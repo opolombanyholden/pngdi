@@ -7,6 +7,19 @@ use Illuminate\Http\Request;
 
 class ProfileController extends Controller
 {
+    /**
+     * Constructeur - Vérifier que l'utilisateur est un opérateur
+     */
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            if (auth()->user() && auth()->user()->role !== 'operator') {
+                abort(403, 'Accès non autorisé');
+            }
+            return $next($request);
+        });
+    }
+
     public function dashboard()
     {
         return view('operator.dashboard');

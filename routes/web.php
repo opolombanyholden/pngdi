@@ -9,12 +9,12 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\VerificationController;
 use App\Http\Controllers\Auth\TwoFactorController;
+use App\Http\Controllers\Operator\ProfileController;
 
 /*
 |--------------------------------------------------------------------------
 | Routes Web Publiques
 |--------------------------------------------------------------------------
-| Routes accessibles à tous les visiteurs
 */
 
 // Page d'accueil
@@ -115,7 +115,7 @@ Route::middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['auth', 'verified', 'account.status'])->group(function () {
+Route::middleware(['auth', 'verified'])->group(function () {
     // Redirection selon le rôle après connexion
     Route::get('/dashboard', function () {
         $user = auth()->user();
@@ -132,84 +132,58 @@ Route::middleware(['auth', 'verified', 'account.status'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Routes Admin
+| Routes Admin - Routes de base uniquement
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'account.status'])->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(function () {
+    // Dashboard principal
     Route::get('/', function () {
-        // Vérification du rôle dans la route elle-même
         if (!in_array(auth()->user()->role, ['admin', 'agent'])) {
             abort(403, 'Accès non autorisé');
         }
         return view('admin.dashboard');
     })->name('dashboard');
     
-    // Routes admin à implémenter
-    Route::prefix('dossiers')->name('dossiers.')->group(function () {
-        Route::get('/', function () {
-            if (!in_array(auth()->user()->role, ['admin', 'agent'])) {
-                abort(403, 'Accès non autorisé');
-            }
-            return 'Liste des dossiers - À implémenter';
-        })->name('index');
-    });
+    // Route de base pour les dossiers
+    Route::get('/dossiers', function () {
+        if (!in_array(auth()->user()->role, ['admin', 'agent'])) {
+            abort(403, 'Accès non autorisé');
+        }
+        return 'Liste des dossiers - À implémenter';
+    })->name('dossiers.index');
     
-    Route::prefix('users')->name('users.')->group(function () {
-        Route::get('/', function () {
-            if (!in_array(auth()->user()->role, ['admin', 'agent'])) {
-                abort(403, 'Accès non autorisé');
-            }
-            return 'Gestion des utilisateurs - À implémenter';
-        })->name('index');
-    });
+    // Route de base pour la gestion des utilisateurs
+    Route::get('/users', function () {
+        if (!in_array(auth()->user()->role, ['admin', 'agent'])) {
+            abort(403, 'Accès non autorisé');
+        }
+        return 'Gestion des utilisateurs - À implémenter';
+    })->name('users.index');
 });
 
 /*
 |--------------------------------------------------------------------------
-| Routes Operator
+| Routes Operator - Dashboard principal uniquement
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'account.status'])->group(function () {
+Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified'])->group(function () {
+    // Dashboard principal avec vérification du rôle
     Route::get('/', function () {
-        // Vérification du rôle dans la route elle-même
         if (auth()->user()->role !== 'operator') {
-            abort(403, 'Accès non autorisé');
+            abort(403, 'Accès réservé aux opérateurs');
         }
+        
         return view('operator.dashboard');
     })->name('dashboard');
     
-    // Routes operator à implémenter
-    Route::prefix('organisations')->name('organisations.')->group(function () {
-        Route::get('/', function () {
-            if (auth()->user()->role !== 'operator') {
-                abort(403, 'Accès non autorisé');
-            }
-            return 'Mes organisations - À implémenter';
-        })->name('index');
-        
-        Route::get('/create', function () {
-            if (auth()->user()->role !== 'operator') {
-                abort(403, 'Accès non autorisé');
-            }
-            return 'Créer une organisation - À implémenter';
-        })->name('create');
-    });
-    
-    Route::prefix('dossiers')->name('dossiers.')->group(function () {
-        Route::get('/', function () {
-            if (auth()->user()->role !== 'operator') {
-                abort(403, 'Accès non autorisé');
-            }
-            return 'Mes dossiers - À implémenter';
-        })->name('index');
-    });
+    // Les autres routes operator sont définies dans routes/operator.php
 });
 
 /*
 |--------------------------------------------------------------------------
-| Route de test pour vérifier l'installation
+| Routes de test (à supprimer en production)
 |--------------------------------------------------------------------------
 */
 
@@ -248,7 +222,7 @@ if (config('app.debug')) {
                 'city' => 'Libreville',
                 'is_active' => true,
                 'email_verified_at' => now(),
-                'two_factor_enabled' => true, // 2FA activé
+                'two_factor_enabled' => true,
             ]
         );
 
@@ -263,7 +237,7 @@ if (config('app.debug')) {
                 'city' => 'Libreville',
                 'is_active' => true,
                 'email_verified_at' => now(),
-                'two_factor_enabled' => true, // 2FA activé
+                'two_factor_enabled' => true,
             ]
         );
 
@@ -278,7 +252,7 @@ if (config('app.debug')) {
                 'city' => 'Port-Gentil',
                 'is_active' => true,
                 'email_verified_at' => now(),
-                'two_factor_enabled' => false, // Pas de 2FA pour les opérateurs
+                'two_factor_enabled' => false,
             ]
         );
 

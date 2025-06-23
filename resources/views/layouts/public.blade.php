@@ -450,6 +450,8 @@
                         </a>
                     </li>
                 </ul>
+                
+                <!-- Section user-menu mise à jour -->
                 <div class="user-menu">
                     @guest
                         <a href="{{ route('login') }}" class="btn btn-outline-primary">
@@ -464,9 +466,19 @@
                                 <i class="fas fa-envelope me-1"></i>Vérifier email
                             </a>
                         @else
-                            <a href="{{ route('dashboard') }}" class="btn btn-custom-primary">
-                                <i class="fas fa-th-large me-1"></i>Mon espace
-                            </a>
+                            @if(auth()->user()->role === 'operator')
+                                <a href="{{ route('operator.dashboard') }}" class="btn btn-custom-primary">
+                                    <i class="fas fa-th-large me-1"></i>Mon espace
+                                </a>
+                            @elseif(in_array(auth()->user()->role, ['admin', 'agent']))
+                                <a href="{{ route('admin.dashboard') }}" class="btn btn-custom-primary">
+                                    <i class="fas fa-th-large me-1"></i>Administration
+                                </a>
+                            @else
+                                <a href="{{ route('home') }}" class="btn btn-custom-primary">
+                                    <i class="fas fa-th-large me-1"></i>Accueil
+                                </a>
+                            @endif
                         @endif
                         
                         <form method="POST" action="{{ route('logout') }}" class="d-inline">
