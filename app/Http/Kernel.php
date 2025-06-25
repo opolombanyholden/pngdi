@@ -64,11 +64,16 @@ class Kernel extends HttpKernel
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         
-        // Middlewares personnalisés
+        // Middlewares personnalisés existants
         'account.status' => \App\Http\Middleware\CheckAccountStatus::class,
         'admin' => \App\Http\Middleware\CheckAdminRole::class,
         'admin.only' => \App\Http\Middleware\CheckAdminOnly::class,
         'operator' => \App\Http\Middleware\CheckOperatorRole::class,
         'role' => \App\Http\Middleware\CheckRole::class,
+        
+        // Nouveaux middleware PNGDI Discussion 7
+        'check.organisation.limit' => \App\Http\Middleware\CheckOrganisationLimit::class,
+        'dossier.lock' => \App\Http\Middleware\DossierLock::class,
+        'verify.operator.role' => \App\Http\Middleware\VerifyOperatorRole::class,
     ];
 }

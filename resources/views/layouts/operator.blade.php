@@ -694,6 +694,25 @@
                 </div>
 
                 <div class="nav-section">
+                    <span class="nav-section-title">GESTION</span>
+                    
+                    <a href="{{ route('operator.members.index') }}" class="nav-item-custom {{ request()->routeIs('operator.members.*') ? 'active' : '' }}">
+                        <div class="nav-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <span class="nav-text">Adhérents</span>
+                        <span class="nav-badge">0</span>
+                    </a>
+
+                    <a href="{{ route('operator.files.index') }}" class="nav-item-custom {{ request()->routeIs('operator.files.*') ? 'active' : '' }}">
+                        <div class="nav-icon">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <span class="nav-text">Documents</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
                     <span class="nav-section-title">OBLIGATIONS</span>
                     
                     <a href="{{ route('operator.declarations.index') }}" class="nav-item-custom {{ request()->routeIs('operator.declarations.*') ? 'active' : '' }}">
@@ -703,14 +722,14 @@
                         <span class="nav-text">Déclarations annuelles</span>
                     </a>
 
-                    <a href="{{ route('operator.rapports.index') }}" class="nav-item-custom {{ request()->routeIs('operator.rapports.*') ? 'active' : '' }}">
+                    <a href="{{ route('operator.reports.index') }}" class="nav-item-custom {{ request()->routeIs('operator.reports.*') ? 'active' : '' }}">
                         <div class="nav-icon">
                             <i class="fas fa-chart-line"></i>
                         </div>
                         <span class="nav-text">Rapports d'activité</span>
                     </a>
 
-                    <a href="{{ route('operator.subventions.index') }}" class="nav-item-custom {{ request()->routeIs('operator.subventions.*') ? 'active' : '' }}">
+                    <a href="{{ route('operator.grants.index') }}" class="nav-item-custom {{ request()->routeIs('operator.grants.*') ? 'active' : '' }}">
                         <div class="nav-icon">
                             <i class="fas fa-money-check-alt"></i>
                         </div>
@@ -737,7 +756,7 @@
                         <span class="nav-badge info">0</span>
                     </a>
 
-                    <a href="{{ route('operator.calendrier') }}" class="nav-item-custom {{ request()->routeIs('operator.calendrier') ? 'active' : '' }}">
+                    <a href="{{ route('calendrier') }}" class="nav-item-custom {{ request()->routeIs('calendrier') ? 'active' : '' }}">
                         <div class="nav-icon">
                             <i class="fas fa-calendar-alt"></i>
                         </div>
@@ -768,7 +787,7 @@
 
             <!-- Actions du bas -->
             <div class="sidebar-footer">
-                <a href="{{ route('operator.profil.index') }}" class="sidebar-footer-item">
+                <a href="{{ route('operator.profile.index') }}" class="sidebar-footer-item">
                     <i class="fas fa-cog"></i>
                     <span>Paramètres</span>
                 </a>
@@ -846,7 +865,7 @@
                                 <i class="fas fa-chevron-down ms-2"></i>
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end dropdown-menu-custom">
-                                <li><a class="dropdown-item dropdown-item-custom" href="{{ route('operator.profil.index') }}">
+                                <li><a class="dropdown-item dropdown-item-custom" href="{{ route('operator.profile.index') }}">
                                     <i class="fas fa-user me-2"></i> Mon profil
                                 </a></li>
                                 <li><a class="dropdown-item dropdown-item-custom" href="{{ route('home') }}">
