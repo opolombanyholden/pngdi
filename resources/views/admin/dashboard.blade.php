@@ -1,107 +1,75 @@
-@extends('layouts.public')
+@extends('layouts.admin')
 
-@section('title', 'Dashboard Admin - PNGDI')
+@section('title', 'Dashboard Administration')
 
 @section('content')
-<div class="container-fluid my-4">
-    <!-- En-tête avec informations utilisateur -->
+<div class="container-fluid px-4 py-3">
+    <h1>
+        <i class="fas fa-tachometer-alt mr-3 text-success"></i>
+        Tableau de Bord Administration PNGDI
+    </h1>
+    <p class="text-muted mb-4">Supervision et gestion des organisations</p>
+
+    <!-- Statistiques principales -->
     <div class="row mb-4">
-        <div class="col-12">
-            <div class="bg-primary text-white p-4 rounded shadow">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h2 class="mb-1">Tableau de bord Administration</h2>
-                        <p class="mb-0">Bienvenue, {{ auth()->user()->name }} ({{ ucfirst(auth()->user()->role) }})</p>
-                    </div>
-                    <form method="POST" action="{{ route('logout') }}" class="d-inline">
-                        @csrf
-                        <button type="submit" class="btn btn-light">
-                            <i class="fas fa-sign-out-alt me-2"></i>
-                            Déconnexion
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Messages de session -->
-    @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="fas fa-check-circle me-2"></i>
-            {{ session('success') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    @endif
-
-    <!-- Cartes de statistiques -->
-    <div class="row mb-4">
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-start border-primary border-4 shadow h-100">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm" style="border-left: 4px solid #009e3f;">
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col">
-                            <div class="text-xs fw-bold text-primary text-uppercase mb-1">
-                                Dossiers en attente
-                            </div>
-                            <div class="h5 mb-0 fw-bold text-gray-800">12</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h3 mb-1 text-success">247</div>
+                            <div class="text-muted small">TOTAL ORGANISATIONS</div>
                         </div>
-                        <div class="col-auto">
-                            <i class="fas fa-clock fa-2x text-primary opacity-25"></i>
+                        <div class="p-3 rounded" style="background-color: rgba(0, 158, 63, 0.1);">
+                            <i class="fas fa-building fa-2x text-success"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-start border-success border-4 shadow h-100">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm" style="border-left: 4px solid #ffcd00;">
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col">
-                            <div class="text-xs fw-bold text-success text-uppercase mb-1">
-                                Dossiers approuvés
-                            </div>
-                            <div class="h5 mb-0 fw-bold text-gray-800">45</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h3 mb-1 text-warning">23</div>
+                            <div class="text-muted small">EN VALIDATION</div>
                         </div>
-                        <div class="col-auto">
-                            <i class="fas fa-check-circle fa-2x text-success opacity-25"></i>
+                        <div class="p-3 rounded" style="background-color: rgba(255, 205, 0, 0.1);">
+                            <i class="fas fa-clock fa-2x text-warning"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-start border-info border-4 shadow h-100">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm" style="border-left: 4px solid #003f7f;">
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col">
-                            <div class="text-xs fw-bold text-info text-uppercase mb-1">
-                                Organisations actives
-                            </div>
-                            <div class="h5 mb-0 fw-bold text-gray-800">{{ \App\Models\User::where('role', 'operator')->count() }}</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h3 mb-1 text-primary">15</div>
+                            <div class="text-muted small">EN COURS</div>
                         </div>
-                        <div class="col-auto">
-                            <i class="fas fa-building fa-2x text-info opacity-25"></i>
+                        <div class="p-3 rounded" style="background-color: rgba(0, 63, 127, 0.1);">
+                            <i class="fas fa-sync-alt fa-2x text-primary"></i>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-start border-warning border-4 shadow h-100">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm" style="border-left: 4px solid #8b1538;">
                 <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col">
-                            <div class="text-xs fw-bold text-warning text-uppercase mb-1">
-                                Utilisateurs
-                            </div>
-                            <div class="h5 mb-0 fw-bold text-gray-800">{{ \App\Models\User::count() }}</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="h3 mb-1 text-danger">189</div>
+                            <div class="text-muted small">APPROUVÉES</div>
                         </div>
-                        <div class="col-auto">
-                            <i class="fas fa-users fa-2x text-warning opacity-25"></i>
+                        <div class="p-3 rounded" style="background-color: rgba(139, 21, 56, 0.1);">
+                            <i class="fas fa-check-circle fa-2x text-danger"></i>
                         </div>
                     </div>
                 </div>
@@ -109,88 +77,190 @@
         </div>
     </div>
 
-    <!-- Menu rapide -->
+    <!-- Actions rapides -->
     <div class="row mb-4">
-        <div class="col-12">
-            <div class="card shadow">
-                <div class="card-header bg-light">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; background-color: rgba(0, 158, 63, 0.1);">
+                        <i class="fas fa-plus fa-lg text-success"></i>
+                    </div>
+                    <h6>Nouveau Dossier</h6>
+                    <p class="small text-muted">Créer un nouveau dossier</p>
+                    <button class="btn btn-outline-success btn-sm">Créer</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; background-color: rgba(0, 63, 127, 0.1);">
+                        <i class="fas fa-users fa-lg text-primary"></i>
+                    </div>
+                    <h6>Gestion Agents</h6>
+                    <p class="small text-muted">Gérer les agents</p>
+                    <button class="btn btn-outline-primary btn-sm">Gérer</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; background-color: rgba(255, 205, 0, 0.1);">
+                        <i class="fas fa-chart-bar fa-lg text-warning"></i>
+                    </div>
+                    <h6>Rapports</h6>
+                    <p class="small text-muted">Voir les statistiques</p>
+                    <button class="btn btn-outline-warning btn-sm">Voir</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm text-center">
+                <div class="card-body">
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; background-color: rgba(23, 162, 184, 0.1);">
+                        <i class="fas fa-cog fa-lg text-info"></i>
+                    </div>
+                    <h6>Paramètres</h6>
+                    <p class="small text-muted">Configuration</p>
+                    <button class="btn btn-outline-info btn-sm">Config</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activité récente -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
                     <h5 class="mb-0">
-                        <i class="fas fa-rocket me-2"></i>
-                        Actions rapides
+                        <i class="fas fa-chart-area mr-2 text-success"></i>
+                        Évolution Mensuelle
+                    </h5>
+                </div>
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-chart-line fa-4x text-muted mb-3" style="opacity: 0.3;"></i>
+                    <h6 class="text-muted">Graphique des soumissions</h6>
+                    <small class="text-muted">Chart.js à intégrer</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bell mr-2 text-primary"></i>
+                        Activité Récente
                     </h5>
                 </div>
                 <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-3">
-                            <a href="{{ route('admin.dossiers.index') }}" class="btn btn-outline-primary w-100">
-                                <i class="fas fa-folder me-2"></i>
-                                Gérer les dossiers
-                            </a>
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-success rounded-circle d-flex align-items-center justify-content-center mr-3" style="width: 35px; height: 35px;">
+                            <i class="fas fa-plus text-white fa-sm"></i>
                         </div>
-                        <div class="col-md-3">
-                            <a href="{{ route('admin.users.index') }}" class="btn btn-outline-info w-100">
-                                <i class="fas fa-users me-2"></i>
-                                Gérer les utilisateurs
-                            </a>
+                        <div>
+                            <div class="font-weight-bold small">Nouvelle organisation</div>
+                            <div class="text-muted small">Association Jeunesse</div>
+                            <div class="text-muted small">5 min</div>
                         </div>
-                        <div class="col-md-3">
-                            <a href="#" class="btn btn-outline-success w-100">
-                                <i class="fas fa-chart-bar me-2"></i>
-                                Voir les statistiques
-                            </a>
+                    </div>
+
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center mr-3" style="width: 35px; height: 35px;">
+                            <i class="fas fa-check text-white fa-sm"></i>
                         </div>
-                        <div class="col-md-3">
-                            <a href="#" class="btn btn-outline-warning w-100">
-                                <i class="fas fa-cog me-2"></i>
-                                Paramètres
-                            </a>
+                        <div>
+                            <div class="font-weight-bold small">Dossier approuvé</div>
+                            <div class="text-muted small">ONG Environnement</div>
+                            <div class="text-muted small">15 min</div>
                         </div>
+                    </div>
+
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-warning rounded-circle d-flex align-items-center justify-content-center mr-3" style="width: 35px; height: 35px;">
+                            <i class="fas fa-user text-dark fa-sm"></i>
+                        </div>
+                        <div>
+                            <div class="font-weight-bold small">Agent connecté</div>
+                            <div class="text-muted small">Marie NZENG</div>
+                            <div class="text-muted small">30 min</div>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <a href="#" class="btn btn-outline-primary btn-sm">Voir tout</a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Tableaux -->
-    <div class="row">
-        <!-- Derniers dossiers -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold text-primary">
-                        <i class="fas fa-file-alt me-2"></i>
-                        Derniers dossiers soumis
-                    </h6>
-                    <a href="{{ route('admin.dossiers.index') }}" class="btn btn-sm btn-primary">
-                        Voir tout
-                    </a>
+    <!-- Dossiers prioritaires -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-folder-open mr-2 text-warning"></i>
+                        Dossiers Prioritaires
+                    </h5>
+                    <a href="#" class="btn btn-outline-success btn-sm">Voir tous</a>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
+                        <table class="table table-hover mb-0">
+                            <thead style="background-color: #f8f9fa;">
                                 <tr>
-                                    <th>Référence</th>
-                                    <th>Organisation</th>
-                                    <th>Type</th>
-                                    <th>Date</th>
-                                    <th>Statut</th>
+                                    <th class="border-0">Organisation</th>
+                                    <th class="border-0">Type</th>
+                                    <th class="border-0">Statut</th>
+                                    <th class="border-0">Priorité</th>
+                                    <th class="border-0">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>REF-2025-001</td>
-                                    <td>Association XYZ</td>
-                                    <td><span class="badge bg-info">Association</span></td>
-                                    <td>{{ date('d/m/Y') }}</td>
-                                    <td><span class="badge bg-warning">En attente</span></td>
+                                    <td>
+                                        <div>
+                                            <div class="font-weight-bold">Association Jeunesse Libreville</div>
+                                            <small class="text-muted">ASSOC-2025-001</small>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge badge-info">Association</span></td>
+                                    <td><span class="badge badge-warning">En Attente</span></td>
+                                    <td><span class="text-danger"><i class="fas fa-circle mr-1"></i>Haute</span></td>
+                                    <td>
+                                        <button class="btn btn-outline-primary btn-sm mr-1">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                                 <tr>
-                                    <td>REF-2025-002</td>
-                                    <td>ONG ABC</td>
-                                    <td><span class="badge bg-success">ONG</span></td>
-                                    <td>{{ date('d/m/Y', strtotime('-1 day')) }}</td>
-                                    <td><span class="badge bg-success">Approuvé</span></td>
+                                    <td>
+                                        <div>
+                                            <div class="font-weight-bold">ONG Environnement</div>
+                                            <small class="text-muted">ONG-2025-003</small>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge badge-success">ONG</span></td>
+                                    <td><span class="badge badge-primary">En Cours</span></td>
+                                    <td><span class="text-warning"><i class="fas fa-circle mr-1"></i>Moyenne</span></td>
+                                    <td>
+                                        <button class="btn btn-outline-primary btn-sm mr-1">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -198,74 +268,16 @@
                 </div>
             </div>
         </div>
-
-        <!-- Activités récentes -->
-        <div class="col-lg-6 mb-4">
-            <div class="card shadow">
-                <div class="card-header bg-light">
-                    <h6 class="mb-0 fw-bold text-primary">
-                        <i class="fas fa-history me-2"></i>
-                        Activités récentes
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="list-group list-group-flush">
-                        <div class="list-group-item px-0">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">Nouvelle inscription</h6>
-                                <small class="text-muted">Il y a 5 min</small>
-                            </div>
-                            <p class="mb-1 text-muted">Un nouvel opérateur s'est inscrit sur la plateforme.</p>
-                            <small><i class="fas fa-user me-1"></i> Jean NGUEMA</small>
-                        </div>
-                        <div class="list-group-item px-0">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">Dossier approuvé</h6>
-                                <small class="text-muted">Il y a 2 heures</small>
-                            </div>
-                            <p class="mb-1 text-muted">Le dossier REF-2025-002 a été approuvé.</p>
-                            <small><i class="fas fa-check me-1"></i> Par Agent01</small>
-                        </div>
-                        <div class="list-group-item px-0">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1">Connexion administrateur</h6>
-                                <small class="text-muted">{{ now()->format('d/m/Y H:i') }}</small>
-                            </div>
-                            <p class="mb-1 text-muted">Vous vous êtes connecté au système.</p>
-                            <small><i class="fas fa-sign-in-alt me-1"></i> IP: {{ request()->ip() }}</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Note d'information -->
-    <div class="row">
-        <div class="col-12">
-            <div class="alert alert-info">
-                <h5 class="alert-heading">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Information
-                </h5>
-                <p class="mb-0">
-                    Ce tableau de bord est une version simplifiée. Les fonctionnalités complètes 
-                    (graphiques, filtres avancés, exports) seront implémentées dans les prochaines discussions.
-                </p>
-            </div>
-        </div>
     </div>
 </div>
 
 <style>
-    .text-xs {
-        font-size: 0.875rem;
-    }
-    .opacity-25 {
-        opacity: 0.25;
-    }
-    .border-start {
-        border-left-width: 0.25rem !important;
-    }
+.card {
+    transition: transform 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
 </style>
 @endsection

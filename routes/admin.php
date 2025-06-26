@@ -47,12 +47,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
             ->name('archiver');
         
         // Gestion des verrous (admin uniquement)
-        Route::post('/{dossier}/force-unlock', [DossierController::class, 'forceUnlock'])
-            ->name('force-unlock');
-        Route::get('/locks/status', [DossierController::class, 'locksStatus'])
-            ->name('locks.status');
-        Route::post('/locks/clean-expired', [DossierController::class, 'cleanExpiredLocks'])
-            ->name('locks.clean');
+        Route::middleware('admin.only')->group(function () {
+            Route::post('/{dossier}/force-unlock', [DossierController::class, 'forceUnlock'])
+                ->name('force-unlock');
+            Route::get('/locks/status', [DossierController::class, 'locksStatus'])
+                ->name('locks.status');
+            Route::post('/locks/clean-expired', [DossierController::class, 'cleanExpiredLocks'])
+                ->name('locks.clean');
+        });
         
         // Rapports et exports
         Route::get('/export/excel', [DossierController::class, 'exportExcel'])->name('export.excel');
@@ -65,7 +67,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     | 👥 GESTION DES UTILISATEURS (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('users')->name('users.')->group(function () {
+    Route::prefix('users')->name('users.')->middleware('admin.only')->group(function () {
         Route::get('/', [UserManagementController::class, 'index'])->name('index');
         Route::get('/create', [UserManagementController::class, 'create'])->name('create');
         Route::post('/', [UserManagementController::class, 'store'])->name('store');
@@ -95,10 +97,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     
     /*
     |--------------------------------------------------------------------------
-    | ⚙️ GESTION DES RÉFÉRENTIELS
+    | ⚙️ GESTION DES RÉFÉRENTIELS (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('referentiels')->name('referentiels.')->group(function () {
+    Route::prefix('referentiels')->name('referentiels.')->middleware('admin.only')->group(function () {
         Route::get('/', [ReferentielController::class, 'index'])->name('index');
         
         // Types d'organisations
@@ -150,10 +152,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     
     /*
     |--------------------------------------------------------------------------
-    | 📝 GESTION DU CONTENU PUBLIC
+    | 📝 GESTION DU CONTENU PUBLIC (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('contenu')->name('contenu.')->group(function () {
+    Route::prefix('contenu')->name('contenu.')->middleware('admin.only')->group(function () {
         // Actualités
         Route::resource('actualites', ContentController::class);
         Route::post('actualites/{actualite}/toggle-publish', [ContentController::class, 'togglePublish'])
@@ -222,7 +224,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     | 📋 JOURNALISATION ET AUDIT (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('logs')->name('logs.')->group(function () {
+    Route::prefix('logs')->name('logs.')->middleware('admin.only')->group(function () {
         Route::get('/', [DashboardController::class, 'logs'])->name('index');
         Route::get('/search', [DashboardController::class, 'searchLogs'])->name('search');
         Route::get('/export', [DashboardController::class, 'exportLogs'])->name('export');
@@ -232,10 +234,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     
     /*
     |--------------------------------------------------------------------------
-    | ⚖️ SANCTIONS ET MESURES DISCIPLINAIRES
+    | ⚖️ SANCTIONS ET MESURES DISCIPLINAIRES (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('sanctions')->name('sanctions.')->group(function () {
+    Route::prefix('sanctions')->name('sanctions.')->middleware('admin.only')->group(function () {
         Route::get('/', [DossierController::class, 'sanctionsIndex'])->name('index');
         Route::get('/create/{organisation}', [DossierController::class, 'sanctionCreate'])->name('create');
         Route::post('/', [DossierController::class, 'sanctionStore'])->name('store');
@@ -251,10 +253,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     
     /*
     |--------------------------------------------------------------------------
-    | 🔧 CONFIGURATION SYSTÈME
+    | 🔧 CONFIGURATION SYSTÈME (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('system')->name('system.')->group(function () {
+    Route::prefix('system')->name('system.')->middleware('admin.only')->group(function () {
         Route::get('/', [DashboardController::class, 'systemInfo'])->name('index');
         Route::get('/config', [DashboardController::class, 'systemConfig'])->name('config');
         Route::post('/config', [DashboardController::class, 'updateSystemConfig'])->name('config.update');
@@ -274,10 +276,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
     
     /*
     |--------------------------------------------------------------------------
-    | 📧 NOTIFICATIONS ET COMMUNICATIONS
+    | 📧 NOTIFICATIONS ET COMMUNICATIONS (Admin uniquement)
     |--------------------------------------------------------------------------
     */
-    Route::prefix('communications')->name('communications.')->group(function () {
+    Route::prefix('communications')->name('communications.')->middleware('admin.only')->group(function () {
         Route::get('/', [ContentController::class, 'communicationsIndex'])->name('index');
         Route::get('/create', [ContentController::class, 'communicationCreate'])->name('create');
         Route::post('/', [ContentController::class, 'communicationStore'])->name('store');

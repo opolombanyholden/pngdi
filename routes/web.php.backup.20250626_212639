@@ -92,22 +92,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/api/stats', [DashboardController::class, 'getStatsApi'])->name('api.stats');
     Route::get('/api/activity', [DashboardController::class, 'getActivityFeed'])->name('api.activity');
     
-// ========================================
-    // ROUTES SYSTÈME MANQUANTES (AJOUTEZ CECI)
-    // ========================================
-    Route::get('/system/settings', function() {
-        return view('admin.system.settings')->with('message', 'Paramètres système - Étape 6 à venir');
-    })->name('system.settings');
+    // Analytics
+    Route::get('/analytics', function() {
+        return response()->json(['message' => 'Analytics - Étape 6 à venir']);
+    })->name('analytics');
     
-    Route::get('/system/logs', function() {
-        return view('admin.system.logs')->with('message', 'Logs système - Étape 6 à venir');
-    })->name('system.logs');
-    
-    Route::get('/system/backup', function() {
-        return view('admin.system.backup')->with('message', 'Sauvegarde système - Étape 6 à venir');
-    })->name('system.backup');
-
-
     // GESTION DES DOSSIERS - Routes de base (les autres sont dans admin.php)
     Route::get('/dossiers', function() {
         return response()->json(['message' => 'Liste complète des dossiers - Étape 3 à venir']);
@@ -237,18 +226,17 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     })->name('reports.export');
     
     // SYSTÈME - Routes complètes
-    // SYSTÈME - Routes complètes (CORRECTION FINALE)
-Route::get('/system/settings', function() {
-    return response()->json(['message' => 'Paramètres système - Étape 6 à venir']);
-})->name('system.settings');
-
-Route::get('/system/logs', function() {
-    return response()->json(['message' => 'Logs système - Étape 6 à venir']);
-})->name('system.logs');
-
-Route::get('/system/backup', function() {
-    return response()->json(['message' => 'Sauvegarde système - Étape 6 à venir']);
-})->name('system.backup');
+    Route::get('/system/settings', function() {
+        return response()->json(['message' => 'Paramètres système - Étape 6 à venir']);
+    })->name('system.settings');
+    
+    Route::get('/system/logs', function() {
+        return response()->json(['message' => 'Logs système - Étape 6 à venir']);
+    })->name('system.logs');
+    
+    Route::get('/system/backup', function() {
+        return response()->json(['message' => 'Sauvegarde système - Étape 6 à venir']);
+    })->name('system.backup');
     
     // ========================================
     // ROUTES MANQUANTES CORRIGÉES
@@ -264,10 +252,14 @@ Route::get('/system/backup', function() {
         Route::post('/mark-all-read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
     });
     
-    // PROFIL ET PARAMÈTRES UTILISATEUR (CORRIGÉS)
-    Route::get('/profile', [\App\Http\Controllers\Admin\ProfileController::class, 'index'])->name('profile');
+    // PROFIL ET PARAMÈTRES UTILISATEUR
+    Route::get('/profile', function() {
+        return response()->json(['message' => 'Profil admin - Étape 6 à venir']);
+    })->name('profile');
     
-    Route::get('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('settings');
+    Route::get('/settings', function() {
+        return response()->json(['message' => 'Paramètres utilisateur - Étape 6 à venir']);
+    })->name('settings');
     
     Route::get('/settings/system', function() {
         return response()->json(['message' => 'Paramètres système - Étape 6 à venir']);
@@ -277,12 +269,19 @@ Route::get('/system/backup', function() {
         return response()->json(['message' => 'Paramètres notifications - Étape 6 à venir']);
     })->name('settings.notifications');
     
-    // API ROUTES pour le layout (CORRIGÉ)
+    // NOTIFICATIONS
+    Route::get('/notifications', function() {
+        return response()->json(['message' => 'Notifications - Étape 6 à venir']);
+    })->name('notifications');
+    
+    // API ROUTES pour le layout
     Route::get('/api/search/all', function() {
         return response()->json(['results' => [], 'message' => 'Recherche - Étape 6 à venir']);
     })->name('api.search.all');
     
-    Route::get('/api/notifications/recent', [\App\Http\Controllers\Admin\NotificationController::class, 'recent'])->name('api.notifications.recent');
+    Route::get('/api/notifications/recent', function() {
+        return response()->json(['count' => 0, 'notifications' => []]);
+    })->name('api.notifications.recent');
 });
 
 /*

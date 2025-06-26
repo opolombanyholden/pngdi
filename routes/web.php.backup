@@ -1,0 +1,727 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\PublicControllers\HomeController;
+use App\Http\Controllers\PublicControllers\ActualiteController;
+use App\Http\Controllers\PublicControllers\DocumentController;
+use App\Http\Controllers\PublicControllers\AnnuaireController;
+use App\Http\Controllers\Operator\ProfileController;
+use App\Http\Controllers\Operator\DossierController;
+use App\Http\Controllers\Operator\OrganisationController;
+use App\Http\Controllers\Operator\AdherentController;
+use App\Http\Controllers\Operator\DocumentController as OperatorDocumentController;
+
+/*
+|--------------------------------------------------------------------------
+| Routes Web Publiques
+|--------------------------------------------------------------------------
+*/
+
+// Page d'accueil
+Route::get('/', [HomeController::class, 'index'])->name('home');
+
+// Pages d'information
+Route::get('/a-propos', [HomeController::class, 'about'])->name('about');
+Route::get('/faq', [HomeController::class, 'faq'])->name('faq');
+Route::get('/guides', [HomeController::class, 'guides'])->name('guides');
+Route::get('/contact', [HomeController::class, 'contact'])->name('contact');
+Route::post('/contact', [HomeController::class, 'sendContact'])->name('contact.send');
+
+// Actualités
+Route::prefix('actualites')->name('actualites.')->group(function () {
+    Route::get('/', [ActualiteController::class, 'index'])->name('index');
+    Route::get('/{slug}', [ActualiteController::class, 'show'])->name('show');
+});
+
+// Documents et ressources
+Route::prefix('documents')->name('documents.')->group(function () {
+    Route::get('/', [DocumentController::class, 'index'])->name('index');
+    Route::get('/download/{id}', [DocumentController::class, 'download'])->name('download');
+});
+
+// Annuaire des organisations
+Route::prefix('annuaire')->name('annuaire.')->group(function () {
+    Route::get('/', [AnnuaireController::class, 'index'])->name('index');
+    Route::get('/associations', [AnnuaireController::class, 'associations'])->name('associations');
+    Route::get('/ong', [AnnuaireController::class, 'ong'])->name('ong');
+    Route::get('/partis-politiques', [AnnuaireController::class, 'partisPolitiques'])->name('partis');
+    Route::get('/confessions-religieuses', [AnnuaireController::class, 'confessionsReligieuses'])->name('confessions');
+    Route::get('/{type}/{slug}', [AnnuaireController::class, 'show'])->name('show');
+});
+
+// Calendrier des événements
+Route::get('/calendrier', [HomeController::class, 'calendrier'])->name('calendrier');
+
+/*
+|--------------------------------------------------------------------------
+| Routes d'authentification - Délégation vers auth.php
+|--------------------------------------------------------------------------
+*/
+require __DIR__.'/auth.php';
+
+/*
+|--------------------------------------------------------------------------
+| Routes protégées (authentification requise)
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    // Redirection selon le rôle après connexion
+    Route::get('/dashboard', function () {
+        $user = auth()->user();
+        
+        if (in_array($user->role, ['admin', 'agent'])) {
+            return redirect()->route('admin.dashboard');
+        } elseif ($user->role === 'operator') {
+            return redirect()->route('operator.dashboard');
+        }
+        
+        return redirect()->route('home');
+    })->name('dashboard');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Routes Admin - Délégation vers admin.php
+|--------------------------------------------------------------------------
+*/
+// À remplacer dans la section Admin de routes/web.php
+
+/*
+|--------------------------------------------------------------------------
+| Routes Admin - Dashboard Moderne Adapté
+|--------------------------------------------------------------------------
+*/
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(function () {
+    
+    // Middleware pour vérifier les rôles admin/agent
+    Route::middleware(function ($request, $next) {
+        if (!auth()->user()->hasRole(['admin', 'agent'])) {
+            abort(403, 'Accès non autorisé à l\'administration');
+        }
+        return $next($request);
+    })->group(function () {
+        
+        // Dashboard principal - utilise le contrôleur mis à jour
+        Route::get('/', [App\Http\Controllers\Admin\DashboardController::class, 'index'])
+            ->name('dashboard');
+        
+        Route::get('/dashboard', function () {
+            return redirect()->route('admin.dashboard');
+        });
+        
+        // API pour le dashboard temps réel
+        Route::get('/api/stats', [App\Http\Controllers\Admin\DashboardController::class, 'getStatsApi'])
+            ->name('api.stats');
+        
+        Route::get('/api/activity', [App\Http\Controllers\Admin\DashboardController::class, 'getActivityFeed'])
+            ->name('api.activity');
+        
+        /*
+        |--------------------------------------------------------------------------
+        | 📋 GESTION DES DOSSIERS - Avec vrais statuts
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('dossiers')->name('dossiers.')->group(function () {
+            
+            // Vues principales avec filtres par statut
+            Route::get('/pending', function() {
+                $dossiers = App\Models\Organisation::whereIn('statut', ['soumis', 'en_validation'])
+                    ->with('user')
+                    ->orderBy('created_at', 'asc')
+                    ->paginate(20);
+                return view('admin.dossiers.pending', compact('dossiers'));
+            })->name('pending');
+            
+            Route::get('/in-progress', function() {
+                $dossiers = App\Models\Organisation::where('statut', 'en_validation')
+                    ->with('user')
+                    ->orderBy('updated_at', 'desc')
+                    ->paginate(20);
+                return view('admin.dossiers.in-progress', compact('dossiers'));
+            })->name('in-progress');
+            
+            Route::get('/completed', function() {
+                $dossiers = App\Models\Organisation::whereIn('statut', ['approuve', 'rejete'])
+                    ->with('user')
+                    ->orderBy('updated_at', 'desc')
+                    ->paginate(20);
+                return view('admin.dossiers.completed', compact('dossiers'));
+            })->name('completed');
+            
+            Route::get('/all', function() {
+                $dossiers = App\Models\Organisation::with('user')
+                    ->orderBy('created_at', 'desc')
+                    ->paginate(20);
+                return view('admin.dossiers.all', compact('dossiers'));
+            })->name('all');
+            
+            // Actions sur les dossiers
+            Route::get('/{id}', function($id) {
+                $dossier = App\Models\Organisation::with('user')->findOrFail($id);
+                return view('admin.dossiers.show', compact('dossier'));
+            })->name('show');
+            
+            Route::post('/{id}/assign', function($id) {
+                $organisation = App\Models\Organisation::findOrFail($id);
+                $organisation->update([
+                    'statut' => 'en_validation'
+                ]);
+                return response()->json(['message' => 'Dossier assigné avec succès']);
+            })->name('assign');
+            
+            Route::post('/{id}/approve', function($id) {
+                $organisation = App\Models\Organisation::findOrFail($id);
+                $organisation->update([
+                    'statut' => 'approuve'
+                ]);
+                return response()->json(['message' => 'Dossier approuvé avec succès']);
+            })->name('approve');
+            
+            Route::post('/{id}/reject', function($id) {
+                $organisation = App\Models\Organisation::findOrFail($id);
+                $organisation->update([
+                    'statut' => 'rejete'
+                ]);
+                return response()->json(['message' => 'Dossier rejeté']);
+            })->name('reject');
+        });
+        
+        /*
+        |--------------------------------------------------------------------------
+        | 👥 GESTION DES UTILISATEURS
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('users')->name('users.')->group(function () {
+            
+            Route::get('/operators', function() {
+                $operators = App\Models\User::where('role', 'operator')
+                    ->withCount('organisations')
+                    ->orderBy('created_at', 'desc')
+                    ->paginate(20);
+                return view('admin.users.operators', compact('operators'));
+            })->name('operators');
+            
+            Route::get('/agents', function() {
+                $agents = App\Models\User::whereIn('role', ['admin', 'agent'])
+                    ->orderBy('created_at', 'desc')
+                    ->paginate(20);
+                return view('admin.users.agents', compact('agents'));
+            })->name('agents');
+            
+            Route::get('/create', function() {
+                return view('admin.users.create');
+            })->name('create');
+            
+            Route::post('/create', function(Illuminate\Http\Request $request) {
+                $validated = $request->validate([
+                    'name' => 'required|string|max:255',
+                    'email' => 'required|email|unique:users',
+                    'role' => 'required|in:admin,agent',
+                    'phone' => 'nullable|string',
+                ]);
+                
+                $user = App\Models\User::create([
+                    'name' => $validated['name'],
+                    'email' => $validated['email'],
+                    'role' => $validated['role'],
+                    'phone' => $validated['phone'],
+                    'password' => bcrypt('ChangeMe123!'),
+                    'email_verified_at' => now(),
+                    'is_active' => true
+                ]);
+                
+                return redirect()->route('admin.users.agents')
+                    ->with('success', 'Agent créé avec succès. Mot de passe temporaire: ChangeMe123!');
+            })->name('store');
+        });
+        
+        /*
+        |--------------------------------------------------------------------------
+        | ⚙️ CONFIGURATION ET RÉFÉRENTIELS
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('config')->name('config.')->group(function () {
+            
+            Route::get('/organizations', function() {
+                $types = ['association', 'ong', 'parti_politique', 'confession_religieuse'];
+                $statusCounts = [];
+                foreach($types as $type) {
+                    $statusCounts[$type] = App\Models\Organisation::where('type', $type)
+                        ->select('statut', DB::raw('count(*) as count'))
+                        ->groupBy('statut')
+                        ->pluck('count', 'statut');
+                }
+                return view('admin.config.organizations', compact('types', 'statusCounts'));
+            })->name('organizations');
+            
+            Route::get('/documents', function() {
+                return view('admin.config.documents');
+            })->name('documents');
+            
+            Route::get('/locations', function() {
+                $provinces = [
+                    'Estuaire', 'Haut-Ogooué', 'Moyen-Ogooué', 'Ngounié', 
+                    'Nyanga', 'Ogooué-Ivindo', 'Ogooué-Lolo', 'Ogooué-Maritime', 'Woleu-Ntem'
+                ];
+                return view('admin.config.locations', compact('provinces'));
+            })->name('locations');
+            
+            Route::get('/workflows', function() {
+                $etapes = [
+                    'soumission' => 'Soumission du dossier',
+                    'verification' => 'Vérification des documents',
+                    'validation' => 'Validation par agent',
+                    'approbation' => 'Approbation finale',
+                    'notification' => 'Notification du résultat'
+                ];
+                return view('admin.config.workflows', compact('etapes'));
+            })->name('workflows');
+        });
+        
+        /*
+        |--------------------------------------------------------------------------
+        | 📊 RAPPORTS ET ANALYTIQUES
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/analytics', function() {
+            $stats = [
+                'monthly' => App\Models\Organisation::selectRaw('MONTH(created_at) as month, COUNT(*) as count')
+                    ->whereYear('created_at', now()->year)
+                    ->groupBy('month')
+                    ->get(),
+                'by_type' => App\Models\Organisation::selectRaw('type, COUNT(*) as count')
+                    ->groupBy('type')
+                    ->get(),
+                'by_status' => App\Models\Organisation::selectRaw('statut, COUNT(*) as count')
+                    ->groupBy('statut')
+                    ->get()
+            ];
+            return view('admin.analytics.index', compact('stats'));
+        })->name('analytics');
+        
+        Route::prefix('reports')->name('reports.')->group(function () {
+            
+            Route::get('/statistics', [App\Http\Controllers\Admin\DashboardController::class, 'statistiques'])
+                ->name('statistics');
+            
+            Route::get('/performance', function() {
+                $metrics = [
+                    'temps_moyen' => App\Models\Organisation::whereIn('statut', ['approuve', 'rejete'])
+                        ->get()
+                        ->avg(function($org) {
+                            return $org->created_at->diffInDays($org->updated_at);
+                        }),
+                    'taux_approbation' => App\Models\Organisation::where('statut', 'approuve')->count() * 100 / 
+                        max(1, App\Models\Organisation::whereIn('statut', ['approuve', 'rejete'])->count()),
+                    'total_traites' => App\Models\Organisation::whereIn('statut', ['approuve', 'rejete'])->count(),
+                    'en_attente' => App\Models\Organisation::whereIn('statut', ['soumis', 'en_validation'])->count()
+                ];
+                return view('admin.reports.performance', compact('metrics'));
+            })->name('performance');
+            
+            Route::get('/export', function() {
+                return view('admin.reports.export');
+            })->name('export');
+            
+            Route::post('/generate', [App\Http\Controllers\Admin\DashboardController::class, 'generateRapport'])
+                ->name('generate');
+        });
+        
+        /*
+        |--------------------------------------------------------------------------
+        | 🔧 SYSTÈME ET MAINTENANCE
+        |--------------------------------------------------------------------------
+        */
+        Route::prefix('system')->name('system.')->group(function () {
+            
+            Route::get('/settings', function() {
+                $settings = [
+                    'app_name' => config('app.name'),
+                    'app_version' => '1.0.0',
+                    'maintenance_mode' => app()->isDownForMaintenance(),
+                    'total_organisations' => App\Models\Organisation::count(),
+                    'total_users' => App\Models\User::count(),
+                    'disk_usage' => disk_free_space('/') / (1024 * 1024 * 1024) // GB
+                ];
+                return view('admin.system.settings', compact('settings'));
+            })->name('settings');
+            
+            Route::get('/logs', [App\Http\Controllers\Admin\DashboardController::class, 'logs'])
+                ->name('logs');
+            
+            Route::get('/backup', function() {
+                return view('admin.system.backup');
+            })->name('backup');
+        });
+        
+        /*
+        |--------------------------------------------------------------------------
+        | 🔔 NOTIFICATIONS ET COMMUNICATIONS
+        |--------------------------------------------------------------------------
+        */
+        Route::get('/notifications', function() {
+            $notifications = [
+                ['message' => App\Models\Organisation::whereIn('statut', ['soumis', 'en_validation'])->count() . ' dossiers en attente', 'time' => 'maintenant', 'type' => 'info'],
+                ['message' => 'Nouveau utilisateur inscrit', 'time' => '1h', 'type' => 'primary'],
+                ['message' => 'Rapport mensuel disponible', 'time' => '2h', 'type' => 'success']
+            ];
+            return view('admin.notifications.index', compact('notifications'));
+        })->name('notifications');
+        
+        Route::get('/profile', function() {
+            $user = auth()->user();
+            $stats = [
+                'dossiers_traites' => 0, // À adapter selon votre logique
+                'connexions_mois' => 15,
+                'derniere_activite' => now()->subHours(2)
+            ];
+            return view('admin.profile.index', compact('user', 'stats'));
+        })->name('profile');
+        
+        Route::get('/settings', function() {
+            return view('admin.settings.index');
+        })->name('settings');
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| 🌐 API ENDPOINTS POUR LE DASHBOARD ADMIN
+|--------------------------------------------------------------------------
+*/
+Route::prefix('api/admin')->name('api.admin.')->middleware(['auth', 'verified'])->group(function () {
+    
+    // Middleware pour vérifier les rôles
+    Route::middleware(function ($request, $next) {
+        if (!auth()->user()->hasRole(['admin', 'agent'])) {
+            return response()->json(['error' => 'Accès non autorisé'], 403);
+        }
+        return $next($request);
+    })->group(function () {
+        
+        // Recherche globale
+        Route::get('/search/all', function(Illuminate\Http\Request $request) {
+            $query = $request->get('q');
+            
+            $organisations = App\Models\Organisation::where('nom', 'LIKE', "%{$query}%")
+                ->orWhere('sigle', 'LIKE', "%{$query}%")
+                ->limit(5)
+                ->get(['id', 'nom', 'sigle', 'type', 'statut']);
+            
+            $users = App\Models\User::where('name', 'LIKE', "%{$query}%")
+                ->orWhere('email', 'LIKE', "%{$query}%")
+                ->limit(5)
+                ->get(['id', 'name', 'email', 'role']);
+            
+            return response()->json([
+                'organisations' => $organisations,
+                'users' => $users,
+                'documents' => []
+            ]);
+        })->name('search.all');
+        
+        // Notifications récentes
+        Route::get('/notifications/recent', function() {
+            $pendingCount = App\Models\Organisation::whereIn('statut', ['soumis', 'en_validation'])->count();
+            $newUsersToday = App\Models\User::whereDate('created_at', today())->count();
+            
+            return response()->json([
+                'count' => $pendingCount + $newUsersToday,
+                'notifications' => [
+                    ['message' => "{$pendingCount} dossiers en attente de validation", 'time' => 'maintenant'],
+                    ['message' => "{$newUsersToday} nouveaux utilisateurs aujourd'hui", 'time' => 'aujourd\'hui'],
+                    ['message' => 'Rapport mensuel disponible', 'time' => '2h']
+                ]
+            ]);
+        })->name('notifications.recent');
+        
+        // Santé du système
+        Route::get('/system/health', function() {
+            try {
+                // Test de connexion base de données
+                DB::connection()->getPdo();
+                $dbStatus = 'connected';
+            } catch (\Exception $e) {
+                $dbStatus = 'error';
+            }
+            
+            return response()->json([
+                'status' => 'healthy',
+                'database' => $dbStatus,
+                'cache' => 'operational',
+                'storage' => is_writable(storage_path()) ? 'accessible' : 'error'
+            ]);
+        })->name('system.health');
+    });
+});
+/*
+|--------------------------------------------------------------------------
+| Routes Operator
+|--------------------------------------------------------------------------
+*/
+Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
+    
+    // Dashboard principal
+    Route::get('/', function () {
+        return view('operator.dashboard');
+    })->name('dashboard');
+    
+    // Profil opérateur
+    Route::prefix('profile')->name('profile.')->group(function () {
+        Route::get('/', [ProfileController::class, 'index'])->name('index');
+        Route::get('/edit', [ProfileController::class, 'edit'])->name('edit');
+        Route::get('/complete', [ProfileController::class, 'complete'])->name('complete');
+        Route::put('/update', [ProfileController::class, 'update'])->name('update');
+        Route::put('/password', [ProfileController::class, 'updatePassword'])->name('password.update');
+        Route::get('/stats', [ProfileController::class, 'getProfileStats'])->name('stats');
+        Route::get('/export', [ProfileController::class, 'exportProfile'])->name('export');
+        Route::delete('/photo', [ProfileController::class, 'deleteProfilePhoto'])->name('photo.delete');
+    });
+    
+    // Organisations avec vérification des limites
+    Route::prefix('organisations')->name('organisations.')->middleware(['organisation.limit'])->group(function () {
+        Route::get('/', [OrganisationController::class, 'index'])->name('index');
+        Route::get('/create', [OrganisationController::class, 'create'])->name('create');
+        Route::post('/', [OrganisationController::class, 'store'])->name('store');
+        Route::get('/{organisation}', [OrganisationController::class, 'show'])->name('show');
+        Route::get('/{organisation}/edit', [OrganisationController::class, 'edit'])->name('edit');
+        Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
+        Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
+    });
+    
+    // Gestion des dossiers avec verrouillage
+    Route::prefix('dossiers')->name('dossiers.')->middleware(['dossier.lock'])->group(function () {
+        Route::get('/', [DossierController::class, 'index'])->name('index');
+        Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
+        Route::post('/', [DossierController::class, 'store'])->name('store');
+        Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
+        Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
+        Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
+        Route::post('/{dossier}/submit', [DossierController::class, 'submit'])->name('submit');
+        Route::delete('/{dossier}', [DossierController::class, 'destroy'])->name('destroy');
+        
+        // Gestion des verrous (AJAX)
+        Route::post('/{dossier}/extend-lock', [DossierController::class, 'extendLock'])->name('extend-lock');
+        Route::post('/{dossier}/release-lock', [DossierController::class, 'releaseLock'])->name('release-lock');
+    });
+    
+        // Gestion des adhérents
+        Route::prefix('members')->name('members.')->group(function () {
+        // Vue globale de tous les adhérents (corrigée)
+        Route::get('/', [AdherentController::class, 'indexGlobal'])->name('index');
+        
+        // Adhérents par organisation (routes existantes)  
+        Route::get('/organisation/{organisation}', [AdherentController::class, 'index'])->name('by-organisation');
+        Route::get('/create', [AdherentController::class, 'create'])->name('create');
+        Route::post('/', [AdherentController::class, 'store'])->name('store');
+        Route::get('/{adherent}', [AdherentController::class, 'show'])->name('show');
+        Route::get('/{adherent}/edit', [AdherentController::class, 'edit'])->name('edit');
+        Route::put('/{adherent}', [AdherentController::class, 'update'])->name('update');
+        Route::delete('/{adherent}', [AdherentController::class, 'destroy'])->name('destroy');
+        
+        // Import/Export
+        Route::get('/import/template', [AdherentController::class, 'downloadTemplate'])->name('import.template');
+        Route::post('/import', [AdherentController::class, 'import'])->name('import');
+        Route::get('/export/{organisation}', [AdherentController::class, 'export'])->name('export');
+        Route::post('/generate-link/{organisation}', [AdherentController::class, 'generateRegistrationLink'])->name('generate-link');
+    });
+    
+    // Gestion des documents
+    Route::prefix('files')->name('files.')->group(function () {
+        Route::get('/', [OperatorDocumentController::class, 'index'])->name('index');
+        Route::post('/upload', [OperatorDocumentController::class, 'upload'])->name('upload');
+        Route::get('/{document}/download', [OperatorDocumentController::class, 'download'])->name('download');
+        Route::delete('/{document}', [OperatorDocumentController::class, 'destroy'])->name('destroy');
+        Route::post('/{document}/replace', [OperatorDocumentController::class, 'replace'])->name('replace');
+    });
+    
+    // Rapports
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/', function () {
+            return view('operator.reports.index');
+        })->name('index');
+        Route::get('/organisation', function () {
+            return view('operator.reports.organisation');
+        })->name('organisation');
+        Route::get('/dossiers', function () {
+            return view('operator.reports.dossiers');
+        })->name('dossiers');
+        Route::get('/adherents', function () {
+            return view('operator.reports.adherents');
+        })->name('adherents');
+    });
+    
+    // Subventions
+    Route::prefix('grants')->name('grants.')->group(function () {
+        Route::get('/', function () {
+            return view('operator.grants.index');
+        })->name('index');
+        Route::get('/demandes', function () {
+            return view('operator.grants.demandes');
+        })->name('demandes');
+        Route::get('/historique', function () {
+            return view('operator.grants.historique');
+        })->name('historique');
+    });
+    
+    // Aide
+    Route::prefix('help')->name('help.')->group(function () {
+        Route::get('/', function () {
+            return view('operator.help.index');
+        })->name('index');
+        Route::get('/guide', function () {
+            return view('operator.help.guide');
+        })->name('guide');
+        Route::get('/faq', function () {
+            return view('operator.help.faq');
+        })->name('faq');
+        Route::get('/contact', function () {
+            return view('operator.help.contact');
+        })->name('contact');
+    });
+    
+    // Messagerie (routes principales pour le dashboard)
+    Route::prefix('messages')->name('messages.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Operator\MessageController::class, 'index'])->name('index');
+        Route::get('/nouveau', [\App\Http\Controllers\Operator\MessageController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Operator\MessageController::class, 'store'])->name('store');
+        Route::get('/{message}', [\App\Http\Controllers\Operator\MessageController::class, 'show'])->name('show');
+        Route::post('/{message}/reply', [\App\Http\Controllers\Operator\MessageController::class, 'reply'])->name('reply');
+        Route::post('/{message}/mark-read', [\App\Http\Controllers\Operator\MessageController::class, 'markAsRead'])->name('mark-read');
+        Route::delete('/{message}', [\App\Http\Controllers\Operator\MessageController::class, 'destroy'])->name('destroy');
+    });
+    
+    // Notifications (routes principales pour le dashboard)
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Operator\MessageController::class, 'notifications'])->name('index');
+        Route::post('/mark-all-read', [\App\Http\Controllers\Operator\MessageController::class, 'markAllAsRead'])->name('mark-all-read');
+        Route::get('/count', [\App\Http\Controllers\Operator\MessageController::class, 'unreadCount'])->name('count');
+    });
+    
+    // Déclarations (routes principales pour le dashboard)
+    Route::prefix('declarations')->name('declarations.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Operator\DeclarationController::class, 'index'])->name('index');
+        Route::get('/create/{organisation}', [\App\Http\Controllers\Operator\DeclarationController::class, 'create'])->name('create');
+        Route::post('/', [\App\Http\Controllers\Operator\DeclarationController::class, 'store'])->name('store');
+        Route::get('/{declaration}', [\App\Http\Controllers\Operator\DeclarationController::class, 'show'])->name('show');
+        Route::post('/{declaration}/soumettre', [\App\Http\Controllers\Operator\DeclarationController::class, 'soumettre'])->name('soumettre');
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Routes API pour vérifications temps réel
+|--------------------------------------------------------------------------
+*/
+Route::prefix('api')->name('api.')->middleware(['auth:sanctum'])->group(function () {
+    // Vérification des limites d'organisation
+    Route::get('/check-organisation-limit/{type}', function ($type) {
+        $user = auth()->user();
+        $count = $user->organisations()->where('type', $type)->where('statut', 'actif')->count();
+        $limite = in_array($type, ['parti_politique', 'confession_religieuse']) ? 1 : null;
+        
+        return response()->json([
+            'count' => $count,
+            'limite' => $limite,
+            'peut_creer' => $limite ? $count < $limite : true
+        ]);
+    })->name('check-organisation-limit');
+    
+    // Informations sur les verrous
+    Route::get('/verrous/status', function () {
+        return response()->json([
+            'locks_actifs' => \App\Models\DossierValidation::where('locked_until', '>', now())->count(),
+            'dernier_nettoyage' => cache('locks_last_cleanup', 'Jamais')
+        ]);
+    })->name('verrous.status');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Routes de test (développement uniquement)
+|--------------------------------------------------------------------------
+*/
+if (config('app.debug')) {
+    Route::get('/test', function () {
+        return [
+            'laravel_version' => app()->version(),
+            'php_version' => PHP_VERSION,
+            'environment' => config('app.env'),
+            'database_connected' => DB::connection()->getPdo() ? 'Yes' : 'No',
+            'current_user' => auth()->check() ? auth()->user()->email : 'Non connecté',
+            'middleware_loaded' => [
+                'organisation.limit' => class_exists(\App\Http\Middleware\CheckOrganisationLimit::class),
+                'dossier.lock' => class_exists(\App\Http\Middleware\DossierLock::class),
+                'operator' => class_exists(\App\Http\Middleware\VerifyOperatorRole::class),
+            ]
+        ];
+    })->name('test');
+    
+    // Créer des utilisateurs de test
+    Route::get('/create-test-users', function () {
+        \App\Models\User::firstOrCreate(
+            ['email' => 'admin@pngdi.ga'],
+            [
+                'name' => 'Admin PNGDI',
+                'password' => bcrypt('password123'),
+                'role' => 'admin',
+                'phone' => '+24101234567',
+                'city' => 'Libreville',
+                'is_active' => true,
+                'email_verified_at' => now(),
+                'two_factor_enabled' => true,
+            ]
+        );
+
+        \App\Models\User::firstOrCreate(
+            ['email' => 'operator@pngdi.ga'],
+            [
+                'name' => 'Jean NGUEMA',
+                'password' => bcrypt('password123'),
+                'role' => 'operator',
+                'phone' => '+24101234569',
+                'city' => 'Port-Gentil',
+                'is_active' => true,
+                'email_verified_at' => now(),
+                'two_factor_enabled' => false,
+            ]
+        );
+
+        return 'Utilisateurs de test créés !<br>' .
+               '<strong>Admin :</strong> admin@pngdi.ga / password123<br>' .
+               '<strong>Opérateur :</strong> operator@pngdi.ga / password123<br>' .
+               '<a href="/login">Se connecter</a>';
+    })->name('create-test-users');
+}
+
+// Inclure les routes admin supplémentaires
+if (file_exists(__DIR__.'/admin.php')) {
+    require __DIR__.'/admin.php';
+}
+
+// Inclure les routes operator supplémentaires  
+if (file_exists(__DIR__.'/operator.php')) {
+    require __DIR__.'/operator.php';
+}
+
+// Gestion des adhérents
+    Route::prefix('members')->name('members.')->group(function () {
+        // Vue globale de tous les adhérents (corrigée)
+        Route::get('/', [AdherentController::class, 'indexGlobal'])->name('index');
+        
+        // Adhérents par organisation (routes existantes)  
+        Route::get('/organisation/{organisation}', [AdherentController::class, 'index'])->name('by-organisation');
+        Route::get('/create', [AdherentController::class, 'create'])->name('create');
+        Route::post('/', [AdherentController::class, 'store'])->name('store');
+        Route::get('/{adherent}', [AdherentController::class, 'show'])->name('show');
+        Route::get('/{adherent}/edit', [AdherentController::class, 'edit'])->name('edit');
+        Route::put('/{adherent}', [AdherentController::class, 'update'])->name('update');
+        Route::delete('/{adherent}', [AdherentController::class, 'destroy'])->name('destroy');
+        
+        // Import/Export
+        Route::get('/import/template', [AdherentController::class, 'downloadTemplate'])->name('import.template');
+        Route::post('/import', [AdherentController::class, 'import'])->name('import');
+        Route::get('/export/{organisation}', [AdherentController::class, 'export'])->name('export');
+        Route::post('/generate-link/{organisation}', [AdherentController::class, 'generateRegistrationLink'])->name('generate-link');
+    });
