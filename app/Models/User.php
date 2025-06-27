@@ -238,6 +238,115 @@ class User extends Authenticatable implements MustVerifyEmail
             ->where('is_active', true);
     }
 
+    // ===== NOUVELLES RELATIONS POUR LE WORKFLOW ADMIN =====
+
+    /**
+     * Dossiers assignés à cet agent (RELATION MANQUANTE CORRIGÉE)
+     */
+    public function assignedDossiers(): HasMany
+    {
+        return $this->hasMany(Dossier::class, 'assigned_to');
+    }
+
+    /**
+     * Dossiers en cours assignés à cet agent
+     */
+    public function dossiersEnCours(): HasMany
+    {
+        return $this->assignedDossiers()->where('statut', 'en_cours');
+    }
+
+    /**
+     * Dossiers validés par cet agent
+     */
+    public function dossiersValides(): HasMany
+    {
+        return $this->hasMany(DossierValidation::class, 'validated_by')
+            ->whereNotNull('validated_at');
+    }
+
+    /**
+     * Commentaires de dossiers créés par cet utilisateur
+     */
+    public function dossierComments(): HasMany
+    {
+        return $this->hasMany(DossierComment::class, 'user_id');
+    }
+
+    /**
+     * Opérations sur dossiers effectuées par cet utilisateur
+     */
+    public function dossierOperations(): HasMany
+    {
+        return $this->hasMany(DossierOperation::class, 'user_id');
+    }
+
+    /**
+     * Archives de dossiers créées par cet utilisateur
+     */
+    public function dossierArchives(): HasMany
+    {
+        return $this->hasMany(DossierArchive::class, 'archived_by');
+    }
+
+    /**
+     * Imports d'adhérents effectués par cet utilisateur
+     */
+    public function adherentImports(): HasMany
+    {
+        return $this->hasMany(AdherentImport::class, 'imported_by');
+    }
+
+    /**
+     * Liens d'inscription créés par cet utilisateur
+     */
+    public function inscriptionLinks(): HasMany
+    {
+        return $this->hasMany(InscriptionLink::class, 'created_by');
+    }
+
+    /**
+     * Exclusions d'adhérents validées par cet utilisateur
+     */
+    public function validatedExclusions(): HasMany
+    {
+        return $this->hasMany(AdherentExclusion::class, 'validated_by');
+    }
+
+    /**
+     * Historiques d'adhérents créés par cet utilisateur
+     */
+    public function createdAdherentHistories(): HasMany
+    {
+        return $this->hasMany(AdherentHistory::class, 'created_by');
+    }
+
+    /**
+     * Historiques d'adhérents validés par cet utilisateur
+     */
+    public function validatedAdherentHistories(): HasMany
+    {
+        return $this->hasMany(AdherentHistory::class, 'validated_by');
+    }
+
+    /**
+     * Déclarations soumises par cet utilisateur
+     */
+    public function submittedDeclarations(): HasMany
+    {
+        return $this->hasMany(Declaration::class, 'submitted_by');
+    }
+
+    /**
+     * Déclarations validées par cet utilisateur
+     */
+    public function validatedDeclarations(): HasMany
+    {
+        return $this->hasMany(Declaration::class, 'validated_by');
+    }
+
+    // ===== RELATIONS EXISTANTES (conservées) =====
+
     public function validations(): HasMany
     {
         return $this->hasMany(DossierValidation::class, 'assigned_to');
@@ -394,6 +503,85 @@ class User extends Authenticatable implements MustVerifyEmail
         $this->update(['preferences' => $preferences]);
     }
 
+    // ===== NOUVELLES MÉTHODES UTILITAIRES POUR LE WORKFLOW =====
+
+    /**
+     * Obtenir le nombre de dossiers en cours assignés
+     */
+    public function getDossiersEnCoursCount(): int
+    {
+        return $this->assignedDossiers()
+            ->where('statut', 'en_cours')
+            ->count();
+    }
+
+    /**
+     * Obtenir le nombre de dossiers validés ce mois
+     */
+    public function getDossiersValidesThisMonth(): int
+    {
+        return $this->dossiersValides()
+            ->whereHas('dossier', function($query) {
+                $query->where('statut', 'approuve')
+                      ->whereMonth('validated_at', now()->month)
+                      ->whereYear('validated_at', now()->year);
+            })
+            ->count();
+    }
+
+    /**
+     * Obtenir la charge de travail actuelle de l'agent
+     */
+    public function getChargeActuelle(): int
+    {
+        return $this->assignedDossiers()
+            ->whereIn('statut', ['soumis', 'en_cours'])
+            ->count();
+    }
+
+    /**
+     * Vérifier si l'agent peut recevoir de nouveaux dossiers
+     */
+    public function canReceiveNewDossiers(int $capaciteMax = 5): bool
+    {
+        return $this->getChargeActuelle() < $capaciteMax;
+    }
+
+    /**
+     * Obtenir les statistiques de performance de l'agent
+     */
+    public function getPerformanceStats(): array
+    {
+        if (!$this->canValidateDossiers()) {
+            return [];
+        }
+
+        $totalAssigned = $this->assignedDossiers()->count();
+        $totalValidated = $this->dossiersValides()->count();
+        $enCours = $this->getDossiersEnCoursCount();
+        $thisMonth = $this->getDossiersValidesThisMonth();
+
+        return [
+            'total_assignes' => $totalAssigned,
+            'total_valides' => $totalValidated,
+            'en_cours' => $enCours,
+            'valides_ce_mois' => $thisMonth,
+            'taux_completion' => $totalAssigned > 0 ? round(($totalValidated / $totalAssigned) * 100, 1) : 0,
+            'charge_actuelle' => $this->getChargeActuelle()
+        ];
+    }
+
+    /**
+     * Vérifier si l'agent est disponible pour assignation
+     */
+    public function isAvailableForAssignment(): bool
+    {
+        return $this->isActive() && 
+               $this->canValidateDossiers() && 
+               $this->canReceiveNewDossiers() &&
+               !$this->isLocked();
+    }
+
     /**
      * Statistiques utilisateur
      */
@@ -413,6 +601,9 @@ class User extends Authenticatable implements MustVerifyEmail
                 'pending' => $this->validations()->whereNull('decision')->count(),
                 'completed' => $this->validations()->whereNotNull('decision')->count()
             ];
+
+            // Ajouter les statistiques de performance
+            $stats['performance'] = $this->getPerformanceStats();
         }
 
         return $stats;

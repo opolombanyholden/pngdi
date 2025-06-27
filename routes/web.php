@@ -11,6 +11,11 @@ use App\Http\Controllers\Operator\OrganisationController;
 use App\Http\Controllers\Operator\AdherentController;
 use App\Http\Controllers\Operator\DocumentController as OperatorDocumentController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\AnalyticsController;
+use App\Http\Controllers\Admin\NotificationController;
+use App\Http\Controllers\Admin\ProfileController as AdminProfileController;
+use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\WorkflowController;
 
 /*
 |--------------------------------------------------------------------------
@@ -83,211 +88,126 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Routes Admin - Dashboard Principal
+| Routes Admin - VERSION TEST MINIMALE
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    
+    // ========================================
+    // DASHBOARD PRINCIPAL ET APIS - FONCTIONNEL
+    // ========================================
+    
     // Dashboard principal
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('/api/stats', [DashboardController::class, 'getStatsApi'])->name('api.stats');
-    Route::get('/api/activity', [DashboardController::class, 'getActivityFeed'])->name('api.activity');
     
-// ========================================
-    // ROUTES SYSTÈME MANQUANTES (AJOUTEZ CECI)
+    // APIs Temps Réel pour Dashboard
+    Route::prefix('api')->name('api.')->group(function () {
+        
+        // Statistiques principales
+        Route::get('/stats', [DashboardController::class, 'getStatsApi'])->name('stats');
+        
+        // Feed d'activité récente
+        Route::get('/activity', [DashboardController::class, 'getActivityFeed'])->name('activity');
+        
+        // Données pour graphiques
+        Route::get('/chart-data', [DashboardController::class, 'getChartDataApi'])->name('chart-data');
+        
+        // APIs supplémentaires
+        Route::get('/agents-status', [DashboardController::class, 'getAgentsStatus'])->name('agents-status');
+        Route::get('/priority-dossiers', [DashboardController::class, 'getPriorityDossiersApi'])->name('priority-dossiers');
+        Route::get('/performance-metrics', [DashboardController::class, 'getPerformanceMetricsApi'])->name('performance-metrics');
+        
+        // APIs pour interface admin
+        Route::get('/search/all', function() {
+            return response()->json(['results' => [], 'message' => 'Recherche globale - Étape 6 à venir']);
+        })->name('search.all');
+        
+        // Notifications existantes
+        Route::get('/notifications/recent', [NotificationController::class, 'recent'])->name('notifications.recent');
+        
+    });
+    
     // ========================================
+    // ROUTES TEMPORAIRES (PLACEHOLDERS)
+    // ========================================
+    
+    // Analytics existant
+    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+    
+    // Notifications existantes
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::post('/mark-read/{id}', [NotificationController::class, 'markAsRead'])->name('mark-read');
+        Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
+    });
+    
+    // Profil admin existant
+    Route::get('/profile', [AdminProfileController::class, 'index'])->name('profile');
+    
+    // Paramètres existants
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    
+    // ========================================
+    // WORKFLOW - ACTIVATION PROGRESSIVE (ÉTAPE 8)
+    // ========================================
+    
+    Route::prefix('workflow')->name('workflow.')->group(function () {
+        // En Attente - PREMIÈRE ACTIVATION ✅
+        Route::get('/en-attente', [WorkflowController::class, 'enAttente'])->name('en-attente');
+        
+        // En Cours - DEUXIÈME ACTIVATION (prochaine étape)
+        Route::get('/en-cours', [WorkflowController::class, 'enCours'])->name('en-cours');
+        
+        // Terminés - TROISIÈME ACTIVATION (prochaine étape)
+        Route::get('/termines', [WorkflowController::class, 'termines'])->name('termines');
+        
+        // Actions sur les dossiers
+        Route::post('/assign/{dossier}', [WorkflowController::class, 'assign'])->name('assign');
+        Route::post('/validate/{validation}', [WorkflowController::class, 'validateDossier'])->name('validate');
+        Route::post('/reject/{validation}', [WorkflowController::class, 'reject'])->name('reject');
+    });
+    
+    // Gestion entités (temporaires)
+    Route::get('/organisations', function() {
+        return response()->json(['message' => 'Gestion organisations admin - Contrôleur à créer']);
+    })->name('organisations.index');
+    
+    Route::get('/dossiers', function() {
+        return response()->json(['message' => 'Gestion dossiers admin - Contrôleur à créer']);
+    })->name('dossiers.index');
+    
+    Route::get('/users', function() {
+        return response()->json(['message' => 'Gestion utilisateurs admin - Contrôleur à créer']);
+    })->name('users.index');
+    
+    // Rapports (temporaires)
+    Route::get('/reports', function() {
+        return response()->json(['message' => 'Rapports admin - Contrôleur à créer']);
+    })->name('reports.index');
+    
+    // Configuration (temporaires)
+    Route::get('/config', function() {
+        return response()->json(['message' => 'Configuration admin - Contrôleur à créer']);
+    })->name('config.index');
+    
+    // Système (temporaires)
     Route::get('/system/settings', function() {
-        return view('admin.system.settings')->with('message', 'Paramètres système - Étape 6 à venir');
+        return response()->json(['message' => 'Paramètres système - Contrôleur à créer']);
     })->name('system.settings');
     
     Route::get('/system/logs', function() {
-        return view('admin.system.logs')->with('message', 'Logs système - Étape 6 à venir');
+        return response()->json(['message' => 'Logs système - Contrôleur à créer']);
     })->name('system.logs');
     
     Route::get('/system/backup', function() {
-        return view('admin.system.backup')->with('message', 'Sauvegarde système - Étape 6 à venir');
+        return response()->json(['message' => 'Sauvegarde système - Contrôleur à créer']);
     })->name('system.backup');
-
-
-    // GESTION DES DOSSIERS - Routes de base (les autres sont dans admin.php)
-    Route::get('/dossiers', function() {
-        return response()->json(['message' => 'Liste complète des dossiers - Étape 3 à venir']);
-    })->name('dossiers.all');
     
-    Route::get('/dossiers/pending', function() {
-        return response()->json(['message' => 'Dossiers en attente - Étape 3 à venir']);
-    })->name('dossiers.pending');
-    
-    Route::get('/dossiers/in-progress', function() {
-        return response()->json(['message' => 'Dossiers en cours - Étape 3 à venir']);
-    })->name('dossiers.in-progress');
-    
-    Route::get('/dossiers/completed', function() {
-        return response()->json(['message' => 'Dossiers terminés - Étape 3 à venir']);
-    })->name('dossiers.completed');
-    
-    Route::get('/dossiers/approved', function() {
-        return response()->json(['message' => 'Dossiers approuvés - Étape 3 à venir']);
-    })->name('dossiers.approved');
-    
-    Route::get('/dossiers/rejected', function() {
-        return response()->json(['message' => 'Dossiers rejetés - Étape 3 à venir']);
-    })->name('dossiers.rejected');
-    
-    Route::get('/dossiers/{id}', function($id) {
-        return response()->json(['message' => "Détail dossier #$id - Étape 3 à venir"]);
-    })->name('dossiers.show');
-    
-    Route::get('/dossiers/{id}/assign', function($id) {
-        return response()->json(['message' => "Attribution dossier #$id - Étape 4 à venir"]);
-    })->name('dossiers.assign');
-    
-    Route::get('/dossiers/{id}/edit', function($id) {
-        return response()->json(['message' => "Édition dossier #$id - Étape 3 à venir"]);
-    })->name('dossiers.edit');
-    
-    Route::post('/dossiers/{id}/approve', function($id) {
-        return response()->json(['message' => "Approbation dossier #$id - Étape 3 à venir"]);
-    })->name('dossiers.approve');
-    
-    Route::post('/dossiers/{id}/reject', function($id) {
-        return response()->json(['message' => "Rejet dossier #$id - Étape 3 à venir"]);
-    })->name('dossiers.reject');
-    
-    // GESTION UTILISATEURS - Routes de base (les autres sont dans admin.php)
-    Route::get('/users', function() {
-        return response()->json(['message' => 'Liste des utilisateurs - Étape 5 à venir']);
-    })->name('users.index');
-    
-    Route::get('/users/create', function() {
-        return response()->json(['message' => 'Création utilisateur - Étape 5 à venir']);
-    })->name('users.create');
-    
-    Route::get('/users/operators', function() {
-        return response()->json(['message' => 'Liste des opérateurs - Étape 5 à venir']);
-    })->name('users.operators');
-    
-    Route::get('/users/agents', function() {
-        return response()->json(['message' => 'Liste des agents - Étape 5 à venir']);
-    })->name('users.agents');
-    
-    Route::get('/users/admins', function() {
-        return response()->json(['message' => 'Liste des administrateurs - Étape 5 à venir']);
-    })->name('users.admins');
-    
-    Route::get('/users/{id}', function($id) {
-        return response()->json(['message' => "Détail utilisateur #$id - Étape 5 à venir"]);
-    })->name('users.show');
-    
-    Route::get('/users/{id}/edit', function($id) {
-        return response()->json(['message' => "Édition utilisateur #$id - Étape 5 à venir"]);
-    })->name('users.edit');
-    
-    // CONFIGURATION - Routes complètes
-    Route::get('/config', function() {
-        return response()->json(['message' => 'Configuration générale - Étape 6 à venir']);
-    })->name('config.index');
-    
-    Route::get('/config/organizations', function() {
-        return response()->json(['message' => 'Configuration organisations - Étape 6 à venir']);
-    })->name('config.organizations');
-    
-    Route::get('/config/documents', function() {
-        return response()->json(['message' => 'Configuration documents - Étape 6 à venir']);
-    })->name('config.documents');
-    
-    Route::get('/config/locations', function() {
-        return response()->json(['message' => 'Configuration zones géographiques - Étape 6 à venir']);
-    })->name('config.locations');
-    
-    Route::get('/config/workflows', function() {
-        return response()->json(['message' => 'Configuration workflows - Étape 6 à venir']);
-    })->name('config.workflows');
-    
-    Route::get('/config/types', function() {
-        return response()->json(['message' => 'Configuration types - Étape 6 à venir']);
-    })->name('config.types');
-    
-    Route::get('/config/permissions', function() {
-        return response()->json(['message' => 'Configuration permissions - Étape 6 à venir']);
-    })->name('config.permissions');
-    
-    Route::get('/config/templates', function() {
-        return response()->json(['message' => 'Configuration templates - Étape 6 à venir']);
-    })->name('config.templates');
-    
-    // RAPPORTS - Routes complètes
-    Route::get('/reports', function() {
-        return response()->json(['message' => 'Rapports - Étape 6 à venir']);
-    })->name('reports.index');
-    
-    Route::get('/reports/generate', function() {
-        return response()->json(['message' => 'Génération rapport - Étape 6 à venir']);
-    })->name('reports.generate');
-    
-    Route::get('/reports/statistics', function() {
-        return response()->json(['message' => 'Statistiques - Étape 6 à venir']);
-    })->name('reports.statistics');
-    
-    Route::get('/reports/performance', function() {
-        return response()->json(['message' => 'Rapports performance - Étape 6 à venir']);
-    })->name('reports.performance');
-    
-    Route::get('/reports/export', function() {
-        return response()->json(['message' => 'Export données - Étape 6 à venir']);
-    })->name('reports.export');
-    
-    // SYSTÈME - Routes complètes
-    // SYSTÈME - Routes complètes (CORRECTION FINALE)
-Route::get('/system/settings', function() {
-    return response()->json(['message' => 'Paramètres système - Étape 6 à venir']);
-})->name('system.settings');
-
-Route::get('/system/logs', function() {
-    return response()->json(['message' => 'Logs système - Étape 6 à venir']);
-})->name('system.logs');
-
-Route::get('/system/backup', function() {
-    return response()->json(['message' => 'Sauvegarde système - Étape 6 à venir']);
-})->name('system.backup');
-    
-    // ========================================
-    // ROUTES MANQUANTES CORRIGÉES
-    // ========================================
-    
-    // Analytics (référencé ligne 152 du layout)
-    Route::get('/analytics', [\App\Http\Controllers\Admin\AnalyticsController::class, 'index'])->name('analytics');
-    
-    // Notifications complètes
-    Route::prefix('notifications')->name('notifications.')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Admin\NotificationController::class, 'index'])->name('index');
-        Route::post('/{id}/read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAsRead'])->name('read');
-        Route::post('/mark-all-read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
-    });
-    
-    // PROFIL ET PARAMÈTRES UTILISATEUR (CORRIGÉS)
-    Route::get('/profile', [\App\Http\Controllers\Admin\ProfileController::class, 'index'])->name('profile');
-    
-    Route::get('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('settings');
-    
-    Route::get('/settings/system', function() {
-        return response()->json(['message' => 'Paramètres système - Étape 6 à venir']);
-    })->name('settings.system');
-    
-    Route::get('/settings/notifications', function() {
-        return response()->json(['message' => 'Paramètres notifications - Étape 6 à venir']);
-    })->name('settings.notifications');
-    
-    // API ROUTES pour le layout (CORRIGÉ)
-    Route::get('/api/search/all', function() {
-        return response()->json(['results' => [], 'message' => 'Recherche - Étape 6 à venir']);
-    })->name('api.search.all');
-    
-    Route::get('/api/notifications/recent', [\App\Http\Controllers\Admin\NotificationController::class, 'recent'])->name('api.notifications.recent');
 });
 
 /*
 |--------------------------------------------------------------------------
-| Routes Operator
+| Routes Operator - CONSERVÉES INTÉGRALEMENT
 |--------------------------------------------------------------------------
 */
 Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
