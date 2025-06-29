@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Operator;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Organisation;
+use App\Models\OrganizationDraft;
 use App\Models\Dossier;
 use App\Models\User;
 use App\Services\OrganisationValidationService;
+use App\Services\OrganisationStepService;
 use App\Services\WorkflowService;
 use App\Services\QrCodeService;
 
@@ -27,6 +29,321 @@ class OrganisationController extends Controller
         $this->qrCodeService = $qrCodeService;
     }
 
+    // =============================================
+    // NOUVELLES MÉTHODES POUR GESTION PAR ÉTAPES
+    // =============================================
+
+    /**
+     * Sauvegarder une étape via AJAX
+     * POST /operator/organisations/step/{step}/save
+     */
+    public function saveStep(Request $request, int $step)
+    {
+        try {
+            $stepService = app(OrganisationStepService::class);
+            
+            $request->validate([
+                'data' => 'required|array',
+                'session_id' => 'nullable|string'
+            ]);
+            
+            $result = $stepService->saveStep(
+                $step,
+                $request->input('data'),
+                auth()->id(),
+                $request->input('session_id', session()->getId())
+            );
+            
+            return response()->json($result);
+            
+        } catch (\Exception $e) {
+            \Log::error('Erreur sauvegarde étape via contrôleur', [
+                'step' => $step,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la sauvegarde',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Valider une étape sans sauvegarder
+     * POST /operator/organisations/step/{step}/validate
+     */
+    public function validateStep(Request $request, int $step)
+    {
+        try {
+            $stepService = app(OrganisationStepService::class);
+            
+            $request->validate([
+                'data' => 'required|array'
+            ]);
+            
+            $result = $stepService->validateStep($step, $request->input('data'));
+            
+            return response()->json([
+                'success' => $result['valid'],
+                'valid' => $result['valid'],
+                'errors' => $result['errors'],
+                'step' => $step
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur de validation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Récupérer un brouillon existant
+     * GET /operator/organisations/draft/{draftId}
+     */
+    public function getDraft(int $draftId)
+    {
+        try {
+            $draft = OrganizationDraft::where('id', $draftId)
+                ->where('user_id', auth()->id())
+                ->first();
+            
+            if (!$draft) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Brouillon non trouvé'
+                ], 404);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'draft' => $draft,
+                'statistics' => $draft->getStatistics(),
+                'steps_summary' => $draft->getStepsSummary(),
+                'next_step' => $draft->getNextStep()
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la récupération du brouillon',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Lister les brouillons de l'utilisateur connecté
+     * GET /operator/organisations/drafts
+     */
+    public function listDrafts(Request $request)
+    {
+        try {
+            $query = OrganizationDraft::where('user_id', auth()->id());
+            
+            // Filtres
+            if ($request->has('type') && $request->input('type') !== 'all') {
+                $query->byType($request->input('type'));
+            }
+            
+            if ($request->boolean('active_only', false)) {
+                $query->active();
+            }
+            
+            $drafts = $query->orderBy('last_saved_at', 'desc')
+                ->limit(20)
+                ->get();
+            
+            $draftsWithStats = $drafts->map(function ($draft) {
+                return [
+                    'id' => $draft->id,
+                    'organization_type' => $draft->organization_type,
+                    'current_step' => $draft->current_step,
+                    'completion_percentage' => $draft->completion_percentage,
+                    'last_saved_at' => $draft->last_saved_at,
+                    'expires_at' => $draft->expires_at,
+                    'is_expired' => $draft->isExpired(),
+                    'statistics' => $draft->getStatistics(),
+                    'can_resume' => !$draft->isExpired()
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'drafts' => $draftsWithStats,
+                'count' => $drafts->count()
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la récupération des brouillons',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Créer un nouveau brouillon
+     * POST /operator/organisations/draft/create
+     */
+    public function createDraft(Request $request)
+    {
+        try {
+            $request->validate([
+                'organization_type' => 'nullable|in:association,ong,parti_politique,confession_religieuse',
+                'session_id' => 'nullable|string'
+            ]);
+            
+            // Vérifier les limites d'organisations
+            $type = $request->input('organization_type');
+            if ($type) {
+                $canCreate = $this->checkOrganisationLimits($type);
+                if (!$canCreate['success']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $canCreate['message']
+                    ], 422);
+                }
+            }
+            
+            $draft = OrganizationDraft::create([
+                'user_id' => auth()->id(),
+                'organization_type' => $type,
+                'session_id' => $request->input('session_id', session()->getId()),
+                'form_data' => [],
+                'current_step' => 1,
+                'completion_percentage' => 0,
+                'last_saved_at' => now(),
+                'expires_at' => now()->addDays(7)
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Brouillon créé avec succès',
+                'draft' => $draft,
+                'draft_id' => $draft->id
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la création du brouillon',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Supprimer un brouillon
+     * DELETE /operator/organisations/draft/{draftId}
+     */
+    public function deleteDraft(int $draftId)
+    {
+        try {
+            $draft = OrganizationDraft::where('id', $draftId)
+                ->where('user_id', auth()->id())
+                ->first();
+            
+            if (!$draft) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Brouillon non trouvé'
+                ], 404);
+            }
+            
+            $draft->delete();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Brouillon supprimé avec succès'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la suppression',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Finaliser un brouillon et créer l'organisation
+     * POST /operator/organisations/draft/{draftId}/finalize
+     */
+    public function finalizeDraft(int $draftId)
+    {
+        try {
+            $stepService = app(OrganisationStepService::class);
+            
+            $result = $stepService->finalizeOrganisation($draftId);
+            
+            if ($result['success']) {
+                // Rediriger vers la page de confirmation
+                return response()->json([
+                    'success' => true,
+                    'message' => $result['message'],
+                    'organisation_id' => $result['organisation_id'],
+                    'redirect_url' => route('operator.organisations.show', $result['organisation_id'])
+                ]);
+            } else {
+                return response()->json($result, 422);
+            }
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la finalisation',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reprendre un brouillon existant
+     * GET /operator/organisations/draft/{draftId}/resume
+     */
+    public function resumeDraft(int $draftId)
+    {
+        try {
+            $draft = OrganizationDraft::where('id', $draftId)
+                ->where('user_id', auth()->id())
+                ->first();
+            
+            if (!$draft) {
+                return redirect()->route('operator.organisations.index')
+                    ->with('error', 'Brouillon non trouvé');
+            }
+            
+            if ($draft->isExpired()) {
+                return redirect()->route('operator.organisations.index')
+                    ->with('warning', 'Ce brouillon a expiré');
+            }
+            
+            // Étendre l'expiration automatiquement
+            $draft->extendExpiration(7);
+            
+            // Rediriger vers la page de création avec le brouillon
+            return redirect()->route('operator.organisations.create')
+                ->with('resume_draft_id', $draft->id)
+                ->with('success', 'Brouillon restauré avec succès');
+            
+        } catch (\Exception $e) {
+            return redirect()->route('operator.organisations.index')
+                ->with('error', 'Erreur lors de la reprise du brouillon');
+        }
+    }
+
+    // =============================================
+    // MÉTHODES EXISTANTES CONSERVÉES
+    // =============================================
+
     /**
      * Afficher la liste des organisations de l'opérateur
      */
@@ -42,6 +359,7 @@ class OrganisationController extends Controller
 
     /**
      * Afficher le formulaire de création d'une organisation
+     * VERSION MISE À JOUR avec support des brouillons
      */
     public function create(Request $request, $type = null)
     {
@@ -52,6 +370,34 @@ class OrganisationController extends Controller
                 ->with('error', $canCreate['message']);
         }
 
+        // Vérifier s'il faut reprendre un brouillon
+        $resumeDraftId = session('resume_draft_id');
+        $existingDraft = null;
+        
+        if ($resumeDraftId) {
+            $existingDraft = OrganizationDraft::where('id', $resumeDraftId)
+                ->where('user_id', auth()->id())
+                ->first();
+            
+            if ($existingDraft && !$existingDraft->isExpired()) {
+                // Nettoyer la session
+                session()->forget('resume_draft_id');
+            } else {
+                $existingDraft = null;
+            }
+        }
+        
+        // Si pas de brouillon existant, chercher les brouillons récents
+        if (!$existingDraft) {
+            $recentDrafts = OrganizationDraft::where('user_id', auth()->id())
+                ->active()
+                ->orderBy('last_saved_at', 'desc')
+                ->limit(5)
+                ->get();
+        } else {
+            $recentDrafts = collect();
+        }
+
         $guides = $this->getGuideContent($type);
         $documentTypes = $this->getRequiredDocuments($type);
         $provinces = $this->getProvinces();
@@ -60,7 +406,9 @@ class OrganisationController extends Controller
             'type', 
             'guides', 
             'documentTypes', 
-            'provinces'
+            'provinces',
+            'existingDraft',
+            'recentDrafts'
         ));
     }
 
@@ -261,12 +609,12 @@ class OrganisationController extends Controller
                         'organisation_id' => $organisation->id,
                         'dossier_id' => $dossier->id,
                         'numero_recepisse' => $numeroRecepisse,
-                        'redirect_url' => route('operator.organisations.confirmation', $dossier->id)
+                        'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
                     ],
                     'confirmation_data' => $confirmationData
                 ]);
             } else {
-                return redirect()->route('operator.organisations.confirmation', $dossier->id)
+                return redirect()->route('operator.dossiers.confirmation', $dossier->id)
                     ->with('success_data', $confirmationData);
             }
 
@@ -510,7 +858,7 @@ class OrganisationController extends Controller
                 'access_time' => now()
             ]);
 
-            return view('operator.organisations.confirmation', compact('confirmationData'));
+            return view('operator.dossiers.confirmation', compact('confirmationData'));
 
         } catch (\Exception $e) {
             \Log::error('Erreur affichage confirmation v3: ' . $e->getMessage(), [
@@ -574,7 +922,7 @@ class OrganisationController extends Controller
     }
 
     // =============================================================================
-    // MÉTHODES PRIVÉES CORRIGÉES
+    // MÉTHODES PRIVÉES CONSERVÉES ET COMPLÉTÉES
     // =============================================================================
 
     /**

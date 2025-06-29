@@ -66,10 +66,33 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
     
     /*
     |--------------------------------------------------------------------------
-    | 🏢 ORGANISATIONS - GESTION AVANCÉE
+    | 🏢 ORGANISATIONS - GESTION AVANCÉE ET NOUVEAUTÉS ✨
     |--------------------------------------------------------------------------
     */
     Route::prefix('organisations')->name('organisations.')->group(function () {
+        
+        // =============================================
+        // 🆕 GESTION PAR ÉTAPES - NOUVELLES ROUTES
+        // =============================================
+        
+        // Gestion des brouillons par étapes
+        Route::get('/drafts', [OrganisationController::class, 'listDrafts'])->name('drafts.list');
+        Route::post('/draft/create', [OrganisationController::class, 'createDraft'])->name('draft.create');
+        Route::get('/draft/{draftId}', [OrganisationController::class, 'getDraft'])->name('draft.get');
+        Route::delete('/draft/{draftId}', [OrganisationController::class, 'deleteDraft'])->name('draft.delete');
+        Route::get('/draft/{draftId}/resume', [OrganisationController::class, 'resumeDraft'])->name('draft.resume');
+        
+        // Sauvegarde et validation par étapes (AJAX)
+        Route::post('/step/{step}/save', [OrganisationController::class, 'saveStep'])->name('step.save');
+        Route::post('/step/{step}/validate', [OrganisationController::class, 'validateStep'])->name('step.validate');
+        
+        // Finalisation et création complète
+        Route::post('/draft/{draftId}/finalize', [OrganisationController::class, 'finalizeDraft'])->name('draft.finalize');
+        
+        // =============================================
+        // GESTION AVANCÉE EXISTANTE
+        // =============================================
+        
         // Gestion des membres dirigeants
         Route::prefix('/{organisation}/dirigeants')->name('dirigeants.')->group(function () {
             Route::get('/', [OrganisationController::class, 'dirigeants'])->name('index');
@@ -381,7 +404,7 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
 
 /*
 |--------------------------------------------------------------------------
-| 🔗 Routes API Operator pour AJAX et widgets
+| 🔗 Routes API Operator pour AJAX et widgets ✨
 |--------------------------------------------------------------------------
 */
 Route::prefix('api/operator')->name('api.operator.')->middleware(['auth', 'operator'])->group(function () {
@@ -395,27 +418,63 @@ Route::prefix('api/operator')->name('api.operator.')->middleware(['auth', 'opera
     Route::get('/search', [ProfileController::class, 'universalSearch'])->name('search');
     Route::get('/search/suggestions', [ProfileController::class, 'searchSuggestions'])->name('search.suggestions');
     
-    // Validation temps réel
+    // =============================================
+    // 🆕 VALIDATION TEMPS RÉEL POUR GESTION PAR ÉTAPES
+    // =============================================
+    
+    // Validation métier temps réel
     Route::post('/validate/nip', [ProfileController::class, 'validateNip'])->name('validate.nip');
     Route::post('/validate/phone', [ProfileController::class, 'validatePhone'])->name('validate.phone');
     Route::post('/validate/organisation-name', [OrganisationController::class, 'validateName'])
         ->name('validate.organisation-name');
+    
+    // Vérifications spécifiques aux étapes
+    Route::post('/validate/step-data', [OrganisationController::class, 'validateStepData'])->name('validate.step-data');
+    Route::post('/validate/members-conflicts', [OrganisationController::class, 'validateMembersConflicts'])
+        ->name('validate.members-conflicts');
+    Route::post('/validate/documents-completeness', [OrganisationController::class, 'validateDocumentsCompleteness'])
+        ->name('validate.documents-completeness');
+    
+    // =============================================
+    // AUTOCOMPLÉTION ET ASSISTANCE
+    // =============================================
     
     // Autocomplétion
     Route::get('/autocomplete/communes', [ProfileController::class, 'autocompleteCommunnes'])
         ->name('autocomplete.communes');
     Route::get('/autocomplete/activites', [OrganisationController::class, 'autocompleteActivites'])
         ->name('autocomplete.activites');
+    Route::get('/autocomplete/professions', [OrganisationController::class, 'autocompleteProfessions'])
+        ->name('autocomplete.professions');
+    
+    // =============================================
+    // UPLOADS ET FICHIERS
+    // =============================================
     
     // Uploads et fichiers (utilise DocumentController existant)
     Route::post('/upload/avatar', [ProfileController::class, 'uploadAvatar'])->name('upload.avatar');
     Route::post('/upload/document', [DocumentController::class, 'uploadDocument'])->name('upload.document');
     Route::post('/upload/bulk', [DocumentController::class, 'bulkUpload'])->name('upload.bulk');
     
+    // Upload spécifique aux étapes
+    Route::post('/upload/step-document', [OrganisationController::class, 'uploadStepDocument'])
+        ->name('upload.step-document');
+    Route::delete('/delete/step-document/{document}', [OrganisationController::class, 'deleteStepDocument'])
+        ->name('delete.step-document');
+    
+    // =============================================
+    // STATISTIQUES ET MONITORING
+    // =============================================
+    
     // Statistiques personnelles
     Route::get('/stats/organisations', [OrganisationController::class, 'getStats'])->name('stats.organisations');
     Route::get('/stats/dossiers', [DossierController::class, 'getStats'])->name('stats.dossiers');
     Route::get('/stats/adherents', [AdherentController::class, 'getStats'])->name('stats.adherents');
+    Route::get('/stats/drafts', [OrganisationController::class, 'getDraftsStats'])->name('stats.drafts');
+    
+    // =============================================
+    // VÉRIFICATIONS SYSTÈME
+    // =============================================
     
     // Vérifications système
     Route::get('/check/limits', [ProfileController::class, 'checkLimits'])->name('check.limits');
@@ -424,4 +483,10 @@ Route::prefix('api/operator')->name('api.operator.')->middleware(['auth', 'opera
     })->name('check.deadlines');
     Route::get('/check/documents', [DocumentController::class, 'checkRequiredDocuments'])
         ->name('check.documents');
+    
+    // Vérifications spécifiques aux brouillons
+    Route::get('/check/draft-expiration/{draftId}', [OrganisationController::class, 'checkDraftExpiration'])
+        ->name('check.draft-expiration');
+    Route::get('/check/step-completion/{draftId}', [OrganisationController::class, 'checkStepCompletion'])
+        ->name('check.step-completion');
 });
