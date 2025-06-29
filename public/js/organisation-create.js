@@ -3,9 +3,30 @@
  * PNGDI - Formulaire Création Organisation - VERSION FINALE COMPLÈTE
  * Fichier: public/js/organisation-create.js
  * Compatible: Bootstrap 5 + Laravel + Toutes les 9 étapes
- * Date: 28/06/2025
+ * Date: 29 juin 2025
+ * Version: 1.2 avec système d'anomalies intégré
  * ========================================================================
  */
+
+// ========================================
+// FONCTION DE COMPATIBILITÉ NAVIGATEURS
+// ========================================
+function elementMatches(element, selector) {
+    if (!element) return false;
+    
+    if (element.matches) {
+        return element.matches(selector);
+    } else if (element.msMatchesSelector) {
+        return element.msMatchesSelector(selector);
+    } else if (element.webkitMatchesSelector) {
+        return element.webkitMatchesSelector(selector);
+    } else if (element.mozMatchesSelector) {
+        return element.mozMatchesSelector(selector);
+    }
+    
+    // Fallback pour très anciens navigateurs
+    return false;
+}
 
 // ========================================
 // 1. CONFIGURATION GLOBALE
@@ -70,6 +91,11 @@ window.OrganisationApp = {
                     label: 'Membre déjà enregistré ailleurs',
                     description: 'Cette personne est déjà membre active d\'une autre organisation'
                 },
+                'profession_exclue_parti': {
+                    level: 'critique',
+                    label: 'Profession exclue pour parti politique',
+                    description: 'Cette profession est interdite pour les membres de partis politiques'
+                },
                 'doublon_fichier': {
                     level: 'mineure',
                     label: 'Doublon dans le fichier',
@@ -105,7 +131,7 @@ window.OrganisationApp = {
             }
         },
         
-        // Exigences par type d'organisation (conservé du fichier original)
+        // Exigences par type d'organisation
         orgRequirements: {
             'association': {
                 minFondateurs: 3,
@@ -131,10 +157,22 @@ window.OrganisationApp = {
                 label: 'Confession Religieuse',
                 documents: ['statuts', 'pv_ag', 'liste_fondateurs', 'justif_siege', 'expose_doctrine', 'justif_lieu_culte']
             }
-        }
+        },
+        
+        // Professions exclues pour partis politiques
+        professionsExcluesParti: [
+            'magistrat', 'juge', 'procureur', 'avocat_general',
+            'militaire', 'gendarme', 'policier', 'forces_armee',
+            'prefet', 'sous_prefet', 'gouverneur', 'maire',
+            'fonctionnaire_administration', 'ambassadeur', 'consul',
+            'directeur_general_public', 'recteur_universite',
+            'chef_etablissement_public', 'membre_conseil_constitutionnel',
+            'controleur_etat', 'inspecteur_general',
+            'membre_autorite_independante', 'comptable_public'
+        ]
     },
     
-    // Cache et données (conservé du fichier original)
+    // Cache et données
     cache: new Map(),
     formData: {},
     validationErrors: {},
@@ -159,12 +197,11 @@ window.OrganisationApp = {
         version: '1.2'
     },
     
-    // Timers (conservé du fichier original)
+    // Timers
     timers: {
         autoSave: null,
         validation: {}
     }
-
 };
 
 // ========================================
@@ -174,7 +211,7 @@ window.OrganisationApp = {
 /**
  * Créer une anomalie pour un adhérent
  */
- function createAnomalie(adherent, type, details = '') {
+function createAnomalie(adherent, type, details = '') {
     const anomalieConfig = OrganisationApp.config.anomalies.types[type];
     if (!anomalieConfig) {
         console.warn('Type d\'anomalie non reconnu:', type);
@@ -282,6 +319,13 @@ function getRecommandationsAnomalies() {
         });
     }
     
+    if (typesDetectes.includes('profession_exclue_parti')) {
+        recommandations.push({
+            type: 'urgent',
+            message: 'Les personnes avec professions exclues ne peuvent être membres de partis politiques.'
+        });
+    }
+    
     return recommandations;
 }
 
@@ -308,12 +352,7 @@ function getQualiteLabel(qualite) {
     return labels[qualite] || 'Non évalué';
 }
 
-console.log('✅ ÉTAPE 1 : Configuration globale avec anomalies - Version 1.2 harmonisée');
-
-// ========================================
-// SUITE : Le reste du fichier original sera conservé et mis à jour aux étapes suivantes
-// Les sections 2-14 du fichier original restent inchangées pour cette étape
-// ========================================
+console.log('✅ Configuration globale avec anomalies - Version 1.2 harmonisée');
 
 // ========================================
 // 2. FONCTIONS DE NAVIGATION
@@ -725,6 +764,9 @@ function getGuideContentForType(type) {
                     </ul>
                 </div>
             </div>
+            <div class="alert alert-danger mt-3">
+                <strong>⚠️ Important :</strong> 22 professions sont exclues des partis politiques (magistrats, militaires, fonctionnaires, etc.)
+            </div>
         `,
         'confession_religieuse': `
             <div class="alert alert-secondary border-0 mb-4 shadow-sm" style="background: linear-gradient(135deg, rgba(111, 66, 193, 0.1) 0%, rgba(232, 62, 140, 0.05) 100%);">
@@ -761,6 +803,7 @@ function getGuideContentForType(type) {
     
     return guides[type] || '<p>Guide non disponible pour ce type d\'organisation.</p>';
 }
+
 // ========================================
 // 4. VALIDATION COMPLÈTE TOUTES ÉTAPES
 // ========================================
@@ -768,7 +811,7 @@ function getGuideContentForType(type) {
 /**
  * Validation de l'étape actuelle
  */
- function validateCurrentStep() {
+function validateCurrentStep() {
     return validateStep(OrganisationApp.currentStep);
 }
 
@@ -907,6 +950,18 @@ function validateStep4() {
         }
     });
     
+    // Validation spéciale pour org_objet (minimum 50 caractères)
+    const orgObjet = document.getElementById('org_objet');
+    if (orgObjet) {
+        const objetText = orgObjet.value.trim();
+        if (objetText.length < 50) {
+            showFieldError(orgObjet, `L'objet social doit contenir au moins 50 caractères (${objetText.length}/50)`);
+            isValid = false;
+        } else {
+            clearFieldError(orgObjet);
+        }
+    }
+    
     return isValid;
 }
 
@@ -989,6 +1044,11 @@ function validateStep8() {
 function validateStep9() {
     const declarations = ['declaration_veracite', 'declaration_conformite', 'declaration_autorisation'];
     
+    // Ajouter la déclaration spécifique pour parti politique
+    if (OrganisationApp.selectedOrgType === 'parti_politique') {
+        declarations.push('declaration_exclusivite_parti');
+    }
+    
     for (const declId of declarations) {
         const decl = document.getElementById(declId);
         if (!decl || !decl.checked) {
@@ -1034,6 +1094,8 @@ function validateField(field) {
             return validateBirthDate(field, value);
         case 'org_nom':
             return validateOrganizationName(field, value);
+        case 'org_objet':
+            return validateOrgObjet(field, value);
         default:
             return validateGenericField(field, value);
     }
@@ -1161,6 +1223,36 @@ function validateOrganizationName(field, value) {
 }
 
 /**
+ * Validation objet social (minimum 50 caractères)
+ */
+function validateOrgObjet(field, value) {
+    if (!value) {
+        showFieldError(field, 'L\'objet social est obligatoire');
+        return false;
+    }
+    
+    const minLength = 50;
+    if (value.length < minLength) {
+        showFieldError(field, `L'objet social doit contenir au moins ${minLength} caractères (${value.length}/${minLength})`);
+        
+        // Ajouter un compteur visuel
+        let counterDiv = field.parentNode.querySelector('.char-counter');
+        if (!counterDiv) {
+            counterDiv = document.createElement('div');
+            counterDiv.className = 'char-counter small text-muted mt-1';
+            field.parentNode.appendChild(counterDiv);
+        }
+        counterDiv.textContent = `${value.length}/${minLength} caractères`;
+        counterDiv.style.color = value.length < minLength ? '#dc3545' : '#28a745';
+        
+        return false;
+    }
+    
+    clearFieldError(field);
+    return true;
+}
+
+/**
  * Validation générique
  */
 function validateGenericField(field, value) {
@@ -1271,7 +1363,7 @@ function updateNIPValidationIcon(status) {
 /**
  * Mise à jour des exigences selon le type d'organisation
  */
- function updateOrganizationRequirements() {
+function updateOrganizationRequirements() {
     if (!OrganisationApp.selectedOrgType) return;
     
     const requirements = OrganisationApp.config.orgRequirements[OrganisationApp.selectedOrgType];
@@ -1416,7 +1508,7 @@ function clearFounderForm() {
 }
 
 /**
- * Ajouter un adhérent
+ * Ajouter un adhérent avec validation profession exclue
  */
 function addAdherent() {
     const adherent = {
@@ -1438,6 +1530,24 @@ function addAdherent() {
         return;
     }
     
+    // Vérification profession exclue pour parti politique
+    if (OrganisationApp.selectedOrgType === 'parti_politique' && adherent.profession) {
+        if (OrganisationApp.config.professionsExcluesParti.includes(adherent.profession)) {
+            if (!confirm(`⚠️ ATTENTION: La profession "${adherent.profession}" est normalement exclue des partis politiques selon la législation gabonaise.\n\nVoulez-vous tout de même ajouter cet adhérent ? (Il sera marqué avec une anomalie critique)`)) {
+                return;
+            }
+            
+            // Marquer avec anomalie mais permettre l'ajout
+            adherent.hasAnomalies = true;
+            adherent.anomalies = [{
+                type: 'profession_exclue_parti',
+                level: 'critique',
+                message: 'Profession exclue pour parti politique',
+                details: `La profession "${adherent.profession}" est interdite pour les membres de partis politiques`
+            }];
+        }
+    }
+    
     // Vérifier doublons
     if (OrganisationApp.adherents.some(a => a.nip === adherent.nip)) {
         showNotification('Ce NIP existe déjà dans la liste des adhérents', 'warning');
@@ -1454,7 +1564,13 @@ function addAdherent() {
     OrganisationApp.adherents.push(adherent);
     updateAdherentsList();
     clearAdherentForm();
-    showNotification('Adhérent ajouté avec succès', 'success');
+    
+    // Message spécial si anomalie
+    if (adherent.hasAnomalies) {
+        showNotification('Adhérent ajouté avec anomalie critique (profession exclue)', 'warning');
+    } else {
+        showNotification('Adhérent ajouté avec succès', 'success');
+    }
 }
 
 /**
@@ -1493,17 +1609,24 @@ function updateAdherentsList() {
                             <th>NIP</th>
                             <th>Téléphone</th>
                             <th>Profession</th>
+                            <th>Statut</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${pageAdherents.map((adherent, index) => `
-                            <tr>
+                            <tr ${adherent.hasAnomalies ? 'class="table-warning"' : ''}>
                                 <td>${adherent.civilite}</td>
                                 <td><strong>${adherent.nom} ${adherent.prenom}</strong></td>
                                 <td><code>${adherent.nip}</code></td>
                                 <td>${adherent.telephone || '-'}</td>
                                 <td>${adherent.profession || '-'}</td>
+                                <td>
+                                    ${adherent.hasAnomalies ? 
+                                        `<span class="badge bg-danger" title="${adherent.anomalies[0]?.details || 'Anomalie détectée'}">Anomalie</span>` : 
+                                        `<span class="badge bg-success">Valide</span>`
+                                    }
+                                </td>
                                 <td>
                                     <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeAdherent(${startIndex + index})">
                                         <i class="fas fa-trash"></i>
@@ -1525,7 +1648,15 @@ function updateAdherentsList() {
     }
     
     if (countSpan) {
-        countSpan.textContent = `${OrganisationApp.adherents.length} adhérent(s)`;
+        // Compter les adhérents valides et avec anomalies
+        const valides = OrganisationApp.adherents.filter(a => !a.hasAnomalies).length;
+        const anomalies = OrganisationApp.adherents.filter(a => a.hasAnomalies).length;
+        
+        if (anomalies > 0) {
+            countSpan.innerHTML = `${OrganisationApp.adherents.length} adhérent(s) <small class="text-muted">(${valides} valides, ${anomalies} anomalies)</small>`;
+        } else {
+            countSpan.textContent = `${OrganisationApp.adherents.length} adhérent(s)`;
+        }
     }
 }
 
@@ -1557,15 +1688,81 @@ function clearAdherentForm() {
     });
 }
 
-
 // ========================================
-// CORRECTION DE LA FONCTION D'IMPORTATION - VERSION COMPLÈTE
+// 5.1 IMPORTATION FICHIER ADHÉRENTS - VERSION COMPLÈTE
 // ========================================
 
 /**
- * Lecture du fichier Excel/CSV - VERSION CORRIGÉE
+ * Gestion de l'importation du fichier Excel/CSV des adhérents
  */
- async function readAdherentFile(file) {
+async function handleAdherentFileImport(fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    console.log('📁 Début importation fichier adhérents:', file.name);
+    
+    // Validation du fichier
+    if (!validateAdherentFile(file)) {
+        clearFileInput();
+        return;
+    }
+    
+    try {
+        showNotification('📁 Analyse du fichier en cours...', 'info');
+        
+        // Lire le fichier Excel/CSV
+        const adherentsData = await readAdherentFile(file);
+        
+        if (!adherentsData || adherentsData.length === 0) {
+            showNotification('❌ Le fichier est vide ou invalide', 'danger');
+            clearFileInput();
+            return;
+        }
+        
+        console.log(`📊 ${adherentsData.length} lignes détectées dans le fichier`);
+        
+        // Valider et traiter les données avec système d'anomalies
+        const validationResult = await validateAdherentsImport(adherentsData);
+        
+        // Traiter selon les résultats de validation
+        await processImportResult(validationResult);
+        
+    } catch (error) {
+        console.error('❌ Erreur importation adhérents:', error);
+        showNotification('❌ Erreur lors de l\'importation: ' + error.message, 'danger');
+        clearFileInput();
+    }
+}
+
+/**
+ * Validation du fichier (format, taille)
+ */
+function validateAdherentFile(file) {
+    // Vérifier la taille (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        showNotification('❌ Le fichier ne peut pas dépasser 5MB', 'danger');
+        return false;
+    }
+    
+    // Vérifier le format
+    const allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.ms-excel', // .xls
+        'text/csv'
+    ];
+    
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
+        showNotification('❌ Format de fichier non autorisé. Utilisez Excel (.xlsx, .xls) ou CSV', 'danger');
+        return false;
+    }
+    
+    return true;
+}
+
+/**
+ * Lecture du fichier Excel/CSV
+ */
+async function readAdherentFile(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         
@@ -1763,427 +1960,24 @@ function parseAdherentCSV(csvText) {
 }
 
 /**
- * Vérification des membres existants via API - VERSION AMÉLIORÉE
- */
-async function checkExistingMembersAPI(nips) {
-    if (nips.length === 0) return [];
-    
-    try {
-        const response = await fetch('/api/organisations/check-existing-members', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ nips: nips })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            return data.existing_nips || [];
-        } else if (response.status === 404) {
-            console.warn('API check membres existants non trouvée, import sans vérification');
-            return []; // Permettre l'import sans vérification
-        } else {
-            console.warn('Erreur API check membres existants:', response.status);
-            return []; // Permettre l'import en cas d'erreur API
-        }
-    } catch (error) {
-        console.error('Erreur vérification membres existants:', error);
-        return []; // Permettre l'import en cas d'erreur réseau
-    }
-}
-
-/**
- * Amélioration des messages d'erreur
- */
-function generateImportMessages(result, minRequired) {
-    const messages = [];
-    
-    // Message principal selon le résultat
-    if (result.canProceed) {
-        const totalValid = result.finalValidCount + result.existingMembers.length;
-        messages.push({
-            type: 'success',
-            title: '✅ Importation possible',
-            content: `${totalValid} adhérents détectés (${result.finalValidCount} nouveaux + ${result.existingMembers.length} à corriger). Minimum requis: ${minRequired}`
-        });
-        
-        if (result.finalValidCount > 0) {
-            messages.push({
-                type: 'info',
-                title: '📊 Résumé de l\'analyse',
-                content: `Fichier traité avec succès : ${result.originalCount} lignes analysées, ${result.finalValidCount} adhérents valides seront ajoutés.`
-            });
-        }
-    } else {
-        const totalValid = result.finalValidCount + result.existingMembers.length;
-        messages.push({
-            type: 'danger',
-            title: '❌ Importation impossible',
-            content: `Seulement ${totalValid} adhérents valides détectés (${result.finalValidCount} nouveaux + ${result.existingMembers.length} existants). Minimum requis: ${minRequired}.`
-        });
-        
-        messages.push({
-            type: 'warning',
-            title: '💡 Suggestion',
-            content: `Ajoutez ${minRequired - totalValid} adhérents supplémentaires dans votre fichier pour pouvoir effectuer l'importation.`
-        });
-    }
-    
-    // Messages spécifiques pour chaque problème
-    if (result.duplicatesInFile.length > 0) {
-        messages.push({
-            type: 'warning',
-            title: '⚠️ Doublons détectés dans le fichier',
-            content: `${result.duplicatesInFile.length} doublons NIP supprimés automatiquement. Seule la première occurrence de chaque NIP a été conservée.`,
-            details: result.duplicatesInFile.map(d => 
-                `Ligne ${d.lineNumber}: ${d.nom} ${d.prenom} (NIP: ${d.nip}) - Doublon supprimé`
-            )
-        });
-    }
-    
-    if (result.existingMembers.length > 0) {
-        messages.push({
-            type: 'warning',
-            title: '⚠️ Membres déjà actifs détectés',
-            content: `${result.existingMembers.length} personnes sont déjà membres actifs d'autres organisations. Elles seront ajoutées avec statut "à corriger" pour régularisation manuelle.`,
-            details: result.existingMembers.map(m => 
-                `Ligne ${m.lineNumber}: ${m.nom} ${m.prenom} (NIP: ${m.nip}) - Déjà membre actif ailleurs`
-            )
-        });
-    }
-    
-    if (result.invalidEntries.length > 0) {
-        messages.push({
-            type: 'danger',
-            title: '❌ Entrées invalides ou incomplètes',
-            content: `${result.invalidEntries.length} entrées ignorées en raison d'erreurs de format ou de données manquantes.`,
-            details: result.invalidEntries.map(e => 
-                `Ligne ${e.lineNumber}: ${e.nom || 'Nom manquant'} ${e.prenom || 'Prénom manquant'} - ${e.error}`
-            )
-        });
-    }
-    
-    return messages;
-}
-
-/**
- * Amélioration du processus d'importation
- */
-async function processImportResult(validationResult) {
-    const { canProceed, validAdherents, existingMembers, messages, originalCount, finalValidCount } = validationResult;
-    
-    // Afficher tous les messages de validation
-    messages.forEach(message => {
-        showDetailedImportNotification(message);
-    });
-    
-    if (!canProceed) {
-        showNotification('❌ Importation annulée: critères non remplis', 'danger');
-        clearFileInput();
-        return;
-    }
-    
-    // Afficher un résumé avant confirmation
-    const summaryMsg = `Importation de ${finalValidCount} nouveaux adhérents` + 
-        (existingMembers.length > 0 ? ` + ${existingMembers.length} à corriger` : '') +
-        ` sur ${originalCount} lignes analysées.`;
-    
-    // Confirmer l'importation
-    if (!confirm(`${summaryMsg}\n\nConfirmez-vous l'importation ?`)) {
-        showNotification('❌ Importation annulée par l\'utilisateur', 'info');
-        clearFileInput();
-        return;
-    }
-    
-    // Confirmer séparément si des membres existants
-    if (existingMembers.length > 0) {
-        const confirmExisting = confirm(
-            `⚠️ ${existingMembers.length} membres sont déjà actifs dans d'autres organisations.\n\n` +
-            `Ils seront ajoutés avec statut "à corriger" nécessitant une régularisation manuelle.\n\n` +
-            `Continuer l'importation ?`
-        );
-        if (!confirmExisting) {
-            showNotification('❌ Importation annulée: membres existants non acceptés', 'info');
-            clearFileInput();
-            return;
-        }
-    }
-    
-    // CONSIGNE 4: Enregistrer avec statut "à corriger" pour les membres existants
-    let adherentsToAdd = [...validAdherents];
-    
-    if (existingMembers.length > 0) {
-        const correctionAdherents = existingMembers.map(member => ({
-            ...member,
-            status: 'correction_required',
-            note: 'Déjà membre actif d\'une autre organisation - Régularisation requise'
-        }));
-        
-        adherentsToAdd = [...adherentsToAdd, ...correctionAdherents];
-    }
-    
-    // Ajouter tous les adhérents à la liste
-    adherentsToAdd.forEach(adherent => {
-        OrganisationApp.adherents.push(adherent);
-    });
-    
-    // Mettre à jour l'affichage avec statuts visuels
-    updateAdherentsListWithStatus();
-    
-    // Message de succès final détaillé
-    const successDetails = [
-        `🎉 Importation réussie !`,
-        `📊 ${validAdherents.length} adhérents valides ajoutés`,
-        existingMembers.length > 0 ? `⚠️ ${existingMembers.length} nécessitent une correction` : '',
-        `📁 Total: ${adherentsToAdd.length} entrées traitées`
-    ].filter(Boolean).join('\n');
-    
-    showNotification(successDetails, 'success', 10000);
-    
-    // Vider le champ fichier et sauvegarder
-    clearFileInput();
-    autoSave();
-    
-    console.log('✅ Import terminé:', {
-        nouveaux: validAdherents.length,
-        corrections: existingMembers.length,
-        total: adherentsToAdd.length
-    });
-}
-
-/**
- * Mise à jour de la liste des adhérents avec statuts visuels
- */
-function updateAdherentsListWithStatus() {
-    // Appeler la fonction existante
-    updateAdherentsList();
-    
-    // Ajouter des indications visuelles pour les statuts
-    setTimeout(() => {
-        const listContainer = document.getElementById('adherents_list');
-        if (listContainer) {
-            // Ajouter des classes CSS pour les statuts
-            OrganisationApp.adherents.forEach((adherent, index) => {
-                const row = listContainer.querySelector(`tr:nth-child(${index + 1})`);
-                if (row && adherent.status === 'correction_required') {
-                    row.classList.add('table-warning');
-                    row.title = adherent.note || 'Nécessite une correction';
-                    
-                    // Ajouter un badge de statut
-                    const statusCell = row.querySelector('td:last-child');
-                    if (statusCell) {
-                        statusCell.innerHTML += ' <span class="badge bg-warning ms-1" title="' + (adherent.note || '') + '">À corriger</span>';
-                    }
-                }
-            });
-        }
-    }, 100);
-}
-
-// Ajouter les styles pour les statuts
-if (!document.getElementById('import-status-styles')) {
-    const styles = document.createElement('style');
-    styles.id = 'import-status-styles';
-    styles.textContent = `
-        .table-warning {
-            background-color: rgba(255, 243, 205, 0.3) !important;
-        }
-        .badge.bg-warning {
-            font-size: 0.75em;
-        }
-    `;
-    document.head.appendChild(styles);
-}
-
-console.log('📁 Module importation adhérents - VERSION CORRIGÉE EXCEL + CSV');
-
-// ========================================
-// AJOUT À INTÉGRER DANS LE FICHIER organisation-create.js
-// Section à ajouter après la section "5. GESTION FONDATEURS ET ADHÉRENTS"
-// ========================================
-
-// ========================================
-// 5.5 IMPORTATION FICHIER ADHÉRENTS - NOUVELLES FONCTIONS
-// ========================================
-
-/**
- * Gestion de l'importation du fichier Excel/CSV des adhérents
- * CONSIGNES : 1=doublons fichier, 2=minimum requis, 3=membres existants, 4=statut correction
- */
- async function handleAdherentFileImport(fileInput) {
-    const file = fileInput.files[0];
-    if (!file) return;
-    
-    console.log('📁 Début importation fichier adhérents:', file.name);
-    
-    // Validation du fichier
-    if (!validateAdherentFile(file)) {
-        clearFileInput();
-        return;
-    }
-    
-    try {
-        showNotification('📁 Analyse du fichier en cours...', 'info');
-        
-        // Lire le fichier Excel/CSV
-        const adherentsData = await readAdherentFile(file);
-        
-        if (!adherentsData || adherentsData.length === 0) {
-            showNotification('❌ Le fichier est vide ou invalide', 'danger');
-            clearFileInput();
-            return;
-        }
-        
-        console.log(`📊 ${adherentsData.length} lignes détectées dans le fichier`);
-        
-        // Appliquer les 4 consignes de validation
-        const validationResult = await validateAdherentsImport(adherentsData);
-        
-        // Traiter selon les résultats de validation
-        await processImportResult(validationResult);
-        
-    } catch (error) {
-        console.error('❌ Erreur importation adhérents:', error);
-        showNotification('❌ Erreur lors de l\'importation: ' + error.message, 'danger');
-        clearFileInput();
-    }
-}
-
-/**
- * Validation du fichier (format, taille)
- */
-function validateAdherentFile(file) {
-    // Vérifier la taille (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-        showNotification('❌ Le fichier ne peut pas dépasser 5MB', 'danger');
-        return false;
-    }
-    
-    // Vérifier le format
-    const allowedTypes = [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-        'application/vnd.ms-excel', // .xls
-        'text/csv'
-    ];
-    
-    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls|csv)$/i)) {
-        showNotification('❌ Format de fichier non autorisé. Utilisez Excel (.xlsx, .xls) ou CSV', 'danger');
-        return false;
-    }
-    
-    return true;
-}
-
-/**
- * Lecture du fichier Excel/CSV
- */
-async function readAdherentFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            try {
-                let data = [];
-                
-                if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-                    // Traitement CSV
-                    const csvText = e.target.result;
-                    data = parseAdherentCSV(csvText);
-                } else {
-                    // Traitement Excel (simulation)
-                    reject(new Error('Import Excel non encore implémenté. Utilisez un fichier CSV.'));
-                    return;
-                }
-                
-                resolve(data);
-            } catch (error) {
-                reject(error);
-            }
-        };
-        
-        reader.onerror = () => reject(new Error('Erreur lecture fichier'));
-        
-        if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-            reader.readAsText(file);
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
-    });
-}
-
-/**
- * Parsing CSV des adhérents
- */
-function parseAdherentCSV(csvText) {
-    const lines = csvText.split('\n').filter(line => line.trim());
-    if (lines.length < 2) {
-        throw new Error('Le fichier CSV doit contenir au moins un en-tête et une ligne de données');
-    }
-    
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-    const data = [];
-    
-    // Vérifier les colonnes requises
-    const requiredColumns = ['civilité', 'nom', 'prenom', 'nip'];
-    const missingColumns = requiredColumns.filter(col => 
-        !headers.some(h => h.includes(col.replace('é', 'e')) || h.includes(col))
-    );
-    
-    if (missingColumns.length > 0) {
-        throw new Error(`Colonnes manquantes: ${missingColumns.join(', ')}`);
-    }
-    
-    for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-        if (values.length < 3) continue; // Ignorer les lignes vides
-        
-        const row = {};
-        headers.forEach((header, index) => {
-            row[header] = values[index] || '';
-        });
-        
-        // Mapper vers notre format standard
-        const adherent = {
-            civilite: row.civilité || row.civilite || 'M',
-            nom: row.nom,
-            prenom: row.prenom || row.prénom,
-            nip: row.nip,
-            telephone: row.telephone || row.téléphone || '',
-            profession: row.profession || '',
-            lineNumber: i + 1
-        };
-        
-        // Valider que les champs obligatoires sont présents
-        if (adherent.nom && adherent.prenom && adherent.nip) {
-            data.push(adherent);
-        }
-    }
-    
-    return data;
-}
-
-/**
- * CONSIGNES 1-4 : Validation complète des données d'importation
+ * Validation complète des données d'importation avec système d'anomalies
  */
 async function validateAdherentsImport(adherentsData) {
-    console.log('📋 NOUVELLE VALIDATION avec gestion anomalies - Version 1.2');
+    console.log('📋 Validation avec gestion anomalies - Version 1.2');
     
     const result = {
         originalCount: adherentsData.length,
         adherentsValides: [],
         adherentsAvecAnomalies: [],
-        adherentsTotal: [], // NOUVEAU : Tous les adhérents (valides + anomalies)
+        adherentsTotal: [], // Tous les adhérents (valides + anomalies)
         duplicatesInFile: [],
         existingMembers: [],
         invalidEntries: [],
         finalValidCount: 0,
-        finalAnomaliesCount: 0, // NOUVEAU
-        canProceed: true, // CHANGÉ : Toujours true maintenant si minimum atteint
+        finalAnomaliesCount: 0,
+        canProceed: true, // Toujours true maintenant si minimum atteint
         messages: [],
-        qualiteGlobale: 'excellent' // NOUVEAU
+        qualiteGlobale: 'excellent'
     };
     
     // Réinitialiser le rapport d'anomalies
@@ -2273,6 +2067,18 @@ async function validateAdherentsImport(adherentsData) {
             }
         }
         
+        // Validation profession exclue pour parti politique
+        if (OrganisationApp.selectedOrgType === 'parti_politique' && adherent.profession) {
+            if (OrganisationApp.config.professionsExcluesParti.includes(adherent.profession)) {
+                const anomalie = createAnomalie(adherent, 'profession_exclue_parti', 
+                    `Profession "${adherent.profession}" interdite pour parti politique`);
+                if (anomalie) {
+                    adherent.anomalies.push(anomalie);
+                    adherent.hasAnomalies = true;
+                }
+            }
+        }
+        
         // Validation format données générales
         if (adherent.nom && adherent.nom.length < 2) {
             const anomalie = createAnomalie(adherent, 'format_donnees', 'Nom trop court');
@@ -2330,7 +2136,7 @@ async function validateAdherentsImport(adherentsData) {
     });
     
     // ========================================
-    // ÉTAPE 4 : CLASSIFICATION FINALE - NOUVELLE RÈGLE
+    // ÉTAPE 4 : CLASSIFICATION FINALE
     // ========================================
     
     processedAdherents.forEach(adherent => {
@@ -2369,7 +2175,7 @@ async function validateAdherentsImport(adherentsData) {
             result.adherentsValides.push(adherent);
         }
         
-        // NOUVEAU : Tous les adhérents sont conservés
+        // Tous les adhérents sont conservés
         result.adherentsTotal.push(adherent);
     });
     
@@ -2391,7 +2197,7 @@ async function validateAdherentsImport(adherentsData) {
     // Déterminer la qualité globale
     result.qualiteGlobale = getQualiteStatut();
     
-    // NOUVELLE LOGIQUE : Toujours permettre l'importation si minimum atteint
+    // Toujours permettre l'importation si minimum atteint
     const totalAdherents = result.finalValidCount + result.finalAnomaliesCount;
     result.canProceed = totalAdherents >= minRequired;
     
@@ -2410,9 +2216,9 @@ async function validateAdherentsImport(adherentsData) {
 }
 
 /**
- * NOUVELLE FONCTION : Génération des messages avec gestion des anomalies
+ * Génération des messages avec gestion des anomalies
  */
- function generateImportMessagesWithAnomalies(result, minRequired) {
+function generateImportMessagesWithAnomalies(result, minRequired) {
     const messages = [];
     const totalAdherents = result.finalValidCount + result.finalAnomaliesCount;
     
@@ -2470,30 +2276,6 @@ async function validateAdherentsImport(adherentsData) {
         });
     }
     
-    // Messages pour doublons (conservés mais signalés)
-    if (result.duplicatesInFile.length > 0) {
-        messages.push({
-            type: 'warning',
-            title: '🔄 Doublons conservés',
-            content: `${result.duplicatesInFile.length} doublons détectés mais conservés avec anomalie`,
-            details: result.duplicatesInFile.map(d => 
-                `Ligne ${d.lineNumber}: ${d.nom} ${d.prenom} (NIP: ${d.nip})`
-            )
-        });
-    }
-    
-    // Messages pour membres existants (conservés avec anomalie)
-    if (result.existingMembers.length > 0) {
-        messages.push({
-            type: 'warning',
-            title: '👥 Membres existants conservés',
-            content: `${result.existingMembers.length} membre(s) déjà actif(s) ailleurs, conservés avec anomalie critique`,
-            details: result.existingMembers.map(m => 
-                `Ligne ${m.lineNumber}: ${m.nom} ${m.prenom} (NIP: ${m.nip})`
-            )
-        });
-    }
-    
     return messages;
 }
 
@@ -2504,11 +2286,12 @@ async function checkExistingMembersAPI(nips) {
     if (nips.length === 0) return [];
     
     try {
-        const response = await fetch('/api/check-existing-members', {
+        const response = await fetch('/api/organisations/check-existing-members', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+                'Accept': 'application/json'
             },
             body: JSON.stringify({ nips: nips })
         });
@@ -2516,78 +2299,21 @@ async function checkExistingMembersAPI(nips) {
         if (response.ok) {
             const data = await response.json();
             return data.existing_nips || [];
+        } else if (response.status === 404) {
+            console.warn('API check membres existants non trouvée, import sans vérification');
+            return [];
         } else {
             console.warn('Erreur API check membres existants:', response.status);
+            return [];
         }
     } catch (error) {
         console.error('Erreur vérification membres existants:', error);
+        return [];
     }
-    
-    return []; // Retourner liste vide en cas d'erreur (permettre l'import)
 }
 
 /**
- * Génération des messages selon les cas d'importation
- */
-function generateImportMessages(result, minRequired) {
-    const messages = [];
-    
-    // Message principal selon le résultat
-    if (result.canProceed) {
-        const totalValid = result.finalValidCount + result.existingMembers.length;
-        messages.push({
-            type: 'success',
-            title: '✅ Importation possible',
-            content: `${totalValid} adhérents détectés (${result.finalValidCount} valides + ${result.existingMembers.length} à corriger). Minimum requis: ${minRequired}`
-        });
-    } else {
-        const totalValid = result.finalValidCount + result.existingMembers.length;
-        messages.push({
-            type: 'danger',
-            title: '❌ Importation impossible',
-            content: `Seulement ${totalValid} adhérents valides détectés, minimum requis: ${minRequired}`
-        });
-    }
-    
-    // Messages spécifiques pour chaque problème
-    if (result.duplicatesInFile.length > 0) {
-        messages.push({
-            type: 'warning',
-            title: '⚠️ Doublons détectés dans le fichier',
-            content: `${result.duplicatesInFile.length} doublons NIP supprimés automatiquement`,
-            details: result.duplicatesInFile.map(d => 
-                `Ligne ${d.lineNumber}: ${d.nom} ${d.prenom} (NIP: ${d.nip})`
-            )
-        });
-    }
-    
-    if (result.existingMembers.length > 0) {
-        messages.push({
-            type: 'warning',
-            title: '⚠️ Membres déjà actifs détectés',
-            content: `${result.existingMembers.length} personnes sont déjà membres actifs d'autres organisations. Elles seront ajoutées avec statut "à corriger"`,
-            details: result.existingMembers.map(m => 
-                `Ligne ${m.lineNumber}: ${m.nom} ${m.prenom} (NIP: ${m.nip})`
-            )
-        });
-    }
-    
-    if (result.invalidEntries.length > 0) {
-        messages.push({
-            type: 'danger',
-            title: '❌ Entrées invalides',
-            content: `${result.invalidEntries.length} entrées avec des erreurs`,
-            details: result.invalidEntries.map(e => 
-                `Ligne ${e.lineNumber}: ${e.nom} ${e.prenom} - ${e.error}`
-            )
-        });
-    }
-    
-    return messages;
-}
-
-/**
- * CONSIGNE 4: Traitement du résultat d'importation
+ * Traitement du résultat d'importation
  */
 async function processImportResult(validationResult) {
     const { canProceed, adherentsTotal, messages, originalCount, finalValidCount, finalAnomaliesCount } = validationResult;
@@ -2603,7 +2329,7 @@ async function processImportResult(validationResult) {
         return;
     }
     
-    // NOUVEAU : Message de confirmation avec anomalies
+    // Message de confirmation avec anomalies
     const totalImport = finalValidCount + finalAnomaliesCount;
     let confirmMsg = `Importation de ${totalImport} adhérents sur ${originalCount} lignes analysées :\n`;
     confirmMsg += `• ${finalValidCount} adhérents valides\n`;
@@ -2619,13 +2345,13 @@ async function processImportResult(validationResult) {
         return;
     }
     
-    // NOUVEAU : Ajouter TOUS les adhérents (valides + anomalies)
+    // Ajouter TOUS les adhérents (valides + anomalies)
     adherentsTotal.forEach(adherent => {
         OrganisationApp.adherents.push(adherent);
     });
     
     // Mettre à jour l'affichage avec les nouveaux statuts
-    updateAdherentsListWithStatus();
+    updateAdherentsList();
     
     // Message de succès détaillé
     let successDetails = [`🎉 Importation réussie !`];
@@ -2649,908 +2375,6 @@ async function processImportResult(validationResult) {
         rapportGenere: OrganisationApp.rapportAnomalies.enabled
     });
 }
-
-/**
- * NOUVELLE FONCTION : Mise à jour affichage avec statuts visuels
- */
- function updateAdherentsListWithStatus() {
-    // Appeler la fonction existante pour la structure de base
-    updateAdherentsList();
-    
-    // Ajouter des indications visuelles pour les statuts après génération
-    setTimeout(() => {
-        const listContainer = document.getElementById('adherents_list');
-        if (listContainer && listContainer.querySelector('table')) {
-            const tbody = listContainer.querySelector('tbody');
-            if (tbody) {
-                const rows = tbody.querySelectorAll('tr');
-                
-                OrganisationApp.adherents.forEach((adherent, index) => {
-                    const row = rows[index];
-                    if (row && adherent.hasAnomalies) {
-                        // Ajouter classe de style selon le niveau d'anomalie
-                        row.classList.add('table-warning');
-                        if (adherent.priorityLevel === 'critique') {
-                            row.classList.add('table-danger');
-                        }
-                        
-                        // Ajouter un badge de statut dans la dernière cellule
-                        const lastCell = row.querySelector('td:last-child');
-                        if (lastCell) {
-                            const badgeColor = adherent.statusColor || 'warning';
-                            const badge = `<span class="badge bg-${badgeColor} ms-1" title="${adherent.anomalies.map(a => a.label).join(', ')}">${adherent.statusLabel}</span>`;
-                            lastCell.innerHTML += badge;
-                        }
-                    }
-                });
-            }
-        }
-    }, 100);
-}
-
-console.log('✅ ÉTAPE 2 : Validation importation avec anomalies - Version 1.2 harmonisée');
-
-// ========================================
-// BLOC 3 : GÉNÉRATION DU RAPPORT D'ANOMALIES
-// Version 1.2 - Système complet de rapport pour transmission
-// À intégrer dans organisation-create.js après l'ÉTAPE 2
-// ========================================
-
-/**
- * FONCTION PRINCIPALE : Générer le rapport d'anomalies complet
- * Appelée depuis l'étape 9 et le récapitulatif
- */
- function generateRapportAnomalies() {
-    console.log('📋 Génération du rapport d\'anomalies - Version 1.2');
-    
-    if (!OrganisationApp.rapportAnomalies.enabled || OrganisationApp.rapportAnomalies.anomalies.length === 0) {
-        console.log('ℹ️ Aucune anomalie détectée, pas de rapport à générer');
-        return null;
-    }
-    
-    const rapport = {
-        metadata: generateRapportMetadata(),
-        organisation: generateRapportOrganisationInfo(),
-        statistiques: generateRapportStatistiques(),
-        anomalies: generateRapportAnomaliesDetail(),
-        recommandations: getRecommandationsAnomalies(),
-        signature: generateRapportSignature()
-    };
-    
-    console.log('✅ Rapport d\'anomalies généré avec succès');
-    return rapport;
-}
-
-/**
- * Générer les métadonnées du rapport
- */
-function generateRapportMetadata() {
-    return {
-        titre: 'Rapport d\'Anomalies - Importation Adhérents',
-        version: OrganisationApp.rapportAnomalies.version,
-        genereAt: OrganisationApp.rapportAnomalies.genereAt || new Date().toISOString(),
-        generePar: 'Système PNGDI',
-        typeDocument: 'RAPPORT_ANOMALIES_ADHERENTS',
-        format: 'JSON/HTML',
-        encodage: 'UTF-8',
-        langue: 'fr-GA'
-    };
-}
-
-/**
- * Générer les informations de l'organisation pour le rapport
- */
-function generateRapportOrganisationInfo() {
-    const formData = collectFormData();
-    
-    return {
-        typeOrganisation: OrganisationApp.selectedOrgType,
-        typeLabel: getOrganizationTypeLabel(OrganisationApp.selectedOrgType),
-        nomOrganisation: formData.org_nom || 'Non renseigné',
-        sigleOrganisation: formData.org_sigle || null,
-        demandeurPrincipal: {
-            nom: `${formData.demandeur_civilite || ''} ${formData.demandeur_nom || ''} ${formData.demandeur_prenom || ''}`.trim(),
-            nip: formData.demandeur_nip || 'Non renseigné',
-            email: formData.demandeur_email || 'Non renseigné',
-            telephone: formData.demandeur_telephone || 'Non renseigné',
-            role: formData.demandeur_role || 'Non renseigné'
-        },
-        exigencesMinimales: {
-            fondateursMin: OrganisationApp.config.orgRequirements[OrganisationApp.selectedOrgType]?.minFondateurs || 3,
-            adherentsMin: OrganisationApp.config.orgRequirements[OrganisationApp.selectedOrgType]?.minAdherents || 10
-        }
-    };
-}
-
-/**
- * Générer les statistiques détaillées
- */
-function generateRapportStatistiques() {
-    const totalAdherents = OrganisationApp.adherents.length;
-    const totalAnomalies = OrganisationApp.rapportAnomalies.anomalies.length;
-    const adherentsAvecAnomalies = OrganisationApp.rapportAnomalies.adherentsAvecAnomalies;
-    const adherentsValides = OrganisationApp.rapportAnomalies.adherentsValides;
-    
-    // Statistiques par niveau d'anomalie
-    const statsNiveaux = OrganisationApp.rapportAnomalies.statistiques;
-    
-    // Statistiques par type d'anomalie
-    const statsTypes = {};
-    OrganisationApp.rapportAnomalies.anomalies.forEach(anomalie => {
-        if (!statsTypes[anomalie.type]) {
-            statsTypes[anomalie.type] = {
-                count: 0,
-                label: anomalie.label,
-                level: anomalie.level
-            };
-        }
-        statsTypes[anomalie.type].count++;
-    });
-    
-    // Calcul des pourcentages
-    const pourcentageValides = totalAdherents > 0 ? ((adherentsValides / totalAdherents) * 100).toFixed(1) : 0;
-    const pourcentageAnomalies = totalAdherents > 0 ? ((adherentsAvecAnomalies / totalAdherents) * 100).toFixed(1) : 0;
-    
-    return {
-        resume: {
-            totalAdherentsImportes: totalAdherents,
-            adherentsValides: adherentsValides,
-            adherentsAvecAnomalies: adherentsAvecAnomalies,
-            totalAnomaliesDetectees: totalAnomalies,
-            pourcentageValides: parseFloat(pourcentageValides),
-            pourcentageAnomalies: parseFloat(pourcentageAnomalies),
-            qualiteGlobale: getQualiteStatut()
-        },
-        parNiveau: {
-            critique: statsNiveaux.critique,
-            majeure: statsNiveaux.majeure,
-            mineure: statsNiveaux.mineure
-        },
-        parType: statsTypes,
-        evaluation: {
-            statutQualite: getQualiteStatut(),
-            niveauRisque: statsNiveaux.critique > 0 ? 'ÉLEVÉ' : 
-                         statsNiveaux.majeure > 0 ? 'MOYEN' : 'FAIBLE',
-            actionRequise: statsNiveaux.critique > 0 ? 'IMMÉDIATE' : 
-                          statsNiveaux.majeure > 0 ? 'SOUS 48H' : 'OPTIONNELLE'
-        }
-    };
-}
-
-/**
- * Générer le détail des anomalies avec groupement
- */
-function generateRapportAnomaliesDetail() {
-    const anomalies = OrganisationApp.rapportAnomalies.anomalies;
-    
-    // Grouper par niveau de gravité
-    const parNiveau = {
-        critique: anomalies.filter(a => a.level === 'critique'),
-        majeure: anomalies.filter(a => a.level === 'majeure'),
-        mineure: anomalies.filter(a => a.level === 'mineure')
-    };
-    
-    // Grouper par type d'anomalie
-    const parType = {};
-    anomalies.forEach(anomalie => {
-        if (!parType[anomalie.type]) {
-            parType[anomalie.type] = [];
-        }
-        parType[anomalie.type].push(anomalie);
-    });
-    
-    // Générer le détail formaté
-    const detailFormate = anomalies.map(anomalie => ({
-        id: anomalie.id,
-        adherent: {
-            nom: anomalie.adherentNom,
-            nip: anomalie.adherentNip,
-            ligne: anomalie.adherentLigne
-        },
-        anomalie: {
-            type: anomalie.type,
-            level: anomalie.level,
-            label: anomalie.label,
-            description: anomalie.description,
-            details: anomalie.details,
-            detecteAt: anomalie.detecteAt
-        },
-        resolution: {
-            priorite: anomalie.level === 'critique' ? 1 : 
-                     anomalie.level === 'majeure' ? 2 : 3,
-            actionSuggere: getActionSuggereePourAnomalie(anomalie.type),
-            delaiRecommande: anomalie.level === 'critique' ? '24h' : 
-                           anomalie.level === 'majeure' ? '72h' : '1 semaine'
-        }
-    }));
-    
-    return {
-        total: anomalies.length,
-        parNiveau: parNiveau,
-        parType: parType,
-        detailComplet: detailFormate,
-        ordreTraitement: detailFormate.sort((a, b) => a.resolution.priorite - b.resolution.priorite)
-    };
-}
-
-/**
- * Obtenir l'action suggérée pour un type d'anomalie
- */
-function getActionSuggereePourAnomalie(type) {
-    const actions = {
-        'nip_invalide': 'Vérifier auprès des services d\'état civil',
-        'telephone_invalide': 'Corriger le format du numéro de téléphone',
-        'email_invalide': 'Corriger l\'adresse email',
-        'champs_incomplets': 'Compléter les informations manquantes',
-        'membre_existant': 'Contacter le membre pour régularisation',
-        'doublon_fichier': 'Supprimer ou fusionner les doublons',
-        'format_donnees': 'Vérifier et corriger le format des données'
-    };
-    
-    return actions[type] || 'Vérifier et corriger les données';
-}
-
-/**
- * Générer la signature du rapport
- */
-function generateRapportSignature() {
-    return {
-        systeme: 'PNGDI - Plateforme Nationale de Gestion des Déclarations d\'Intentions',
-        version: '1.2',
-        module: 'Import Adhérents avec Gestion Anomalies',
-        checksum: generateRapportChecksum(),
-        timestamp: Date.now(),
-        format: 'Rapport JSON structuré compatible email/inbox'
-    };
-}
-
-/**
- * Générer un checksum simple pour le rapport
- */
-function generateRapportChecksum() {
-    const data = JSON.stringify({
-        anomalies: OrganisationApp.rapportAnomalies.anomalies.length,
-        timestamp: OrganisationApp.rapportAnomalies.genereAt,
-        version: OrganisationApp.rapportAnomalies.version
-    });
-    
-    // Simple hash basé sur le contenu
-    let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-        const char = data.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32-bit integer
-    }
-    
-    return Math.abs(hash).toString(16);
-}
-
-/**
- * Générer le rapport au format HTML pour email
- */
-function generateRapportAnomaliesHTML() {
-    const rapport = generateRapportAnomalies();
-    if (!rapport) return null;
-    
-    const stats = rapport.statistiques;
-    const anomalies = rapport.anomalies;
-    
-    return `
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${rapport.metadata.titre}</title>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
-            .header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-            .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
-            .stat-card { background: #fff; border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; text-align: center; }
-            .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
-            .badge-danger { background: #dc3545; color: white; }
-            .badge-warning { background: #ffc107; color: #212529; }
-            .badge-info { background: #17a2b8; color: white; }
-            .badge-success { background: #28a745; color: white; }
-            .anomalie-item { border-left: 4px solid #dc3545; padding: 10px; margin: 10px 0; background: #f8f9fa; }
-            .anomalie-critique { border-left-color: #dc3545; }
-            .anomalie-majeure { border-left-color: #ffc107; }
-            .anomalie-mineure { border-left-color: #17a2b8; }
-            .table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            .table th, .table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
-            .table th { background: #f8f9fa; font-weight: bold; }
-            .recommandation { background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 6px; padding: 15px; margin: 10px 0; }
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>${rapport.metadata.titre}</h1>
-            <p><strong>Organisation :</strong> ${rapport.organisation.nomOrganisation} (${rapport.organisation.typeLabel})</p>
-            <p><strong>Demandeur :</strong> ${rapport.organisation.demandeurPrincipal.nom}</p>
-            <p><strong>Généré le :</strong> ${new Date(rapport.metadata.genereAt).toLocaleDateString('fr-FR', { 
-                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
-            })}</p>
-        </div>
-        
-        <div class="stats">
-            <div class="stat-card">
-                <h3>${stats.resume.totalAdherentsImportes}</h3>
-                <p>Adhérents importés</p>
-            </div>
-            <div class="stat-card">
-                <h3 style="color: #28a745;">${stats.resume.adherentsValides}</h3>
-                <p>Valides (${stats.resume.pourcentageValides}%)</p>
-            </div>
-            <div class="stat-card">
-                <h3 style="color: #dc3545;">${stats.resume.adherentsAvecAnomalies}</h3>
-                <p>Avec anomalies (${stats.resume.pourcentageAnomalies}%)</p>
-            </div>
-            <div class="stat-card">
-                <h3>${stats.resume.totalAnomaliesDetectees}</h3>
-                <p>Anomalies détectées</p>
-            </div>
-        </div>
-        
-        <h2>📊 Répartition par niveau de gravité</h2>
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Niveau</th>
-                    <th>Nombre</th>
-                    <th>Action requise</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><span class="badge badge-danger">Critique</span></td>
-                    <td>${stats.parNiveau.critique}</td>
-                    <td>Correction immédiate</td>
-                </tr>
-                <tr>
-                    <td><span class="badge badge-warning">Majeure</span></td>
-                    <td>${stats.parNiveau.majeure}</td>
-                    <td>Correction sous 48h</td>
-                </tr>
-                <tr>
-                    <td><span class="badge badge-info">Mineure</span></td>
-                    <td>${stats.parNiveau.mineure}</td>
-                    <td>Correction recommandée</td>
-                </tr>
-            </tbody>
-        </table>
-        
-        <h2>📋 Détail des anomalies par ordre de priorité</h2>
-        ${anomalies.ordreTraitement.map(anomalie => `
-            <div class="anomalie-item anomalie-${anomalie.anomalie.level}">
-                <h4>${anomalie.adherent.nom} <span class="badge badge-${anomalie.anomalie.level === 'critique' ? 'danger' : anomalie.anomalie.level === 'majeure' ? 'warning' : 'info'}">${anomalie.anomalie.level.toUpperCase()}</span></h4>
-                <p><strong>NIP :</strong> ${anomalie.adherent.nip} | <strong>Ligne :</strong> ${anomalie.adherent.ligne || 'N/A'}</p>
-                <p><strong>Anomalie :</strong> ${anomalie.anomalie.label}</p>
-                <p><strong>Description :</strong> ${anomalie.anomalie.description}</p>
-                ${anomalie.anomalie.details ? `<p><strong>Détails :</strong> ${anomalie.anomalie.details}</p>` : ''}
-                <p><strong>Action suggérée :</strong> ${anomalie.resolution.actionSuggere}</p>
-                <p><strong>Délai recommandé :</strong> ${anomalie.resolution.delaiRecommande}</p>
-            </div>
-        `).join('')}
-        
-        <h2>💡 Recommandations</h2>
-        ${rapport.recommandations.map(rec => `
-            <div class="recommandation">
-                <strong>${rec.type.toUpperCase()} :</strong> ${rec.message}
-            </div>
-        `).join('')}
-        
-        <div class="header" style="margin-top: 30px; text-align: center; font-size: 0.9em; color: #666;">
-            <p>Rapport généré automatiquement par ${rapport.signature.systeme}</p>
-            <p>Version ${rapport.signature.version} | Checksum: ${rapport.signature.checksum}</p>
-        </div>
-    </body>
-    </html>
-    `;
-}
-
-/**
- * Télécharger le rapport au format JSON
- */
-function downloadRapportAnomalies() {
-    const rapport = generateRapportAnomalies();
-    if (!rapport) {
-        showNotification('Aucun rapport d\'anomalies à télécharger', 'info');
-        return;
-    }
-    
-    const rapportJSON = JSON.stringify(rapport, null, 2);
-    const blob = new Blob([rapportJSON], { type: 'application/json;charset=utf-8;' });
-    const link = document.createElement('a');
-    
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        const fileName = `rapport_anomalies_${rapport.organisation.nomOrganisation.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.json`;
-        
-        link.setAttribute('href', url);
-        link.setAttribute('download', fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        showNotification('Rapport d\'anomalies téléchargé avec succès', 'success');
-    }
-}
-
-console.log('✅ BLOC 3 : Génération rapport anomalies - Version 1.2');
-
-// ========================================
-// BLOC 4 : INTERFACE UTILISATEUR RAPPORT ANOMALIES
-// Version 1.2 - Modal prévisualisation et boutons d'actions
-// À intégrer dans organisation-create.js après l'ÉTAPE 3
-// ========================================
-
-/**
- * FONCTION PRINCIPALE : Prévisualiser le rapport d'anomalies en modal
- */
- function previewRapportAnomalies() {
-    console.log('👁️ Prévisualisation du rapport d\'anomalies');
-    
-    const rapport = generateRapportAnomalies();
-    if (!rapport) {
-        showNotification('Aucun rapport d\'anomalies à prévisualiser', 'info');
-        return;
-    }
-    
-    // Créer et afficher la modal
-    createRapportAnomaliesModal(rapport);
-}
-
-/**
- * Créer la modal de prévisualisation du rapport
- */
-function createRapportAnomaliesModal(rapport) {
-    const modalId = 'rapportAnomaliesModal';
-    
-    // Supprimer l'ancienne modal si elle existe
-    const existingModal = document.getElementById(modalId);
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    const stats = rapport.statistiques;
-    const anomalies = rapport.anomalies;
-    
-    const modalHTML = `
-        <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}Label" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-scrollable">
-                <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title" id="${modalId}Label">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            ${rapport.metadata.titre}
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    
-                    <div class="modal-body">
-                        ${generateRapportModalContent(rapport)}
-                    </div>
-                    
-                    <div class="modal-footer bg-light">
-                        <div class="d-flex justify-content-between w-100 align-items-center">
-                            <div class="text-muted small">
-                                <i class="fas fa-info-circle me-1"></i>
-                                Généré le ${new Date(rapport.metadata.genereAt).toLocaleDateString('fr-FR', {
-                                    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                                })}
-                            </div>
-                            <div>
-                                <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">
-                                    <i class="fas fa-times me-1"></i>Fermer
-                                </button>
-                                <button type="button" class="btn btn-success me-2" onclick="downloadRapportAnomalies()">
-                                    <i class="fas fa-download me-1"></i>Télécharger JSON
-                                </button>
-                                <button type="button" class="btn btn-primary" onclick="exportRapportHTML()">
-                                    <i class="fas fa-file-export me-1"></i>Exporter HTML
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Ajouter la modal au DOM
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
-    // Afficher la modal
-    const modal = new bootstrap.Modal(document.getElementById(modalId));
-    modal.show();
-    
-    // Nettoyer après fermeture
-    modal._element.addEventListener('hidden.bs.modal', () => {
-        modal._element.remove();
-    });
-}
-
-/**
- * Générer le contenu de la modal
- */
-function generateRapportModalContent(rapport) {
-    const stats = rapport.statistiques;
-    const anomalies = rapport.anomalies;
-    
-    return `
-        <!-- En-tête du rapport -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header bg-gradient-primary text-white">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <h6 class="mb-1">
-                            <i class="fas fa-building me-2"></i>
-                            ${rapport.organisation.nomOrganisation}
-                        </h6>
-                        <small class="opacity-75">
-                            ${rapport.organisation.typeLabel} | Demandeur: ${rapport.organisation.demandeurPrincipal.nom}
-                        </small>
-                    </div>
-                    <div class="col-md-4 text-end">
-                        <span class="badge ${getQualiteBadgeClass(stats.resume.qualiteGlobale)} fs-6">
-                            ${getQualiteLabel(stats.resume.qualiteGlobale)}
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Statistiques résumées -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card border-0 bg-light h-100">
-                    <div class="card-body text-center">
-                        <h3 class="text-primary mb-1">${stats.resume.totalAdherentsImportes}</h3>
-                        <small class="text-muted">Total importés</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 bg-success-subtle h-100">
-                    <div class="card-body text-center">
-                        <h3 class="text-success mb-1">${stats.resume.adherentsValides}</h3>
-                        <small class="text-muted">Valides (${stats.resume.pourcentageValides}%)</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 bg-warning-subtle h-100">
-                    <div class="card-body text-center">
-                        <h3 class="text-warning mb-1">${stats.resume.adherentsAvecAnomalies}</h3>
-                        <small class="text-muted">Avec anomalies (${stats.resume.pourcentageAnomalies}%)</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 bg-danger-subtle h-100">
-                    <div class="card-body text-center">
-                        <h3 class="text-danger mb-1">${stats.resume.totalAnomaliesDetectees}</h3>
-                        <small class="text-muted">Anomalies total</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Répartition par niveau -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header">
-                <h6 class="mb-0">
-                    <i class="fas fa-chart-bar me-2"></i>
-                    Répartition par niveau de gravité
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <div class="d-flex align-items-center p-3 bg-danger-subtle rounded">
-                            <div class="me-3">
-                                <span class="badge bg-danger fs-6">${stats.parNiveau.critique}</span>
-                            </div>
-                            <div>
-                                <strong class="text-danger">Critique</strong><br>
-                                <small class="text-muted">Action immédiate</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="d-flex align-items-center p-3 bg-warning-subtle rounded">
-                            <div class="me-3">
-                                <span class="badge bg-warning fs-6">${stats.parNiveau.majeure}</span>
-                            </div>
-                            <div>
-                                <strong class="text-warning">Majeure</strong><br>
-                                <small class="text-muted">Sous 48h</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="d-flex align-items-center p-3 bg-info-subtle rounded">
-                            <div class="me-3">
-                                <span class="badge bg-info fs-6">${stats.parNiveau.mineure}</span>
-                            </div>
-                            <div>
-                                <strong class="text-info">Mineure</strong><br>
-                                <small class="text-muted">Recommandée</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Tableau des anomalies avec filtrage -->
-        <div class="card border-0 shadow-sm mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-list me-2"></i>
-                    Détail des anomalies (${anomalies.total})
-                </h6>
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-outline-secondary btn-sm active" onclick="filterAnomalies('all')">
-                        Toutes
-                    </button>
-                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="filterAnomalies('critique')">
-                        Critiques
-                    </button>
-                    <button type="button" class="btn btn-outline-warning btn-sm" onclick="filterAnomalies('majeure')">
-                        Majeures
-                    </button>
-                    <button type="button" class="btn btn-outline-info btn-sm" onclick="filterAnomalies('mineure')">
-                        Mineures
-                    </button>
-                </div>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                    <table class="table table-hover mb-0" id="anomaliesTable">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th>Adhérent</th>
-                                <th>NIP</th>
-                                <th>Ligne</th>
-                                <th>Niveau</th>
-                                <th>Anomalie</th>
-                                <th>Action suggérée</th>
-                                <th>Délai</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${generateAnomaliesTableRows(anomalies.ordreTraitement)}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Recommandations -->
-        ${rapport.recommandations.length > 0 ? `
-        <div class="card border-0 shadow-sm">
-            <div class="card-header">
-                <h6 class="mb-0">
-                    <i class="fas fa-lightbulb me-2"></i>
-                    Recommandations (${rapport.recommandations.length})
-                </h6>
-            </div>
-            <div class="card-body">
-                ${rapport.recommandations.map(rec => `
-                    <div class="alert alert-${getRecommandationAlertClass(rec.type)} d-flex align-items-start">
-                        <i class="fas ${getRecommandationIcon(rec.type)} me-3 mt-1"></i>
-                        <div>
-                            <strong>${rec.type.toUpperCase()} :</strong> ${rec.message}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-        ` : ''}
-    `;
-}
-
-/**
- * Générer les lignes du tableau des anomalies
- */
-function generateAnomaliesTableRows(anomalies) {
-    return anomalies.map(anomalie => `
-        <tr class="anomalie-row anomalie-${anomalie.anomalie.level}" data-level="${anomalie.anomalie.level}">
-            <td>
-                <strong>${anomalie.adherent.nom}</strong>
-            </td>
-            <td>
-                <code class="small">${anomalie.adherent.nip}</code>
-            </td>
-            <td>
-                <span class="badge bg-secondary">${anomalie.adherent.ligne || 'N/A'}</span>
-            </td>
-            <td>
-                <span class="badge bg-${getLevelBadgeColor(anomalie.anomalie.level)}">
-                    ${anomalie.anomalie.level.toUpperCase()}
-                </span>
-            </td>
-            <td>
-                <div>
-                    <strong class="small">${anomalie.anomalie.label}</strong>
-                    <br>
-                    <small class="text-muted">${anomalie.anomalie.description}</small>
-                    ${anomalie.anomalie.details ? `<br><small class="text-warning">Détails: ${anomalie.anomalie.details}</small>` : ''}
-                </div>
-            </td>
-            <td>
-                <small>${anomalie.resolution.actionSuggere}</small>
-            </td>
-            <td>
-                <span class="badge bg-outline-${getLevelBadgeColor(anomalie.anomalie.level)}">
-                    ${anomalie.resolution.delaiRecommande}
-                </span>
-            </td>
-        </tr>
-    `).join('');
-}
-
-/**
- * Filtrer les anomalies par niveau
- */
-function filterAnomalies(level) {
-    const table = document.getElementById('anomaliesTable');
-    if (!table) return;
-    
-    const rows = table.querySelectorAll('.anomalie-row');
-    const buttons = table.closest('.card').querySelectorAll('.btn-group .btn');
-    
-    // Mettre à jour les boutons
-    buttons.forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
-    
-    // Filtrer les lignes
-    rows.forEach(row => {
-        if (level === 'all' || row.dataset.level === level) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
-    });
-}
-
-/**
- * Exporter le rapport en HTML
- */
-function exportRapportHTML() {
-    const htmlContent = generateRapportAnomaliesHTML();
-    if (!htmlContent) {
-        showNotification('Impossible d\'exporter le rapport HTML', 'danger');
-        return;
-    }
-    
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
-    const link = document.createElement('a');
-    
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        const fileName = `rapport_anomalies_${OrganisationApp.formData.org_nom ? OrganisationApp.formData.org_nom.replace(/[^a-z0-9]/gi, '_') : 'organisation'}_${new Date().toISOString().split('T')[0]}.html`;
-        
-        link.setAttribute('href', url);
-        link.setAttribute('download', fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        showNotification('Rapport HTML exporté avec succès', 'success');
-    }
-}
-
-/**
- * Fonctions utilitaires pour l'affichage
- */
-function getQualiteBadgeClass(qualite) {
-    const classes = {
-        'excellent': 'bg-success',
-        'bon': 'bg-info',
-        'moyen': 'bg-warning',
-        'faible': 'bg-danger'
-    };
-    return classes[qualite] || 'bg-secondary';
-}
-
-function getQualiteLabel(qualite) {
-    const labels = {
-        'excellent': 'Excellente qualité',
-        'bon': 'Bonne qualité',
-        'moyen': 'Qualité moyenne',
-        'faible': 'Qualité faible'
-    };
-    return labels[qualite] || 'Non évalué';
-}
-
-function getLevelBadgeColor(level) {
-    const colors = {
-        'critique': 'danger',
-        'majeure': 'warning',
-        'mineure': 'info'
-    };
-    return colors[level] || 'secondary';
-}
-
-function getRecommandationAlertClass(type) {
-    const classes = {
-        'urgent': 'danger',
-        'important': 'warning',
-        'conseil': 'info'
-    };
-    return classes[type] || 'secondary';
-}
-
-function getRecommandationIcon(type) {
-    const icons = {
-        'urgent': 'fa-exclamation-triangle',
-        'important': 'fa-exclamation-circle',
-        'conseil': 'fa-lightbulb'
-    };
-    return icons[type] || 'fa-info-circle';
-}
-
-/**
- * Générer la section anomalies pour le récapitulatif
- */
-function generateAnomaliesRecapSection() {
-    if (!OrganisationApp.rapportAnomalies.enabled || OrganisationApp.rapportAnomalies.anomalies.length === 0) {
-        return '';
-    }
-    
-    const stats = OrganisationApp.rapportAnomalies.statistiques;
-    const total = OrganisationApp.rapportAnomalies.adherentsAvecAnomalies;
-    
-    return `
-        <div class="card border-warning shadow-sm mt-4">
-            <div class="card-header bg-warning text-dark">
-                <h6 class="mb-0">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Rapport d'anomalies détectées
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p class="mb-2">
-                            <strong>${total} adhérent(s)</strong> présentent des anomalies nécessitant une attention :
-                        </p>
-                        <ul class="list-unstyled">
-                            ${stats.critique > 0 ? `<li><span class="badge bg-danger me-2">${stats.critique}</span>Critique(s) - Action immédiate</li>` : ''}
-                            ${stats.majeure > 0 ? `<li><span class="badge bg-warning me-2">${stats.majeure}</span>Majeure(s) - Sous 48h</li>` : ''}
-                            ${stats.mineure > 0 ? `<li><span class="badge bg-info me-2">${stats.mineure}</span>Mineure(s) - Recommandée</li>` : ''}
-                        </ul>
-                    </div>
-                    <div class="col-md-6 text-end">
-                        <button type="button" class="btn btn-outline-primary me-2" onclick="previewRapportAnomalies()">
-                            <i class="fas fa-eye me-1"></i>Prévisualiser
-                        </button>
-                        <button type="button" class="btn btn-success" onclick="downloadRapportAnomalies()">
-                            <i class="fas fa-download me-1"></i>Télécharger
-                        </button>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <small class="text-muted">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Ce rapport sera automatiquement transmis avec votre dossier pour faciliter le traitement.
-                    </small>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-// Exposer les nouvelles fonctions globalement
-window.previewRapportAnomalies = previewRapportAnomalies;
-window.exportRapportHTML = exportRapportHTML;
-window.filterAnomalies = filterAnomalies;
-
-console.log('✅ BLOC 4 : Interface utilisateur rapport anomalies - Version 1.2');
 
 /**
  * Affichage de notification détaillée pour l'import
@@ -3579,7 +2403,7 @@ function showDetailedImportNotification(message) {
         </div>
     `;
     
-    // Créer notification personnalisée avec fonction showCustomNotification existante
+    // Créer notification personnalisée
     showCustomNotification(notificationContent, message.type, hasDetails ? 15000 : 8000);
 }
 
@@ -3610,112 +2434,6 @@ function clearFileInput() {
         fileInput.value = '';
     }
 }
-
-/**
- * Notification personnalisée (utilise showCustomNotification si elle existe, sinon showNotification)
- */
-function showCustomNotification(htmlContent, type = 'info', duration = 5000) {
-    // Si la fonction showCustomNotification n'existe pas, utiliser showNotification basique
-    if (typeof showCustomNotification === 'undefined') {
-        // Extraire le texte du HTML pour showNotification basique
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = htmlContent;
-        const textContent = tempDiv.textContent || tempDiv.innerText || '';
-        showNotification(textContent, type, duration);
-        return;
-    }
-    
-    // Sinon utiliser la version complète (à implémenter si besoin)
-    let container = document.getElementById('notification-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'notification-container';
-        container.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            max-width: 500px;
-        `;
-        document.body.appendChild(container);
-    }
-    
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type} alert-dismissible fade show shadow-lg`;
-    notification.style.cssText = `
-        margin-bottom: 10px;
-        border: none;
-        border-radius: 12px;
-        animation: slideInRight 0.3s ease-out;
-    `;
-    
-    notification.innerHTML = `
-        ${htmlContent}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" style="margin-top: -0.5rem;"></button>
-    `;
-    
-    container.appendChild(notification);
-    
-    // Auto-suppression
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease-out';
-            setTimeout(() => {
-                notification.remove();
-            }, 300);
-        }
-    }, duration);
-}
-
-// ========================================
-// MISE À JOUR DE LA FONCTION setupEventListeners
-// ========================================
-
-/**
- * AJOUTER cette section dans la fonction setupEventListeners existante
- */
-function initializeAdherentFileImport() {
-    const fileInput = document.getElementById('adherents_file');
-    if (fileInput) {
-        // Supprimer les anciens event listeners
-        fileInput.removeEventListener('change', handleAdherentFileImport);
-        
-        // Ajouter le nouvel event listener
-        fileInput.addEventListener('change', function() {
-            if (this.files.length > 0) {
-                handleAdherentFileImport(this);
-            }
-        });
-        console.log('✅ Événement importation fichier adhérents configuré');
-    }
-}
-
-// Exposer les fonctions globalement
-window.handleAdherentFileImport = handleAdherentFileImport;
-window.toggleImportDetails = toggleImportDetails;
-
-// ========================================
-// INSTRUCTIONS D'INTÉGRATION
-// ========================================
-
-/*
-INSTRUCTIONS POUR L'INTÉGRATION :
-
-1. Ajouter ce code à la fin de la section "5. GESTION FONDATEURS ET ADHÉRENTS" 
-   dans le fichier organisation-create.js
-
-2. Dans la fonction setupEventListeners existante, ajouter cet appel :
-   initializeAdherentFileImport();
-
-3. Dans la section "13. FONCTIONS GLOBALES EXPOSÉES", ajouter :
-   window.handleAdherentFileImport = handleAdherentFileImport;
-   window.toggleImportDetails = toggleImportDetails;
-
-4. Tester l'importation avec un fichier CSV ayant ces colonnes :
-   Civilité,Nom,Prenom,NIP,Telephone,Profession
-*/
-
-console.log('📁 Module importation adhérents configuré - respecte les 4 consignes');
 
 // ========================================
 // 6. GESTION DOCUMENTS
@@ -3926,7 +2644,7 @@ function openImageModal(imageSrc) {
 /**
  * Générer le récapitulatif final
  */
- function generateRecap() {
+function generateRecap() {
     console.log('📋 Génération récapitulatif avec rapport d\'anomalies - Version 1.2');
     
     const container = document.getElementById('recap_content');
@@ -3996,7 +2714,7 @@ function openImageModal(imageSrc) {
             </div>
         </div>
         
-        <!-- NOUVEAU : Section rapport d'anomalies conditionnelle -->
+        <!-- Section rapport d'anomalies conditionnelle -->
         ${generateAnomaliesRecapSection()}
         
         <!-- Statut de validation mis à jour -->
@@ -4005,6 +2723,9 @@ function openImageModal(imageSrc) {
                 ${generateValidationStatusWithQuality()}
             </div>
         </div>
+        
+        <!-- Section spéciale pour parti politique -->
+        ${OrganisationApp.selectedOrgType === 'parti_politique' ? generatePartiPolitiqueSection() : ''}
     `;
     
     container.innerHTML = recapHTML;
@@ -4016,9 +2737,9 @@ function openImageModal(imageSrc) {
 }
 
 /**
- * NOUVEAU : Générer la composition avec indicateur de qualité
+ * Générer la composition avec indicateur de qualité
  */
- function generateCompositionWithQuality(formData) {
+function generateCompositionWithQuality(formData) {
     const totalAdherents = OrganisationApp.adherents.length;
     const adherentsValides = OrganisationApp.rapportAnomalies.enabled ? 
         OrganisationApp.rapportAnomalies.adherentsValides : totalAdherents;
@@ -4060,9 +2781,9 @@ function openImageModal(imageSrc) {
 }
 
 /**
- * NOUVEAU : Générer le statut de validation avec qualité
+ * Générer le statut de validation avec qualité
  */
- function generateValidationStatusWithQuality() {
+function generateValidationStatusWithQuality() {
     const qualiteStatut = getQualiteStatut();
     const isQualityGood = ['excellent', 'bon'].includes(qualiteStatut);
     
@@ -4131,8 +2852,879 @@ function openImageModal(imageSrc) {
     `;
 }
 
+/**
+ * Générer la section spéciale pour parti politique
+ */
+function generatePartiPolitiqueSection() {
+    const professionsExclues = OrganisationApp.adherents.filter(a => 
+        a.hasAnomalies && a.anomalies.some(an => an.type === 'profession_exclue_parti')
+    );
+    
+    if (professionsExclues.length === 0) {
+        return `
+            <div class="alert alert-success mt-4">
+                <h6><i class="fas fa-shield-alt me-2"></i>Conformité Parti Politique</h6>
+                <p class="mb-0">✅ Aucune profession exclue détectée. Votre parti politique respecte les exigences légales gabonaises.</p>
+            </div>
+        `;
+    }
+    
+    return `
+        <div class="alert alert-danger mt-4">
+            <h6><i class="fas fa-exclamation-triangle me-2"></i>Attention - Professions Exclues Détectées</h6>
+            <p><strong>${professionsExclues.length} membre(s)</strong> avec des professions normalement exclues pour les partis politiques :</p>
+            <ul class="mb-2">
+                ${professionsExclues.map(p => `
+                    <li><strong>${p.nom} ${p.prenom}</strong> - ${p.profession}</li>
+                `).join('')}
+            </ul>
+            <p class="mb-0"><small class="text-muted">
+                Ces membres ont été conservés avec une anomalie critique. Une régularisation sera nécessaire.
+            </small></p>
+        </div>
+    `;
+}
+
+/**
+ * Générer la section anomalies pour le récapitulatif
+ */
+function generateAnomaliesRecapSection() {
+    if (!OrganisationApp.rapportAnomalies.enabled || OrganisationApp.rapportAnomalies.anomalies.length === 0) {
+        return '';
+    }
+    
+    const stats = OrganisationApp.rapportAnomalies.statistiques;
+    const total = OrganisationApp.rapportAnomalies.adherentsAvecAnomalies;
+    
+    return `
+        <div class="card border-warning shadow-sm mt-4">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Rapport d'anomalies détectées
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-2">
+                            <strong>${total} adhérent(s)</strong> présentent des anomalies nécessitant une attention :
+                        </p>
+                        <ul class="list-unstyled">
+                            ${stats.critique > 0 ? `<li><span class="badge bg-danger me-2">${stats.critique}</span>Critique(s) - Action immédiate</li>` : ''}
+                            ${stats.majeure > 0 ? `<li><span class="badge bg-warning me-2">${stats.majeure}</span>Majeure(s) - Sous 48h</li>` : ''}
+                            ${stats.mineure > 0 ? `<li><span class="badge bg-info me-2">${stats.mineure}</span>Mineure(s) - Recommandée</li>` : ''}
+                        </ul>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button type="button" class="btn btn-outline-primary me-2" onclick="previewRapportAnomalies()">
+                            <i class="fas fa-eye me-1"></i>Prévisualiser
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="downloadRapportAnomalies()">
+                            <i class="fas fa-download me-1"></i>Télécharger
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Ce rapport sera automatiquement transmis avec votre dossier pour faciliter le traitement.
+                    </small>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Mettre à jour les statistiques du rapport
+ */
+function updateRapportStatistiques() {
+    if (!OrganisationApp.rapportAnomalies.enabled) return;
+    
+    // Recalculer les statistiques en temps réel
+    OrganisationApp.rapportAnomalies.adherentsValides = OrganisationApp.adherents.filter(a => !a.hasAnomalies).length;
+    OrganisationApp.rapportAnomalies.adherentsAvecAnomalies = OrganisationApp.adherents.filter(a => a.hasAnomalies).length;
+    
+    console.log('📊 Statistiques rapport mises à jour:', OrganisationApp.rapportAnomalies);
+}
+
 // ========================================
-// 8. SAUVEGARDE ET COLLECTE DE DONNÉES
+// 8. RAPPORT D'ANOMALIES COMPLET
+// ========================================
+
+/**
+ * Générer le rapport d'anomalies complet
+ */
+function generateRapportAnomalies() {
+    console.log('📋 Génération du rapport d\'anomalies - Version 1.2');
+    
+    if (!OrganisationApp.rapportAnomalies.enabled || OrganisationApp.rapportAnomalies.anomalies.length === 0) {
+        console.log('ℹ️ Aucune anomalie détectée, pas de rapport à générer');
+        return null;
+    }
+    
+    const rapport = {
+        metadata: generateRapportMetadata(),
+        organisation: generateRapportOrganisationInfo(),
+        statistiques: generateRapportStatistiques(),
+        anomalies: generateRapportAnomaliesDetail(),
+        recommandations: getRecommandationsAnomalies(),
+        signature: generateRapportSignature()
+    };
+    
+    console.log('✅ Rapport d\'anomalies généré avec succès');
+    return rapport;
+}
+
+/**
+ * Générer les métadonnées du rapport
+ */
+function generateRapportMetadata() {
+    return {
+        titre: 'Rapport d\'Anomalies - Importation Adhérents',
+        version: OrganisationApp.rapportAnomalies.version,
+        genereAt: OrganisationApp.rapportAnomalies.genereAt || new Date().toISOString(),
+        generePar: 'Système PNGDI',
+        typeDocument: 'RAPPORT_ANOMALIES_ADHERENTS',
+        format: 'JSON/HTML',
+        encodage: 'UTF-8',
+        langue: 'fr-GA'
+    };
+}
+
+/**
+ * Générer les informations de l'organisation pour le rapport
+ */
+function generateRapportOrganisationInfo() {
+    const formData = collectFormData();
+    
+    return {
+        typeOrganisation: OrganisationApp.selectedOrgType,
+        typeLabel: getOrganizationTypeLabel(OrganisationApp.selectedOrgType),
+        nomOrganisation: formData.org_nom || 'Non renseigné',
+        sigleOrganisation: formData.org_sigle || null,
+        demandeurPrincipal: {
+            nom: `${formData.demandeur_civilite || ''} ${formData.demandeur_nom || ''} ${formData.demandeur_prenom || ''}`.trim(),
+            nip: formData.demandeur_nip || 'Non renseigné',
+            email: formData.demandeur_email || 'Non renseigné',
+            telephone: formData.demandeur_telephone || 'Non renseigné',
+            role: formData.demandeur_role || 'Non renseigné'
+        },
+        exigencesMinimales: {
+            fondateursMin: OrganisationApp.config.orgRequirements[OrganisationApp.selectedOrgType]?.minFondateurs || 3,
+            adherentsMin: OrganisationApp.config.orgRequirements[OrganisationApp.selectedOrgType]?.minAdherents || 10
+        }
+    };
+}
+
+/**
+ * Générer les statistiques détaillées
+ */
+function generateRapportStatistiques() {
+    const totalAdherents = OrganisationApp.adherents.length;
+    const totalAnomalies = OrganisationApp.rapportAnomalies.anomalies.length;
+    const adherentsAvecAnomalies = OrganisationApp.rapportAnomalies.adherentsAvecAnomalies;
+    const adherentsValides = OrganisationApp.rapportAnomalies.adherentsValides;
+    
+    // Statistiques par niveau d'anomalie
+    const statsNiveaux = OrganisationApp.rapportAnomalies.statistiques;
+    
+    // Statistiques par type d'anomalie
+    const statsTypes = {};
+    OrganisationApp.rapportAnomalies.anomalies.forEach(anomalie => {
+        if (!statsTypes[anomalie.type]) {
+            statsTypes[anomalie.type] = {
+                count: 0,
+                label: anomalie.label,
+                level: anomalie.level
+            };
+        }
+        statsTypes[anomalie.type].count++;
+    });
+    
+    // Calcul des pourcentages
+    const pourcentageValides = totalAdherents > 0 ? ((adherentsValides / totalAdherents) * 100).toFixed(1) : 0;
+    const pourcentageAnomalies = totalAdherents > 0 ? ((adherentsAvecAnomalies / totalAdherents) * 100).toFixed(1) : 0;
+    
+    return {
+        resume: {
+            totalAdherentsImportes: totalAdherents,
+            adherentsValides: adherentsValides,
+            adherentsAvecAnomalies: adherentsAvecAnomalies,
+            totalAnomaliesDetectees: totalAnomalies,
+            pourcentageValides: parseFloat(pourcentageValides),
+            pourcentageAnomalies: parseFloat(pourcentageAnomalies),
+            qualiteGlobale: getQualiteStatut()
+        },
+        parNiveau: {
+            critique: statsNiveaux.critique,
+            majeure: statsNiveaux.majeure,
+            mineure: statsNiveaux.mineure
+        },
+        parType: statsTypes,
+        evaluation: {
+            statutQualite: getQualiteStatut(),
+            niveauRisque: statsNiveaux.critique > 0 ? 'ÉLEVÉ' : 
+                         statsNiveaux.majeure > 0 ? 'MOYEN' : 'FAIBLE',
+            actionRequise: statsNiveaux.critique > 0 ? 'IMMÉDIATE' : 
+                          statsNiveaux.majeure > 0 ? 'SOUS 48H' : 'OPTIONNELLE'
+        }
+    };
+}
+
+/**
+ * Générer le détail des anomalies avec groupement
+ */
+function generateRapportAnomaliesDetail() {
+    const anomalies = OrganisationApp.rapportAnomalies.anomalies;
+    
+    // Grouper par niveau de gravité
+    const parNiveau = {
+        critique: anomalies.filter(a => a.level === 'critique'),
+        majeure: anomalies.filter(a => a.level === 'majeure'),
+        mineure: anomalies.filter(a => a.level === 'mineure')
+    };
+    
+    // Grouper par type d'anomalie
+    const parType = {};
+    anomalies.forEach(anomalie => {
+        if (!parType[anomalie.type]) {
+            parType[anomalie.type] = [];
+        }
+        parType[anomalie.type].push(anomalie);
+    });
+    
+    // Générer le détail formaté
+    const detailFormate = anomalies.map(anomalie => ({
+        id: anomalie.id,
+        adherent: {
+            nom: anomalie.adherentNom,
+            nip: anomalie.adherentNip,
+            ligne: anomalie.adherentLigne
+        },
+        anomalie: {
+            type: anomalie.type,
+            level: anomalie.level,
+            label: anomalie.label,
+            description: anomalie.description,
+            details: anomalie.details,
+            detecteAt: anomalie.detecteAt
+        },
+        resolution: {
+            priorite: anomalie.level === 'critique' ? 1 : 
+                     anomalie.level === 'majeure' ? 2 : 3,
+            actionSuggere: getActionSuggereePourAnomalie(anomalie.type),
+            delaiRecommande: anomalie.level === 'critique' ? '24h' : 
+                           anomalie.level === 'majeure' ? '72h' : '1 semaine'
+        }
+    }));
+    
+    return {
+        total: anomalies.length,
+        parNiveau: parNiveau,
+        parType: parType,
+        detailComplet: detailFormate,
+        ordreTraitement: detailFormate.sort((a, b) => a.resolution.priorite - b.resolution.priorite)
+    };
+}
+
+/**
+ * Obtenir l'action suggérée pour un type d'anomalie
+ */
+function getActionSuggereePourAnomalie(type) {
+    const actions = {
+        'nip_invalide': 'Vérifier auprès des services d\'état civil',
+        'telephone_invalide': 'Corriger le format du numéro de téléphone',
+        'email_invalide': 'Corriger l\'adresse email',
+        'champs_incomplets': 'Compléter les informations manquantes',
+        'membre_existant': 'Contacter le membre pour régularisation',
+        'profession_exclue_parti': 'Exclure le membre ou changer le type d\'organisation',
+        'doublon_fichier': 'Supprimer ou fusionner les doublons',
+        'format_donnees': 'Vérifier et corriger le format des données'
+    };
+    
+    return actions[type] || 'Vérifier et corriger les données';
+}
+
+/**
+ * Générer la signature du rapport
+ */
+function generateRapportSignature() {
+    return {
+        systeme: 'PNGDI - Plateforme Nationale de Gestion des Déclarations d\'Intentions',
+        version: '1.2',
+        module: 'Import Adhérents avec Gestion Anomalies',
+        checksum: generateRapportChecksum(),
+        timestamp: Date.now(),
+        format: 'Rapport JSON structuré compatible email/inbox'
+    };
+}
+
+/**
+ * Générer un checksum simple pour le rapport
+ */
+function generateRapportChecksum() {
+    const data = JSON.stringify({
+        anomalies: OrganisationApp.rapportAnomalies.anomalies.length,
+        timestamp: OrganisationApp.rapportAnomalies.genereAt,
+        version: OrganisationApp.rapportAnomalies.version
+    });
+    
+    // Simple hash basé sur le contenu
+    let hash = 0;
+    for (let i = 0; i < data.length; i++) {
+        const char = data.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return Math.abs(hash).toString(16);
+}
+
+/**
+ * Prévisualiser le rapport d'anomalies en modal
+ */
+function previewRapportAnomalies() {
+    console.log('👁️ Prévisualisation du rapport d\'anomalies');
+    
+    const rapport = generateRapportAnomalies();
+    if (!rapport) {
+        showNotification('Aucun rapport d\'anomalies à prévisualiser', 'info');
+        return;
+    }
+    
+    // Créer et afficher la modal
+    createRapportAnomaliesModal(rapport);
+}
+
+/**
+ * Créer la modal de prévisualisation du rapport
+ */
+function createRapportAnomaliesModal(rapport) {
+    const modalId = 'rapportAnomaliesModal';
+    
+    // Supprimer l'ancienne modal si elle existe
+    const existingModal = document.getElementById(modalId);
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const stats = rapport.statistiques;
+    const anomalies = rapport.anomalies;
+    
+    const modalHTML = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-labelledby="${modalId}Label" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="${modalId}Label">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ${rapport.metadata.titre}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        ${generateRapportModalContent(rapport)}
+                    </div>
+                    
+                    <div class="modal-footer bg-light">
+                        <div class="d-flex justify-content-between w-100 align-items-center">
+                            <div class="text-muted small">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Généré le ${new Date(rapport.metadata.genereAt).toLocaleDateString('fr-FR', {
+                                    year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                })}
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-outline-secondary me-2" data-bs-dismiss="modal">
+                                    <i class="fas fa-times me-1"></i>Fermer
+                                </button>
+                                <button type="button" class="btn btn-success me-2" onclick="downloadRapportAnomalies()">
+                                    <i class="fas fa-download me-1"></i>Télécharger JSON
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="exportRapportHTML()">
+                                    <i class="fas fa-file-export me-1"></i>Exporter HTML
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Ajouter la modal au DOM
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Afficher la modal
+    const modal = new bootstrap.Modal(document.getElementById(modalId));
+    modal.show();
+    
+    // Nettoyer après fermeture
+    modal._element.addEventListener('hidden.bs.modal', () => {
+        modal._element.remove();
+    });
+}
+
+/**
+ * Générer le contenu de la modal
+ */
+function generateRapportModalContent(rapport) {
+    const stats = rapport.statistiques;
+    const anomalies = rapport.anomalies;
+    
+    return `
+        <!-- En-tête du rapport -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-gradient-primary text-white">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h6 class="mb-1">
+                            <i class="fas fa-building me-2"></i>
+                            ${rapport.organisation.nomOrganisation}
+                        </h6>
+                        <small class="opacity-75">
+                            ${rapport.organisation.typeLabel} | Demandeur: ${rapport.organisation.demandeurPrincipal.nom}
+                        </small>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span class="badge ${getQualiteBadgeClass(stats.resume.qualiteGlobale)} fs-6">
+                            ${getQualiteLabel(stats.resume.qualiteGlobale)}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Statistiques résumées -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 bg-light h-100">
+                    <div class="card-body text-center">
+                        <h3 class="text-primary mb-1">${stats.resume.totalAdherentsImportes}</h3>
+                        <small class="text-muted">Total importés</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 bg-success-subtle h-100">
+                    <div class="card-body text-center">
+                        <h3 class="text-success mb-1">${stats.resume.adherentsValides}</h3>
+                        <small class="text-muted">Valides (${stats.resume.pourcentageValides}%)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 bg-warning-subtle h-100">
+                    <div class="card-body text-center">
+                        <h3 class="text-warning mb-1">${stats.resume.adherentsAvecAnomalies}</h3>
+                        <small class="text-muted">Avec anomalies (${stats.resume.pourcentageAnomalies}%)</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 bg-danger-subtle h-100">
+                    <div class="card-body text-center">
+                        <h3 class="text-danger mb-1">${stats.resume.totalAnomaliesDetectees}</h3>
+                        <small class="text-muted">Anomalies total</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Répartition par niveau -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>
+                    Répartition par niveau de gravité
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center p-3 bg-danger-subtle rounded">
+                            <div class="me-3">
+                                <span class="badge bg-danger fs-6">${stats.parNiveau.critique}</span>
+                            </div>
+                            <div>
+                                <strong class="text-danger">Critique</strong><br>
+                                <small class="text-muted">Action immédiate</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center p-3 bg-warning-subtle rounded">
+                            <div class="me-3">
+                                <span class="badge bg-warning fs-6">${stats.parNiveau.majeure}</span>
+                            </div>
+                            <div>
+                                <strong class="text-warning">Majeure</strong><br>
+                                <small class="text-muted">Sous 48h</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center p-3 bg-info-subtle rounded">
+                            <div class="me-3">
+                                <span class="badge bg-info fs-6">${stats.parNiveau.mineure}</span>
+                            </div>
+                            <div>
+                                <strong class="text-info">Mineure</strong><br>
+                                <small class="text-muted">Recommandée</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tableau des anomalies -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    Détail des anomalies (${anomalies.total})
+                </h6>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-secondary btn-sm active" onclick="filterAnomalies('all')">
+                        Toutes
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="filterAnomalies('critique')">
+                        Critiques
+                    </button>
+                    <button type="button" class="btn btn-outline-warning btn-sm" onclick="filterAnomalies('majeure')">
+                        Majeures
+                    </button>
+                    <button type="button" class="btn btn-outline-info btn-sm" onclick="filterAnomalies('mineure')">
+                        Mineures
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover mb-0" id="anomaliesTable">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Adhérent</th>
+                                <th>NIP</th>
+                                <th>Ligne</th>
+                                <th>Niveau</th>
+                                <th>Anomalie</th>
+                                <th>Action suggérée</th>
+                                <th>Délai</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${generateAnomaliesTableRows(anomalies.ordreTraitement)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recommandations -->
+        ${rapport.recommandations.length > 0 ? `
+        <div class="card border-0 shadow-sm">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>
+                    Recommandations (${rapport.recommandations.length})
+                </h6>
+            </div>
+            <div class="card-body">
+                ${rapport.recommandations.map(rec => `
+                    <div class="alert alert-${getRecommandationAlertClass(rec.type)} d-flex align-items-start">
+                        <i class="fas ${getRecommandationIcon(rec.type)} me-3 mt-1"></i>
+                        <div>
+                            <strong>${rec.type.toUpperCase()} :</strong> ${rec.message}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
+    `;
+}
+
+/**
+ * Générer les lignes du tableau des anomalies
+ */
+function generateAnomaliesTableRows(anomalies) {
+    return anomalies.map(anomalie => `
+        <tr class="anomalie-row anomalie-${anomalie.anomalie.level}" data-level="${anomalie.anomalie.level}">
+            <td>
+                <strong>${anomalie.adherent.nom}</strong>
+            </td>
+            <td>
+                <code class="small">${anomalie.adherent.nip}</code>
+            </td>
+            <td>
+                <span class="badge bg-secondary">${anomalie.adherent.ligne || 'N/A'}</span>
+            </td>
+            <td>
+                <span class="badge bg-${getLevelBadgeColor(anomalie.anomalie.level)}">
+                    ${anomalie.anomalie.level.toUpperCase()}
+                </span>
+            </td>
+            <td>
+                <div>
+                    <strong class="small">${anomalie.anomalie.label}</strong>
+                    <br>
+                    <small class="text-muted">${anomalie.anomalie.description}</small>
+                    ${anomalie.anomalie.details ? `<br><small class="text-warning">Détails: ${anomalie.anomalie.details}</small>` : ''}
+                </div>
+            </td>
+            <td>
+                <small>${anomalie.resolution.actionSuggere}</small>
+            </td>
+            <td>
+                <span class="badge bg-outline-${getLevelBadgeColor(anomalie.anomalie.level)}">
+                    ${anomalie.resolution.delaiRecommande}
+                </span>
+            </td>
+        </tr>
+    `).join('');
+}
+
+/**
+ * Filtrer les anomalies par niveau
+ */
+function filterAnomalies(level) {
+    const table = document.getElementById('anomaliesTable');
+    if (!table) return;
+    
+    const rows = table.querySelectorAll('.anomalie-row');
+    const buttons = table.closest('.card').querySelectorAll('.btn-group .btn');
+    
+    // Mettre à jour les boutons
+    buttons.forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // Filtrer les lignes
+    rows.forEach(row => {
+        if (level === 'all' || row.dataset.level === level) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+/**
+ * Télécharger le rapport au format JSON
+ */
+function downloadRapportAnomalies() {
+    const rapport = generateRapportAnomalies();
+    if (!rapport) {
+        showNotification('Aucun rapport d\'anomalies à télécharger', 'info');
+        return;
+    }
+    
+    const rapportJSON = JSON.stringify(rapport, null, 2);
+    const blob = new Blob([rapportJSON], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        const fileName = `rapport_anomalies_${rapport.organisation.nomOrganisation.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('Rapport d\'anomalies téléchargé avec succès', 'success');
+    }
+}
+
+/**
+ * Exporter le rapport en HTML
+ */
+function exportRapportHTML() {
+    const htmlContent = generateRapportAnomaliesHTML();
+    if (!htmlContent) {
+        showNotification('Impossible d\'exporter le rapport HTML', 'danger');
+        return;
+    }
+    
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+    const link = document.createElement('a');
+    
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        const fileName = `rapport_anomalies_${OrganisationApp.formData.org_nom ? OrganisationApp.formData.org_nom.replace(/[^a-z0-9]/gi, '_') : 'organisation'}_${new Date().toISOString().split('T')[0]}.html`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('Rapport HTML exporté avec succès', 'success');
+    }
+}
+
+/**
+ * Générer le rapport au format HTML pour email
+ */
+function generateRapportAnomaliesHTML() {
+    const rapport = generateRapportAnomalies();
+    if (!rapport) return null;
+    
+    const stats = rapport.statistiques;
+    const anomalies = rapport.anomalies;
+    
+    return `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${rapport.metadata.titre}</title>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }
+            .header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+            .stat-card { background: #fff; border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; text-align: center; }
+            .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
+            .badge-danger { background: #dc3545; color: white; }
+            .badge-warning { background: #ffc107; color: #212529; }
+            .badge-info { background: #17a2b8; color: white; }
+            .badge-success { background: #28a745; color: white; }
+            .anomalie-item { border-left: 4px solid #dc3545; padding: 10px; margin: 10px 0; background: #f8f9fa; }
+            .anomalie-critique { border-left-color: #dc3545; }
+            .anomalie-majeure { border-left-color: #ffc107; }
+            .anomalie-mineure { border-left-color: #17a2b8; }
+            .table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            .table th, .table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #dee2e6; }
+            .table th { background: #f8f9fa; font-weight: bold; }
+            .recommandation { background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 6px; padding: 15px; margin: 10px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>${rapport.metadata.titre}</h1>
+            <p><strong>Organisation :</strong> ${rapport.organisation.nomOrganisation} (${rapport.organisation.typeLabel})</p>
+            <p><strong>Demandeur :</strong> ${rapport.organisation.demandeurPrincipal.nom}</p>
+            <p><strong>Généré le :</strong> ${new Date(rapport.metadata.genereAt).toLocaleDateString('fr-FR', { 
+                year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+            })}</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>${stats.resume.totalAdherentsImportes}</h3>
+                <p>Adhérents importés</p>
+            </div>
+            <div class="stat-card">
+                <h3 style="color: #28a745;">${stats.resume.adherentsValides}</h3>
+                <p>Valides (${stats.resume.pourcentageValides}%)</p>
+            </div>
+            <div class="stat-card">
+                <h3 style="color: #dc3545;">${stats.resume.adherentsAvecAnomalies}</h3>
+                <p>Avec anomalies (${stats.resume.pourcentageAnomalies}%)</p>
+            </div>
+            <div class="stat-card">
+                <h3>${stats.resume.totalAnomaliesDetectees}</h3>
+                <p>Anomalies détectées</p>
+            </div>
+        </div>
+        
+        <h2>📊 Répartition par niveau de gravité</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Niveau</th>
+                    <th>Nombre</th>
+                    <th>Action requise</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-danger">Critique</span></td>
+                    <td>${stats.parNiveau.critique}</td>
+                    <td>Correction immédiate</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-warning">Majeure</span></td>
+                    <td>${stats.parNiveau.majeure}</td>
+                    <td>Correction sous 48h</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-info">Mineure</span></td>
+                    <td>${stats.parNiveau.mineure}</td>
+                    <td>Correction recommandée</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>📋 Détail des anomalies par ordre de priorité</h2>
+        ${anomalies.ordreTraitement.map(anomalie => `
+            <div class="anomalie-item anomalie-${anomalie.anomalie.level}">
+                <h4>${anomalie.adherent.nom} <span class="badge badge-${anomalie.anomalie.level === 'critique' ? 'danger' : anomalie.anomalie.level === 'majeure' ? 'warning' : 'info'}">${anomalie.anomalie.level.toUpperCase()}</span></h4>
+                <p><strong>NIP :</strong> ${anomalie.adherent.nip} | <strong>Ligne :</strong> ${anomalie.adherent.ligne || 'N/A'}</p>
+                <p><strong>Anomalie :</strong> ${anomalie.anomalie.label}</p>
+                <p><strong>Description :</strong> ${anomalie.anomalie.description}</p>
+                ${anomalie.anomalie.details ? `<p><strong>Détails :</strong> ${anomalie.anomalie.details}</p>` : ''}
+                <p><strong>Action suggérée :</strong> ${anomalie.resolution.actionSuggere}</p>
+                <p><strong>Délai recommandé :</strong> ${anomalie.resolution.delaiRecommande}</p>
+            </div>
+        `).join('')}
+        
+        <h2>💡 Recommandations</h2>
+        ${rapport.recommandations.map(rec => `
+            <div class="recommandation">
+                <strong>${rec.type.toUpperCase()} :</strong> ${rec.message}
+            </div>
+        `).join('')}
+        
+        <div class="header" style="margin-top: 30px; text-align: center; font-size: 0.9em; color: #666;">
+            <p>Rapport généré automatiquement par ${rapport.signature.systeme}</p>
+            <p>Version ${rapport.signature.version} | Checksum: ${rapport.signature.checksum}</p>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+/**
+ * Fonctions utilitaires pour l'affichage
+ */
+function getLevelBadgeColor(level) {
+    const colors = {
+        'critique': 'danger',
+        'majeure': 'warning',
+        'mineure': 'info'
+    };
+    return colors[level] || 'secondary';
+}
+
+function getRecommandationAlertClass(type) {
+    const classes = {
+        'urgent': 'danger',
+        'important': 'warning',
+        'conseil': 'info'
+    };
+    return classes[type] || 'secondary';
+}
+
+function getRecommandationIcon(type) {
+    const icons = {
+        'urgent': 'fa-exclamation-triangle',
+        'important': 'fa-exclamation-circle',
+        'conseil': 'fa-lightbulb'
+    };
+    return icons[type] || 'fa-info-circle';
+}
+
+// ========================================
+// 9. SAUVEGARDE ET COLLECTE DE DONNÉES
 // ========================================
 
 /**
@@ -4197,7 +3789,7 @@ function autoSave() {
             fondateurs: OrganisationApp.fondateurs,
             adherents: OrganisationApp.adherents,
             documents: Object.keys(OrganisationApp.documents),
-            // NOUVEAU : Inclure le rapport d'anomalies
+            // Inclure le rapport d'anomalies
             rapportAnomaliesAdherents: OrganisationApp.rapportAnomalies.enabled ? {
                 enabled: true,
                 adherentsValides: OrganisationApp.rapportAnomalies.adherentsValides,
@@ -4210,7 +3802,7 @@ function autoSave() {
             currentStep: OrganisationApp.currentStep,
             selectedOrgType: OrganisationApp.selectedOrgType,
             timestamp: Date.now(),
-            version: '1.2' // MISE À JOUR version
+            version: '1.2'
         };
         
         localStorage.setItem('pngdi_organisation_draft', JSON.stringify(saveData));
@@ -4254,13 +3846,13 @@ function loadSavedData() {
  */
 function restoreFormData(savedData) {
     try {
-        // Restaurer les données existantes (fonction conservée)
+        // Restaurer les données existantes
         OrganisationApp.currentStep = savedData.currentStep || 1;
         OrganisationApp.selectedOrgType = savedData.selectedOrgType || '';
         OrganisationApp.fondateurs = savedData.fondateurs || [];
         OrganisationApp.adherents = savedData.adherents || [];
         
-        // NOUVEAU : Restaurer le rapport d'anomalies
+        // Restaurer le rapport d'anomalies
         if (savedData.rapportAnomaliesAdherents && savedData.rapportAnomaliesAdherents.enabled) {
             OrganisationApp.rapportAnomalies = {
                 enabled: true,
@@ -4274,7 +3866,7 @@ function restoreFormData(savedData) {
             console.log('✅ Rapport d\'anomalies restauré:', OrganisationApp.rapportAnomalies);
         }
         
-        // Restaurer les champs du formulaire (code existant conservé)
+        // Restaurer les champs du formulaire
         const formData = savedData.formData || {};
         Object.keys(formData).forEach(key => {
             const field = document.getElementById(key) || document.querySelector(`[name="${key}"]`);
@@ -4288,7 +3880,7 @@ function restoreFormData(savedData) {
             }
         });
         
-        // Restaurer la sélection du type d'organisation (code existant)
+        // Restaurer la sélection du type d'organisation
         if (OrganisationApp.selectedOrgType) {
             const typeCard = document.querySelector(`[data-type="${OrganisationApp.selectedOrgType}"]`);
             if (typeCard) {
@@ -4305,20 +3897,6 @@ function restoreFormData(savedData) {
         console.error('Erreur restauration données:', error);
         showNotification('Erreur lors de la restauration des données', 'warning');
     }
-}
-
-
-/**
- * NOUVEAU : Mettre à jour les statistiques du rapport
- */
- function updateRapportStatistiques() {
-    if (!OrganisationApp.rapportAnomalies.enabled) return;
-    
-    // Recalculer les statistiques en temps réel
-    OrganisationApp.rapportAnomalies.adherentsValides = OrganisationApp.adherents.filter(a => !a.hasAnomalies).length;
-    OrganisationApp.rapportAnomalies.adherentsAvecAnomalies = OrganisationApp.adherents.filter(a => a.hasAnomalies).length;
-    
-    console.log('📊 Statistiques rapport mises à jour:', OrganisationApp.rapportAnomalies);
 }
 
 /**
@@ -4344,7 +3922,7 @@ function updateSaveIndicator(status) {
 }
 
 // ========================================
-// 9. NOTIFICATIONS
+// 10. NOTIFICATIONS
 // ========================================
 
 /**
@@ -4400,8 +3978,64 @@ function showNotification(message, type = 'info', duration = 5000) {
     }, duration);
 }
 
+/**
+ * Notification personnalisée (utilise showCustomNotification si elle existe, sinon showNotification)
+ */
+function showCustomNotification(htmlContent, type = 'info', duration = 5000) {
+    // Si la fonction showCustomNotification n'existe pas, utiliser showNotification basique
+    if (typeof showCustomNotification === 'undefined') {
+        // Extraire le texte du HTML pour showNotification basique
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlContent;
+        const textContent = tempDiv.textContent || tempDiv.innerText || '';
+        showNotification(textContent, type, duration);
+        return;
+    }
+    
+    // Sinon utiliser la version complète
+    let container = document.getElementById('notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notification-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 500px;
+        `;
+        document.body.appendChild(container);
+    }
+    
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show shadow-lg`;
+    notification.style.cssText = `
+        margin-bottom: 10px;
+        border: none;
+        border-radius: 12px;
+        animation: slideInRight 0.3s ease-out;
+    `;
+    
+    notification.innerHTML = `
+        ${htmlContent}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" style="margin-top: -0.5rem;"></button>
+    `;
+    
+    container.appendChild(notification);
+    
+    // Auto-suppression
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'slideOutRight 0.3s ease-out';
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }
+    }, duration);
+}
+
 // ========================================
-// 10. SOUMISSION FINALE
+// 11. SOUMISSION FINALE
 // ========================================
 
 /**
@@ -4419,18 +4053,35 @@ function validateAllSteps() {
 }
 
 /**
- * Soumission finale du formulaire
+ * Soumission finale du formulaire avec rapport d'anomalies
  */
 async function submitForm() {
-    console.log('📤 Début de la soumission du formulaire...');
+    console.log('📤 Début de la soumission du formulaire avec rapport d\'anomalies...');
     
     // Validation finale complète
     if (!validateAllSteps()) {
         showNotification('Veuillez corriger toutes les erreurs avant de soumettre', 'danger');
         return false;
     }
+
+    // ✅ AJOUTER ICI :
+const analysis = analyzeFormData();
+if (analysis.fieldCount > 1000) {
+    console.warn('⚠️ Trop de champs:', analysis.fieldCount);
+}
     
     try {
+        // Afficher le loader
+        const analysis = analyzeFormData();
+        if (analysis.fieldCount > 1000) {
+            console.warn('⚠️ Trop de champs:', analysis.fieldCount);
+            showNotification(`Attention: ${analysis.fieldCount} champs détectés (limite recommandée: 1000)`, 'warning');
+        }
+        if (analysis.totalSize > 50 * 1024 * 1024) { // 50MB
+            console.warn('⚠️ Taille importante:', (analysis.totalSize / 1024 / 1024).toFixed(2) + ' MB');
+            showNotification(`Attention: ${(analysis.totalSize / 1024 / 1024).toFixed(2)} MB de données à envoyer`, 'warning');
+        }
+        
         // Afficher le loader
         showGlobalLoader(true);
         updateSaveIndicator('saving');
@@ -4452,138 +4103,11 @@ async function submitForm() {
             }
         });
         
-        // Ajouter les fondateurs
-        formData.append('fondateurs', JSON.stringify(OrganisationApp.fondateurs));
-        
-        // Ajouter les adhérents
-        formData.append('adherents', JSON.stringify(OrganisationApp.adherents));
-        
-        // Ajouter les métadonnées
-        formData.append('selectedOrgType', OrganisationApp.selectedOrgType);
-        formData.append('totalFondateurs', OrganisationApp.fondateurs.length);
-        formData.append('totalAdherents', OrganisationApp.adherents.length);
-        formData.append('totalDocuments', Object.keys(OrganisationApp.documents).length);
-        
-        // Ajouter les documents
-        Object.keys(OrganisationApp.documents).forEach(docType => {
-            const doc = OrganisationApp.documents[docType];
-            if (doc.file) {
-                formData.append(`documents[${docType}]`, doc.file);
-            }
-        });
-        
-        console.log('📋 Données préparées pour soumission');
-        
-        // Soumettre via fetch pour avoir plus de contrôle
-        const formElement = document.getElementById('organisationForm');
-        const response = await fetch(formElement.action, {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        });
-        
-        console.log('📡 Réponse reçue du serveur:', response.status);
-        
-        if (response.ok) {
-            const result = await response.json();
-            
-            if (result.success) {
-                // Succès
-                showNotification('🎉 Dossier soumis avec succès !', 'success', 10000);
-                
-                // Nettoyer les données sauvegardées
-                localStorage.removeItem('pngdi_organisation_draft');
-                
-                // Désactiver le formulaire pour éviter les double soumissions
-                const submitBtn = document.getElementById('submitBtn');
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Dossier soumis';
-                }
-                
-                // Rediriger après un délai
-                if (result.redirect) {
-                    setTimeout(() => {
-                        window.location.href = result.redirect;
-                    }, 3000);
-                } else {
-                    // Redirection par défaut
-                    setTimeout(() => {
-                        window.location.href = '/operator/organisations';
-                    }, 3000);
-                }
-                
-            } else {
-                // Erreur métier
-                showNotification(result.message || 'Erreur lors de la soumission', 'danger');
-                
-                // Afficher les erreurs de validation si présentes
-                if (result.errors) {
-                    Object.keys(result.errors).forEach(field => {
-                        const fieldElement = document.querySelector(`[name="${field}"]`) || 
-                                           document.getElementById(field);
-                        if (fieldElement) {
-                            showFieldError(fieldElement, result.errors[field][0]);
-                        }
-                    });
-                }
-            }
-        } else {
-            // Erreur HTTP
-            throw new Error(`Erreur HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur soumission:', error);
-        showNotification('Erreur de communication avec le serveur. Veuillez réessayer.', 'danger');
-    } finally {
-        showGlobalLoader(false);
-        updateSaveIndicator('success');
-    }
-}
-
-/**
- * MISE À JOUR : Soumission finale avec rapport d'anomalies
- * Ajoute la transmission du rapport à la fonction existante submitForm()
- */
- async function submitFormWithAnomalies() {
-    console.log('📤 Début de la soumission du formulaire avec rapport d\'anomalies...');
-    
-    // Validation finale complète (fonction existante conservée)
-    if (!validateAllSteps()) {
-        showNotification('Veuillez corriger toutes les erreurs avant de soumettre', 'danger');
-        return false;
-    }
-    
-    try {
-        // Afficher le loader
-        showGlobalLoader(true);
-        updateSaveIndicator('saving');
-        
-        // Préparation des données (code existant conservé)
-        const formData = new FormData();
-        const data = collectFormData();
-        
-        // Ajouter le token CSRF
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        if (csrfToken) {
-            formData.append('_token', csrfToken);
-        }
-        
-        // Ajouter les données de base (code existant)
-        Object.keys(data).forEach(key => {
-            if (data[key] !== null && data[key] !== undefined) {
-                formData.append(key, data[key]);
-            }
-        });
-        
-        // Ajouter les fondateurs et adhérents (code existant)
+        // Ajouter les fondateurs et adhérents
         formData.append('fondateurs', JSON.stringify(OrganisationApp.fondateurs));
         formData.append('adherents', JSON.stringify(OrganisationApp.adherents));
         
-        // NOUVEAU : Ajouter le rapport d'anomalies si présent
+        // Ajouter le rapport d'anomalies si présent
         if (OrganisationApp.rapportAnomalies.enabled) {
             const rapport = generateRapportAnomalies();
             const rapportHTML = generateRapportAnomaliesHTML();
@@ -4597,14 +4121,14 @@ async function submitForm() {
             formData.append('has_anomalies', 'false');
         }
         
-        // Ajouter les métadonnées (code existant + nouvelles)
+        // Ajouter les métadonnées
         formData.append('selectedOrgType', OrganisationApp.selectedOrgType);
         formData.append('totalFondateurs', OrganisationApp.fondateurs.length);
         formData.append('totalAdherents', OrganisationApp.adherents.length);
         formData.append('totalDocuments', Object.keys(OrganisationApp.documents).length);
-        formData.append('qualiteAdherents', getQualiteStatut()); // NOUVEAU
+        formData.append('qualiteAdherents', getQualiteStatut());
         
-        // Ajouter les documents (code existant)
+        // Ajouter les documents
         Object.keys(OrganisationApp.documents).forEach(docType => {
             const doc = OrganisationApp.documents[docType];
             if (doc.file) {
@@ -4614,7 +4138,7 @@ async function submitForm() {
         
         console.log('📋 Données préparées pour soumission v1.2');
         
-        // Soumettre via fetch (code existant conservé)
+        // Soumettre via fetch
         const formElement = document.getElementById('organisationForm');
         const response = await fetch(formElement.action, {
             method: 'POST',
@@ -4647,7 +4171,7 @@ async function submitForm() {
                     submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Dossier soumis';
                 }
                 
-                // Redirection (code existant)
+                // Redirection
                 if (result.redirect) {
                     setTimeout(() => {
                         window.location.href = result.redirect;
@@ -4659,7 +4183,7 @@ async function submitForm() {
                 }
                 
             } else {
-                // Erreur métier (code existant)
+                // Erreur métier
                 showNotification(result.message || 'Erreur lors de la soumission', 'danger');
                 
                 if (result.errors) {
@@ -4700,7 +4224,7 @@ function showGlobalLoader(show) {
 }
 
 // ========================================
-// 11. UTILITAIRES AVANCÉS
+// 12. UTILITAIRES AVANCÉS
 // ========================================
 
 /**
@@ -4846,8 +4370,35 @@ function stopAutoSave() {
     }
 }
 
+// AJOUTER CETTE FONCTION de diagnostic
+function analyzeFormData() {
+    const form = document.getElementById('organisationForm');
+    const formData = new FormData(form);
+    
+    let totalSize = 0;
+    let fieldCount = 0;
+    let largestFields = [];
+    
+    for (let [key, value] of formData.entries()) {
+        fieldCount++;
+        const size = new Blob([value]).size;
+        totalSize += size;
+        
+        if (size > 1000) { // Champs > 1KB
+            largestFields.push({key, size, value: value.toString().substring(0, 50)});
+        }
+    }
+    
+    console.log('=== ANALYSE FORMULAIRE ===');
+    console.log('Nombre de champs:', fieldCount);
+    console.log('Taille totale:', (totalSize / 1024).toFixed(2) + ' KB');
+    console.log('Champs volumineux:', largestFields);
+    
+    return {fieldCount, totalSize, largestFields};
+}
+
 // ========================================
-// 12. INITIALISATION COMPLÈTE
+// 13. INITIALISATION COMPLÈTE
 // ========================================
 
 /**
@@ -4930,15 +4481,44 @@ function setupEventListeners() {
         provinceSelect.addEventListener('change', updateDepartements);
     }
     
-    // Validation en temps réel
+    // Validation en temps réel avec débounce pour org_objet
+    const orgObjetField = document.getElementById('org_objet');
+    if (orgObjetField) {
+        orgObjetField.addEventListener('input', function(e) {
+            const currentLength = e.target.value.trim().length;
+            const minLength = 50;
+            
+            // Mettre à jour compteur en temps réel
+            let counterDiv = e.target.parentNode.querySelector('.char-counter');
+            if (!counterDiv) {
+                counterDiv = document.createElement('div');
+                counterDiv.className = 'char-counter small text-muted mt-1';
+                e.target.parentNode.appendChild(counterDiv);
+            }
+            counterDiv.textContent = `${currentLength}/${minLength} caractères`;
+            counterDiv.style.color = currentLength < minLength ? '#dc3545' : '#28a745';
+            
+            // Validation différée
+            clearTimeout(e.target.validationTimeout);
+            e.target.validationTimeout = setTimeout(() => {
+                validateField(e.target);
+            }, OrganisationApp.config.validationDelay);
+        });
+    }
+    
+    // Validation en temps réel pour autres champs
     document.addEventListener('input', function(e) {
-        if (e.target.matches('input, textarea, select')) {
+        const validationSelector = 'input:not(#org_objet), textarea:not(#org_objet), select';
+        if (elementMatches(e.target, validationSelector)) {
             clearTimeout(e.target.validationTimeout);
             e.target.validationTimeout = setTimeout(() => {
                 validateField(e.target);
             }, OrganisationApp.config.validationDelay);
         }
     });
+    
+    // Configuration de l'importation fichier adhérents
+    initializeAdherentFileImport();
     
     // Sauvegarde avant fermeture
     window.addEventListener('beforeunload', function(e) {
@@ -4955,7 +4535,7 @@ function setupEventListeners() {
         }
         
         // Flèches pour navigation (si pas dans un champ)
-        if (!e.target.matches('input, textarea, select')) {
+        if (!elementMatches(e.target,'input, textarea, select')) {
             if (e.key === 'ArrowRight' && e.ctrlKey) {
                 e.preventDefault();
                 changeStep(1);
@@ -4974,12 +4554,58 @@ function setupEventListeners() {
             submitForm();
         });
     }
-
-    initializeAdherentFileImport();
 }
 
+/**
+ * Initialiser l'importation de fichier adhérents
+ */
+function initializeAdherentFileImport() {
+    const fileInput = document.getElementById('adherents_file');
+    if (fileInput) {
+        // Supprimer les anciens event listeners
+        fileInput.removeEventListener('change', handleAdherentFileImport);
+        
+        // Ajouter le nouvel event listener
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                handleAdherentFileImport(this);
+            }
+        });
+        console.log('✅ Événement importation fichier adhérents configuré');
+    }
+}
+
+/**
+ * Basculer les déclarations selon le type d'organisation
+ */
+function toggleDeclarationParti() {
+    const typeOrganisation = document.querySelector('input[name="type_organisation"]:checked');
+    const declarationParti = document.getElementById('declaration_parti_politique');
+    
+    if (typeOrganisation && typeOrganisation.value === 'parti_politique') {
+        if (declarationParti) {
+            declarationParti.classList.remove('d-none');
+            const checkbox = document.getElementById('declaration_exclusivite_parti');
+            if (checkbox) {
+                checkbox.required = true;
+            }
+        }
+    } else {
+        if (declarationParti) {
+            declarationParti.classList.add('d-none');
+            const checkbox = document.getElementById('declaration_exclusivite_parti');
+            if (checkbox) {
+                checkbox.required = false;
+                checkbox.checked = false;
+            }
+        }
+    }
+}
+
+
+
 // ========================================
-// 13. FONCTIONS GLOBALES EXPOSÉES
+// 14. FONCTIONS GLOBALES EXPOSÉES
 // ========================================
 
 // Exposer les fonctions principales pour compatibilité avec le HTML
@@ -4994,13 +4620,20 @@ window.getCurrentLocation = getCurrentLocation;
 window.openImageModal = openImageModal;
 window.handleAdherentFileImport = handleAdherentFileImport;
 window.toggleImportDetails = toggleImportDetails;
-
-
+window.previewRapportAnomalies = previewRapportAnomalies;
+window.downloadRapportAnomalies = downloadRapportAnomalies;
+window.exportRapportHTML = exportRapportHTML;
+window.filterAnomalies = filterAnomalies;
+window.downloadTemplate = downloadTemplate;
+window.toggleAdherentMode = toggleAdherentMode;
+window.updateDepartements = updateDepartements;
+window.toggleDeclarationParti = toggleDeclarationParti;
+window.submitForm = submitForm;
 
 /**
  * Vérification de l'intégrité du système d'anomalies
  */
- function verifyAnomaliesSystem() {
+function verifyAnomaliesSystem() {
     const checks = {
         configurationAnomalies: !!OrganisationApp.config.anomalies,
         rapportAnomaliesStructure: !!OrganisationApp.rapportAnomalies,
@@ -5019,13 +4652,19 @@ window.toggleImportDetails = toggleImportDetails;
 }
 
 // ========================================
-// 14. INITIALISATION AU CHARGEMENT DOM
+// 15. INITIALISATION AU CHARGEMENT DOM
 // ========================================
 
 document.addEventListener('DOMContentLoaded', function() {
     // Vérifier que nous sommes sur la bonne page
     if (document.getElementById('organisationForm')) {
         initializeApplication();
+        
+        // Vérifier l'intégrité du système d'anomalies
+        verifyAnomaliesSystem();
+        
+        // Configurer les événements spéciaux
+        setupSpecialEventListeners();
     }
     
     // Ajouter les styles pour les animations de notifications
@@ -5046,12 +4685,200 @@ document.addEventListener('DOMContentLoaded', function() {
                 10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
                 20%, 40%, 60%, 80% { transform: translateX(5px); }
             }
+            .table-warning {
+                background-color: rgba(255, 243, 205, 0.3) !important;
+            }
+            .badge.bg-warning {
+                font-size: 0.75em;
+            }
+            .char-counter {
+                transition: color 0.3s ease;
+            }
+            .organization-type-card {
+                transition: all 0.3s ease;
+                cursor: pointer;
+            }
+            .organization-type-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            .organization-type-card.active {
+                border-color: #0d6efd !important;
+                background-color: rgba(13, 110, 253, 0.05);
+            }
+            .step-indicator {
+                transition: all 0.3s ease;
+                cursor: pointer;
+            }
+            .step-indicator:hover {
+                transform: scale(1.1);
+            }
+            .step-indicator.active {
+                background-color: #0d6efd !important;
+                color: white !important;
+            }
+            .step-indicator.completed {
+                background-color: #198754 !important;
+                color: white !important;
+            }
+            .anomalie-row {
+                transition: all 0.3s ease;
+            }
+            .anomalie-critique {
+                border-left: 3px solid #dc3545;
+            }
+            .anomalie-majeure {
+                border-left: 3px solid #ffc107;
+            }
+            .anomalie-mineure {
+                border-left: 3px solid #17a2b8;
+            }
         `;
         document.head.appendChild(styles);
     }
 });
 
-// Message de chargement
-console.log('📝 Module Organisation JavaScript COMPLET chargé - PARTIE 4 FINALE');
+/**
+ * Configuration des événements spéciaux
+ */
+function setupSpecialEventListeners() {
+    // Événement pour basculer les déclarations parti politique
+    document.addEventListener('change', function(e) {
+        if (elementMatches(e.target,'input[name="type_organisation"]')) {
+            toggleDeclarationParti();
+        }
+    });
+    
+    // Gestion des navigation avec les touches
+    document.addEventListener('keydown', function(e) {
+        // Échapper pour fermer les modals
+        if (e.key === 'Escape') {
+            const modals = document.querySelectorAll('.modal.show');
+            modals.forEach(modal => {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            });
+        }
+        
+        // Entrée pour valider les étapes
+        if (e.key === 'Enter' && e.ctrlKey) {
+            e.preventDefault();
+            if (OrganisationApp.currentStep < OrganisationApp.totalSteps) {
+                changeStep(1);
+            } else {
+                submitForm();
+            }
+        }
+    });
+    
+    // Auto-focus sur le premier champ de chaque étape
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                const target = mutation.target;
+                if (target.classList.contains('step-content') && target.style.display === 'block') {
+                    setTimeout(() => {
+                        const firstInput = target.querySelector('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]), select, textarea');
+                        if (firstInput && !firstInput.disabled) {
+                            firstInput.focus();
+                        }
+                    }, 100);
+                }
+            }
+        });
+    });
+    
+    // Observer les changements d'affichage des étapes
+    document.querySelectorAll('.step-content').forEach(step => {
+        observer.observe(step, { attributes: true, attributeFilter: ['style'] });
+    });
+    
+    // Gestion des tooltips Bootstrap si disponible
+    if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+    
+    // Validation automatique à la perte de focus
+    document.addEventListener('blur', function(e) {
+        if (elementMatches(e.target,'input[required], select[required], textarea[required]')) {
+            validateField(e.target);
+        }
+    }, true);
+    
+    // Nettoyage automatique des erreurs lors de la saisie
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('is-invalid')) {
+            // Nettoyer l'erreur après 1 seconde de saisie continue
+            clearTimeout(e.target.cleanupTimeout);
+            e.target.cleanupTimeout = setTimeout(() => {
+                if (e.target.value.trim()) {
+                    clearFieldError(e.target);
+                }
+            }, 1000);
+        }
+    });
+    
+    // Prévenír la soumission accidentelle avec Entrée
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && elementMatches(e.target,'input:not([type="submit"]):not([type="button"])')) {
+            e.preventDefault();
+            // Aller au champ suivant
+            const form = e.target.closest('form');
+            if (form) {
+                const formElements = Array.from(form.querySelectorAll('input, select, textarea, button'));
+                const currentIndex = formElements.indexOf(e.target);
+                const nextElement = formElements[currentIndex + 1];
+                if (nextElement && !nextElement.disabled) {
+                    nextElement.focus();
+                }
+            }
+        }
+    });
+    
+    console.log('✅ Événements spéciaux configurés');
+}
 
-// FIN DE LA PARTIE 4 - FICHIER JAVASCRIPT COMPLET
+/**
+ * Message de fin de chargement
+ */
+console.log(`
+🎉 ========================================================================
+   PNGDI - Formulaire Création Organisation - CHARGEMENT TERMINÉ
+   ========================================================================
+   
+   ✅ Version: 1.2 - Système d'anomalies intégré
+   ✅ 9 étapes complètes avec validation
+   ✅ Import Excel/CSV avec détection d'anomalies
+   ✅ Rapport d'anomalies automatique
+   ✅ Sauvegarde automatique toutes les 30s
+   ✅ Validation temps réel
+   ✅ Interface responsive Bootstrap 5
+   ✅ 22 professions exclues pour partis politiques
+   ✅ Gestion complète des documents
+   ✅ Géolocalisation intégrée
+   ✅ Raccourcis clavier
+   
+   🚀 Prêt pour production !
+   📋 Système révolutionnaire de conservation totale des anomalies
+   🇬🇦 Conformité législation gabonaise
+   
+   Développé pour l'excellence du service public gabonais
+========================================================================
+`);
+
+// Vérification finale de l'intégrité au chargement
+setTimeout(() => {
+    const integrityCheck = verifyAnomaliesSystem();
+    if (integrityCheck) {
+        console.log('🎯 Système opérationnel - Toutes les fonctionnalités disponibles');
+    } else {
+        console.warn('⚠️ Problème d\'intégrité détecté - Certaines fonctionnalités peuvent être limitées');
+    }
+}, 1000);
+
+// Fin du fichier JavaScript complet

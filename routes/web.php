@@ -16,6 +16,9 @@ use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\ProfileController as AdminProfileController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\WorkflowController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
@@ -57,6 +60,54 @@ Route::prefix('annuaire')->name('annuaire.')->group(function () {
 
 // Calendrier des événements
 Route::get('/calendrier', [HomeController::class, 'calendrier'])->name('calendrier');
+
+/*
+|--------------------------------------------------------------------------
+| Routes de vérification QR Code (publiques)
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/verify/{type}/{code}', function($type, $code) {
+    try {
+        $qrService = new App\Services\QrCodeService();
+        $result = $qrService->verifyCode($type, $code);
+        
+        if ($result['valid']) {
+            return view('public.qr-verification-success', [
+                'result' => $result,
+                'type' => $type,
+                'data' => $result['data']
+            ]);
+        } else {
+            return view('public.qr-verification-error', [
+                'result' => $result,
+                'message' => $result['message']
+            ]);
+        }
+    } catch (\Exception $e) {
+        \Log::error('Erreur vérification QR Code: ' . $e->getMessage());
+        
+        return view('public.qr-verification-error', [
+            'result' => ['valid' => false],
+            'message' => 'Erreur lors de la vérification du code'
+        ]);
+    }
+})->name('public.verify');
+
+// Route API pour vérification AJAX
+Route::get('/api/verify/{type}/{code}', function($type, $code) {
+    try {
+        $qrService = new App\Services\QrCodeService();
+        $result = $qrService->verifyCode($type, $code);
+        
+        return response()->json($result);
+    } catch (\Exception $e) {
+        return response()->json([
+            'valid' => false,
+            'message' => 'Erreur lors de la vérification'
+        ], 500);
+    }
+})->name('api.verify');
 
 /*
 |--------------------------------------------------------------------------
@@ -207,7 +258,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
 /*
 |--------------------------------------------------------------------------
-| Routes Operator - CONSERVÉES INTÉGRALEMENT
+| Routes Operator - CONSERVÉES INTÉGRALEMENT AVEC CORRECTIONS
 |--------------------------------------------------------------------------
 */
 Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
@@ -229,7 +280,7 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::delete('/photo', [ProfileController::class, 'deleteProfilePhoto'])->name('photo.delete');
     });
     
-    // Organisations avec vérification des limites
+    // ✅ ORGANISATIONS AVEC CORRECTIONS FINALES
     Route::prefix('organisations')->name('organisations.')->middleware(['check.organisation.limit'])->group(function () {
         Route::get('/', [OrganisationController::class, 'index'])->name('index');
         Route::get('/create', [OrganisationController::class, 'create'])->name('create');
@@ -238,6 +289,17 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::get('/{organisation}/edit', [OrganisationController::class, 'edit'])->name('edit');
         Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
         Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
+        
+        // ✅ PAGE DE CONFIRMATION APRÈS CRÉATION
+        Route::get('/confirmation/{dossier}', [OrganisationController::class, 'confirmation'])->name('confirmation');
+        
+        // ✅ TÉLÉCHARGEMENT ACCUSÉ DE RÉCEPTION
+        Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
+        
+        // ✅ VÉRIFICATIONS AJAX EN TEMPS RÉEL
+        Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
+        Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
+        Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
     });
     
     // Gestion des dossiers avec verrouillage
@@ -386,92 +448,7 @@ Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Routes de test (développement uniquement)
-|--------------------------------------------------------------------------
-*/
-if (config('app.debug')) {
-    Route::get('/test', function () {
-        return [
-            'laravel_version' => app()->version(),
-            'php_version' => PHP_VERSION,
-            'environment' => config('app.env'),
-            'database_connected' => DB::connection()->getPdo() ? 'Yes' : 'No',
-            'current_user' => auth()->check() ? auth()->user()->email : 'Non connecté',
-            'middleware_loaded' => [
-                'check.organisation.limit' => class_exists(\App\Http\Middleware\CheckOrganisationLimit::class),
-                'dossier.lock' => class_exists(\App\Http\Middleware\DossierLock::class),
-                'operator' => class_exists(\App\Http\Middleware\VerifyOperatorRole::class),
-            ]
-        ];
-    })->name('test');
-    
-    // Créer des utilisateurs de test
-    Route::get('/create-test-users', function () {
-        \App\Models\User::firstOrCreate(
-            ['email' => 'admin@pngdi.ga'],
-            [
-                'name' => 'Admin PNGDI',
-                'password' => bcrypt('admin123'),
-                'role' => 'admin',
-                'phone' => '+24101234567',
-                'city' => 'Libreville',
-                'is_active' => true,
-                'email_verified_at' => now(),
-            ]
-        );
-
-        \App\Models\User::firstOrCreate(
-            ['email' => 'agent@pngdi.ga'],
-            [
-                'name' => 'Agent PNGDI',
-                'password' => bcrypt('agent123'),
-                'role' => 'agent',
-                'phone' => '+24101234568',
-                'city' => 'Libreville',
-                'is_active' => true,
-                'email_verified_at' => now(),
-            ]
-        );
-
-        \App\Models\User::firstOrCreate(
-            ['email' => 'operator@pngdi.ga'],
-            [
-                'name' => 'Jean NGUEMA',
-                'password' => bcrypt('operator123'),
-                'role' => 'operator',
-                'phone' => '+24101234569',
-                'city' => 'Port-Gentil',
-                'is_active' => true,
-                'email_verified_at' => now(),
-            ]
-        );
-
-        return 'Utilisateurs de test créés !<br>' .
-               '<strong>Admin :</strong> admin@pngdi.ga / admin123<br>' .
-               '<strong>Agent :</strong> agent@pngdi.ga / agent123<br>' .
-               '<strong>Opérateur :</strong> operator@pngdi.ga / operator123<br>' .
-               '<a href="/login">Se connecter</a>';
-    })->name('create-test-users');
-}
-
-// Inclure les routes admin supplémentaires
-if (file_exists(__DIR__.'/admin.php')) {
-    require __DIR__.'/admin.php';
-}
-
-// Inclure les routes operator supplémentaires  
-if (file_exists(__DIR__.'/operator.php')) {
-    require __DIR__.'/operator.php';
-}
-
-// ========================================================================
-// ROUTES API REQUISES POUR LA SECTION O JAVASCRIPT
-// À ajouter dans routes/api.php ou routes/web.php
-// ========================================================================
-
-/*
-|--------------------------------------------------------------------------
-| Routes API pour Validation en Temps Réel
+| Routes API pour Validation en Temps Réel - NOUVELLES ROUTES COMPLÈTES
 |--------------------------------------------------------------------------
 */
 
@@ -827,3 +804,92 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
         ]);
     })->name('validate-complete-form');
 });
+
+/*
+|--------------------------------------------------------------------------
+| Routes de test (développement uniquement)
+|--------------------------------------------------------------------------
+*/
+if (config('app.debug')) {
+    Route::get('/test', function () {
+        return [
+            'laravel_version' => app()->version(),
+            'php_version' => PHP_VERSION,
+            'environment' => config('app.env'),
+            'database_connected' => DB::connection()->getPdo() ? 'Yes' : 'No',
+            'current_user' => auth()->check() ? auth()->user()->email : 'Non connecté',
+            'middleware_loaded' => [
+                'check.organisation.limit' => class_exists(\App\Http\Middleware\CheckOrganisationLimit::class),
+                'dossier.lock' => class_exists(\App\Http\Middleware\DossierLock::class),
+                'operator' => class_exists(\App\Http\Middleware\VerifyOperatorRole::class),
+            ]
+        ];
+    })->name('test');
+    
+    // Créer des utilisateurs de test
+    Route::get('/create-test-users', function () {
+        \App\Models\User::firstOrCreate(
+            ['email' => 'admin@pngdi.ga'],
+            [
+                'name' => 'Admin PNGDI',
+                'password' => bcrypt('admin123'),
+                'role' => 'admin',
+                'phone' => '+24101234567',
+                'city' => 'Libreville',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]
+        );
+
+        \App\Models\User::firstOrCreate(
+            ['email' => 'agent@pngdi.ga'],
+            [
+                'name' => 'Agent PNGDI',
+                'password' => bcrypt('agent123'),
+                'role' => 'agent',
+                'phone' => '+24101234568',
+                'city' => 'Libreville',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]
+        );
+
+        \App\Models\User::firstOrCreate(
+            ['email' => 'operator@pngdi.ga'],
+            [
+                'name' => 'Jean NGUEMA',
+                'password' => bcrypt('operator123'),
+                'role' => 'operator',
+                'phone' => '+24101234569',
+                'city' => 'Port-Gentil',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]
+        );
+
+        return 'Utilisateurs de test créés !<br>' .
+               '<strong>Admin :</strong> admin@pngdi.ga / admin123<br>' .
+               '<strong>Agent :</strong> agent@pngdi.ga / agent123<br>' .
+               '<strong>Opérateur :</strong> operator@pngdi.ga / operator123<br>' .
+               '<a href="/login">Se connecter</a>';
+    })->name('create-test-users');
+    
+    // Route de test pour la création d'organisation
+    Route::post('/test-organisation-debug', function(Request $request) {
+        return response()->json([
+            'success' => true, 
+            'message' => 'Route de test fonctionnelle',
+            'data' => $request->all()
+        ]);
+    })->name('test-organisation-debug');
+}
+
+// Inclure les routes admin supplémentaires
+if (file_exists(__DIR__.'/admin.php')) {
+    require __DIR__.'/admin.php';
+}
+
+// Inclure les routes operator supplémentaires  
+if (file_exists(__DIR__.'/operator.php')) {
+    require __DIR__.'/operator.php';
+}

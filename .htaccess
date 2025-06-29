@@ -1,0 +1,4 @@
+# Augmenter les limites de requête
+LimitRequestBody 52428800
+LimitRequestFields 5000
+LimitRequestFieldSize 8190

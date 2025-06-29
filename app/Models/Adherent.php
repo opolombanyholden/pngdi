@@ -12,122 +12,254 @@ class Adherent extends Model
 {
     use HasFactory;
 
+    /**
+     * ✅ FILLABLE - Mis à jour avec toutes les nouvelles colonnes de la migration
+     */
     protected $fillable = [
+        // Identification de base
         'organisation_id',
         'nip',
         'nom',
         'prenom',
+        
+        // Informations personnelles (colonnes existantes dans la DB)
         'date_naissance',
         'lieu_naissance',
         'sexe',
         'nationalite',
-        'profession',
-        'adresse',
+        'telephone',
+        'email',
+        
+        // ✅ NOUVELLES COLONNES AJOUTÉES PAR LA MIGRATION
+        'profession',           // ⭐ Ajoutée par migration
+        'fonction',             // ⭐ Ajoutée par migration (default 'Membre')
+        
+        // Adresse complète (colonnes existantes dans la DB)
+        'adresse_complete',
         'province',
         'departement',
         'canton',
         'prefecture',
         'sous_prefecture',
-        'telephone',
-        'email',
-        'photo_path',
-        'piece_identite_path',
+        'regroupement',
+        'zone_type',
+        'ville_commune',
+        'arrondissement',
+        'quartier',
+        'village',
+        'lieu_dit',
+        
+        // Documents et photos
+        'photo',
+        'piece_identite',
+        
+        // Dates importantes
         'date_adhesion',
-        'numero_carte',
+        'date_exclusion',
+        'motif_exclusion',
+        
+        // Statuts et relations
         'is_fondateur',
         'is_active',
-        'metadata'
+        'fondateur_id',
+        
+        // ✅ HISTORIQUE - Colonne JSON existante dans la DB
+        'historique'            // ⭐ Colonne JSON pour stocker l'historique
     ];
 
+    /**
+     * ✅ CASTS - Mis à jour avec les nouveaux types
+     */
     protected $casts = [
         'date_naissance' => 'date',
         'date_adhesion' => 'date',
+        'date_exclusion' => 'date',
         'is_fondateur' => 'boolean',
         'is_active' => 'boolean',
-        'metadata' => 'array'
+        'historique' => 'array',    // ⭐ Cast JSON en array
     ];
 
-    // Constantes
+    /**
+     * ✅ CONSTANTES - Enrichies
+     */
     const SEXE_MASCULIN = 'M';
     const SEXE_FEMININ = 'F';
+    
+    // ⭐ NOUVELLES CONSTANTES POUR FONCTIONS
+    const FONCTION_MEMBRE = 'Membre';
+    const FONCTION_PRESIDENT = 'Président';
+    const FONCTION_VICE_PRESIDENT = 'Vice-Président';
+    const FONCTION_SECRETAIRE_GENERAL = 'Secrétaire Général';
+    const FONCTION_TRESORIER = 'Trésorier';
+    const FONCTION_COMMISSAIRE = 'Commissaire aux Comptes';
+    
+    // ⭐ PROFESSIONS EXCLUES POUR PARTIS POLITIQUES
+    const PROFESSIONS_EXCLUES_PARTIS = [
+        'Magistrat', 'Juge', 'Procureur', 'Commissaire de police',
+        'Officier de police judiciaire', 'Militaire en activité',
+        'Gendarme en activité', 'Fonctionnaire de la sécurité d\'État',
+        'Agent des services de renseignement', 'Diplomate en mission',
+        'Gouverneur de province', 'Préfet', 'Sous-préfet', 'Maire en exercice',
+        'Membre du Conseil constitutionnel', 'Membre de la Cour de cassation',
+        'Membre du Conseil d\'État', 'Contrôleur général d\'État',
+        'Inspecteur général d\'État', 'Agent comptable de l\'État',
+        'Trésorier payeur général', 'Receveur des finances'
+    ];
 
     /**
-     * Boot method pour gérer les événements
+     * ✅ BOOT - Enrichi avec gestion des nouvelles colonnes
      */
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($adherent) {
-            // Générer le numéro de carte si non fourni
-            if (empty($adherent->numero_carte)) {
-                $adherent->numero_carte = self::generateNumeroCarte($adherent->organisation_id);
+            // Définir fonction par défaut si non spécifiée
+            if (empty($adherent->fonction)) {
+                $adherent->fonction = self::FONCTION_MEMBRE;
             }
-
-            // Vérifier l'unicité pour les partis politiques
-            if ($adherent->organisation->isPartiPolitique()) {
+            
+            // Vérifier profession exclue pour parti politique
+            if ($adherent->organisation && $adherent->organisation->isPartiPolitique()) {
+                self::verifyProfessionForPartiPolitique($adherent);
                 self::verifyUnicityForPartiPolitique($adherent);
+            }
+            
+            // ✅ CORRECTION - Initialiser l'historique correctement
+            if (empty($adherent->historique)) {
+                $adherent->historique = [
+                    'creation' => now()->toISOString(),
+                    'source' => 'creation_manuelle',
+                    'events' => []
+                ];
             }
         });
 
         static::created(function ($adherent) {
-            // Créer l'historique d'adhésion
-            AdherentHistory::create([
-                'adherent_id' => $adherent->id,
-                'organisation_id' => $adherent->organisation_id,
-                'type_mouvement' => 'adhesion',
-                'date_mouvement' => $adherent->date_adhesion ?? now(),
-                'motif' => 'Adhésion initiale'
-            ]);
+            // ✅ CORRECTION - Utiliser try-catch pour éviter les erreurs fatales
+            try {
+                // Ajouter l'événement d'adhésion dans l'historique
+                $adherent->addToHistorique('adhesion', [
+                    'date' => $adherent->date_adhesion ?? now(),
+                    'organisation_id' => $adherent->organisation_id,
+                    'profession' => $adherent->profession,
+                    'fonction' => $adherent->fonction
+                ]);
+            } catch (\Exception $e) {
+                \Log::error('Erreur lors de l\'ajout à l\'historique JSON: ' . $e->getMessage());
+                // Continue sans faire échouer la création
+            }
+            
+            // ✅ CORRECTION - Créer l'historique dans la table dédiée si elle existe
+            try {
+                if (class_exists('App\Models\AdherentHistory')) {
+                    \App\Models\AdherentHistory::create([
+                        'adherent_id' => $adherent->id,
+                        'organisation_id' => $adherent->organisation_id,
+                        'type_mouvement' => 'adhesion',
+                        'motif' => 'Adhésion initiale - Profession: ' . ($adherent->profession ?? 'Non renseignée'),
+                        'date_effet' => $adherent->date_adhesion ?? now(),
+                        'created_by' => auth()->id() ?? 1
+                    ]);
+                }
+            } catch (\Exception $e) {
+                \Log::error('Erreur lors de la création de l\'historique dédié: ' . $e->getMessage());
+                // Continue sans faire échouer la création
+            }
         });
     }
 
     /**
-     * Générer un numéro de carte unique
+     * ⭐ NOUVELLE MÉTHODE - Vérifier profession exclue pour parti politique
      */
-    public static function generateNumeroCarte($organisationId): string
+    protected static function verifyProfessionForPartiPolitique($adherent)
     {
-        $organisation = Organisation::find($organisationId);
-        $prefix = strtoupper(substr($organisation->sigle ?? $organisation->nom, 0, 3));
-        $year = date('Y');
-        
-        $lastAdherent = self::where('organisation_id', $organisationId)
-            ->where('numero_carte', 'like', $prefix . '-' . $year . '-%')
-            ->orderBy('numero_carte', 'desc')
-            ->first();
-
-        if ($lastAdherent) {
-            $lastNumber = intval(substr($lastAdherent->numero_carte, -6));
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
+        if (empty($adherent->profession)) {
+            return; // Pas de profession spécifiée, on laisse passer
         }
-
-        return sprintf('%s-%s-%06d', $prefix, $year, $newNumber);
+        
+        $professionLower = strtolower($adherent->profession);
+        $exclusLower = array_map('strtolower', self::PROFESSIONS_EXCLUES_PARTIS);
+        
+        if (in_array($professionLower, $exclusLower)) {
+            throw new \Exception(
+                "La profession '{$adherent->profession}' est incompatible avec l'adhésion à un parti politique selon la législation gabonaise."
+            );
+        }
     }
 
     /**
-     * Vérifier l'unicité pour les partis politiques
+     * ✅ MÉTHODE AMÉLIORÉE - Vérifier l'unicité pour les partis politiques
      */
     protected static function verifyUnicityForPartiPolitique($adherent)
     {
         $existingAdhesion = self::join('organisations', 'adherents.organisation_id', '=', 'organisations.id')
             ->where('adherents.nip', $adherent->nip)
             ->where('adherents.is_active', true)
-            ->where('organisations.type', Organisation::TYPE_PARTI)
+            ->where('organisations.type', 'parti_politique') // ⭐ Utiliser la valeur enum réelle
             ->where('adherents.organisation_id', '!=', $adherent->organisation_id)
             ->first();
 
         if ($existingAdhesion) {
             throw new \Exception(
-                "Cette personne (NIP: {$adherent->nip}) est déjà membre du parti politique '{$existingAdhesion->organisation->nom}'. " .
+                "Cette personne (NIP: {$adherent->nip}) est déjà membre actif du parti politique '{$existingAdhesion->nom}'. " .
                 "Une exclusion formelle est requise avant de pouvoir adhérer à un autre parti."
             );
         }
     }
 
     /**
-     * Relations
+     * ✅ CORRECTION PRINCIPALE - Méthode addToHistorique sécurisée
+     */
+    public function addToHistorique($type, $data = [])
+    {
+        try {
+            // ✅ S'assurer que historique est toujours un array valide
+            $currentHistorique = $this->historique;
+            
+            // Gérer les différents cas : null, string, array
+            if (is_null($currentHistorique)) {
+                $historique = ['events' => []];
+            } elseif (is_string($currentHistorique)) {
+                // Tenter de decoder le JSON, sinon initialiser
+                $decoded = json_decode($currentHistorique, true);
+                $historique = is_array($decoded) ? $decoded : ['events' => []];
+            } elseif (is_array($currentHistorique)) {
+                $historique = $currentHistorique;
+            } else {
+                // Type inattendu, réinitialiser
+                $historique = ['events' => []];
+            }
+            
+            // ✅ S'assurer que la clé 'events' existe et est un array
+            if (!isset($historique['events']) || !is_array($historique['events'])) {
+                $historique['events'] = [];
+            }
+            
+            // ✅ Ajouter le nouvel événement
+            $historique['events'][] = [
+                'type' => $type,
+                'date' => now()->toISOString(),
+                'data' => $data,
+                'user_id' => auth()->id()
+            ];
+            
+            // ✅ Sauvegarder en utilisant update plutôt que save pour éviter les événements récursifs
+            $this->updateQuietly(['historique' => $historique]);
+            
+        } catch (\Exception $e) {
+            // ✅ Logger l'erreur mais ne pas faire échouer l'opération
+            \Log::error('Erreur dans addToHistorique: ' . $e->getMessage(), [
+                'adherent_id' => $this->id,
+                'type' => $type,
+                'data' => $data,
+                'current_historique' => $this->historique
+            ]);
+        }
+    }
+
+    /**
+     * ✅ RELATIONS - Inchangées
      */
     public function organisation(): BelongsTo
     {
@@ -148,9 +280,17 @@ class Adherent extends Model
     {
         return $this->hasMany(AdherentImport::class);
     }
+    
+    /**
+     * ⭐ NOUVELLE RELATION - Lien vers le fondateur si is_fondateur
+     */
+    public function fondateur(): BelongsTo
+    {
+        return $this->belongsTo(Fondateur::class, 'fondateur_id');
+    }
 
     /**
-     * Scopes
+     * ✅ SCOPES - Enrichis avec nouveaux scopes
      */
     public function scopeActifs($query)
     {
@@ -181,19 +321,46 @@ class Adherent extends Model
     {
         return $query->where('sexe', self::SEXE_FEMININ);
     }
+    
+    /**
+     * ⭐ NOUVEAUX SCOPES - Pour profession et fonction
+     */
+    public function scopeByProfession($query, $profession)
+    {
+        return $query->where('profession', $profession);
+    }
+    
+    public function scopeByFonction($query, $fonction)
+    {
+        return $query->where('fonction', $fonction);
+    }
+    
+    public function scopeResponsables($query)
+    {
+        return $query->whereIn('fonction', [
+            self::FONCTION_PRESIDENT,
+            self::FONCTION_VICE_PRESIDENT,
+            self::FONCTION_SECRETAIRE_GENERAL,
+            self::FONCTION_TRESORIER
+        ]);
+    }
+    
+    public function scopeWithProfessionExclue($query)
+    {
+        return $query->whereIn('profession', self::PROFESSIONS_EXCLUES_PARTIS);
+    }
 
     /**
-     * Méthodes utilitaires
+     * ✅ MÉTHODES UTILITAIRES - Enrichies
      */
     public function isExcluded(): bool
     {
-        return $this->exclusion()->exists();
+        return !$this->is_active || $this->date_exclusion !== null;
     }
 
     public function canBeTransferred(): bool
     {
-        // Un adhérent peut être transféré s'il n'est pas fondateur et est actif
-        return !$this->is_fondateur && $this->is_active;
+        return !$this->is_fondateur && $this->is_active && !$this->isExcluded();
     }
 
     public function getAge(): int
@@ -210,110 +377,99 @@ class Adherent extends Model
     {
         return $this->sexe === self::SEXE_MASCULIN ? 'Masculin' : 'Féminin';
     }
+    
+    /**
+     * ⭐ NOUVEAUX ACCESSORS - Pour profession et fonction
+     */
+    public function getProfessionLabelAttribute(): string
+    {
+        return $this->profession ?? 'Non renseignée';
+    }
+    
+    public function getFonctionLabelAttribute(): string
+    {
+        return $this->fonction ?? self::FONCTION_MEMBRE;
+    }
+    
+    public function getIsResponsableAttribute(): bool
+    {
+        return in_array($this->fonction, [
+            self::FONCTION_PRESIDENT,
+            self::FONCTION_VICE_PRESIDENT,
+            self::FONCTION_SECRETAIRE_GENERAL,
+            self::FONCTION_TRESORIER
+        ]);
+    }
+    
+    public function getHasProfessionExclueAttribute(): bool
+    {
+        if (empty($this->profession)) {
+            return false;
+        }
+        
+        return in_array(strtolower($this->profession), 
+            array_map('strtolower', self::PROFESSIONS_EXCLUES_PARTIS)
+        );
+    }
 
     /**
-     * Exclure l'adhérent
+     * ✅ MÉTHODE AMÉLIORÉE - Exclure l'adhérent
      */
     public function exclude($motif, $dateExclusion = null, $documentPath = null)
     {
+        $dateExclusion = $dateExclusion ?? now();
+        
         // Marquer l'adhérent comme inactif
-        $this->update(['is_active' => false]);
+        $this->update([
+            'is_active' => false,
+            'date_exclusion' => $dateExclusion,
+            'motif_exclusion' => $motif
+        ]);
 
-        // Créer l'enregistrement d'exclusion
-        AdherentExclusion::create([
-            'adherent_id' => $this->id,
-            'organisation_id' => $this->organisation_id,
-            'date_exclusion' => $dateExclusion ?? now(),
+        // Ajouter à l'historique JSON
+        $this->addToHistorique('exclusion', [
             'motif' => $motif,
+            'date_exclusion' => $dateExclusion,
             'document_path' => $documentPath
         ]);
 
-        // Créer l'historique
-        AdherentHistory::create([
-            'adherent_id' => $this->id,
-            'organisation_id' => $this->organisation_id,
-            'type_mouvement' => 'exclusion',
-            'date_mouvement' => $dateExclusion ?? now(),
-            'motif' => $motif
-        ]);
+        // Créer l'enregistrement d'exclusion si la table existe
+        if (class_exists('App\Models\AdherentExclusion')) {
+            \App\Models\AdherentExclusion::create([
+                'adherent_id' => $this->id,
+                'organisation_id' => $this->organisation_id,
+                'type_exclusion' => 'exclusion_disciplinaire',
+                'motif_detaille' => $motif,
+                'date_decision' => $dateExclusion,
+                'document_decision' => $documentPath,
+                'validated_by' => auth()->id() ?? 1
+            ]);
+        }
 
         return true;
     }
 
     /**
-     * Réactiver l'adhérent
+     * ✅ MÉTHODE AMÉLIORÉE - Réactiver l'adhérent
      */
     public function reactivate($motif = 'Réactivation')
     {
-        $this->update(['is_active' => true]);
-
-        AdherentHistory::create([
-            'adherent_id' => $this->id,
-            'organisation_id' => $this->organisation_id,
-            'type_mouvement' => 'reactivation',
-            'date_mouvement' => now(),
-            'motif' => $motif
-        ]);
-
-        return true;
-    }
-
-    /**
-     * Transférer vers une autre organisation
-     */
-    public function transferTo($newOrganisationId, $motif = 'Transfert', $documentPath = null)
-    {
-        $oldOrganisationId = $this->organisation_id;
-
-        // Si c'est un parti politique, vérifier l'unicité
-        $newOrganisation = Organisation::find($newOrganisationId);
-        if ($newOrganisation->isPartiPolitique()) {
-            // Vérifier qu'il n'est pas déjà dans un autre parti
-            $existingInParti = self::join('organisations', 'adherents.organisation_id', '=', 'organisations.id')
-                ->where('adherents.nip', $this->nip)
-                ->where('adherents.is_active', true)
-                ->where('organisations.type', Organisation::TYPE_PARTI)
-                ->where('adherents.id', '!=', $this->id)
-                ->exists();
-
-            if ($existingInParti) {
-                throw new \Exception("Cette personne est déjà membre d'un parti politique actif.");
-            }
-        }
-
-        // Effectuer le transfert
         $this->update([
-            'organisation_id' => $newOrganisationId,
-            'date_adhesion' => now(),
-            'numero_carte' => self::generateNumeroCarte($newOrganisationId)
+            'is_active' => true,
+            'date_exclusion' => null,
+            'motif_exclusion' => null
         ]);
 
-        // Créer l'historique de sortie
-        AdherentHistory::create([
-            'adherent_id' => $this->id,
-            'organisation_id' => $oldOrganisationId,
-            'type_mouvement' => 'sortie',
-            'date_mouvement' => now(),
+        $this->addToHistorique('reactivation', [
             'motif' => $motif,
-            'organisation_destination_id' => $newOrganisationId,
-            'document_path' => $documentPath
-        ]);
-
-        // Créer l'historique d'entrée
-        AdherentHistory::create([
-            'adherent_id' => $this->id,
-            'organisation_id' => $newOrganisationId,
-            'type_mouvement' => 'entree',
-            'date_mouvement' => now(),
-            'motif' => $motif,
-            'organisation_source_id' => $oldOrganisationId
+            'date_reactivation' => now()
         ]);
 
         return true;
     }
 
     /**
-     * Vérifier si l'adhérent peut adhérer à une organisation
+     * ✅ MÉTHODE VÉRIFICATION - Mise à jour pour nouvelles contraintes
      */
     public static function canJoinOrganisation($nip, $organisationId): array
     {
@@ -324,60 +480,96 @@ class Adherent extends Model
         }
 
         // Pour les partis politiques
-        if ($organisation->isPartiPolitique()) {
+        if ($organisation->type === 'parti_politique') {
             $existingInParti = self::join('organisations', 'adherents.organisation_id', '=', 'organisations.id')
                 ->where('adherents.nip', $nip)
                 ->where('adherents.is_active', true)
-                ->where('organisations.type', Organisation::TYPE_PARTI)
+                ->where('organisations.type', 'parti_politique')
                 ->first();
 
             if ($existingInParti) {
                 return [
                     'can_join' => false,
-                    'reason' => "Déjà membre du parti politique '{$existingInParti->organisation->nom}'",
-                    'existing_organisation' => $existingInParti->organisation
-                ];
-            }
-        }
-
-        // Pour les confessions religieuses (si restriction similaire)
-        if ($organisation->isConfessionReligieuse()) {
-            $existingInConfession = self::join('organisations', 'adherents.organisation_id', '=', 'organisations.id')
-                ->where('adherents.nip', $nip)
-                ->where('adherents.is_active', true)
-                ->where('organisations.type', Organisation::TYPE_CONFESSION)
-                ->first();
-
-            if ($existingInConfession) {
-                return [
-                    'can_join' => false,
-                    'reason' => "Déjà membre de la confession religieuse '{$existingInConfession->organisation->nom}'",
-                    'existing_organisation' => $existingInConfession->organisation
+                    'reason' => "Déjà membre du parti politique '{$existingInParti->nom}'",
+                    'existing_organisation' => $existingInParti
                 ];
             }
         }
 
         return ['can_join' => true];
     }
-
+    
     /**
-     * Obtenir toutes les organisations de l'adhérent
+     * ⭐ NOUVELLE MÉTHODE - Détecter les anomalies
      */
-    public function getAllOrganisations()
+    public function detectAnomalies(): array
     {
-        return Organisation::whereHas('adherents', function ($query) {
-            $query->where('nip', $this->nip);
-        })->get();
+        $anomalies = [
+            'critiques' => [],
+            'majeures' => [],
+            'mineures' => []
+        ];
+
+        // Anomalies critiques
+        if (!preg_match('/^[0-9]{13}$/', $this->nip)) {
+            $anomalies['critiques'][] = [
+                'code' => 'nip_invalide',
+                'message' => 'Format NIP incorrect'
+            ];
+        }
+
+        if ($this->organisation && $this->organisation->type === 'parti_politique' && $this->has_profession_exclue) {
+            $anomalies['critiques'][] = [
+                'code' => 'profession_exclue_parti',
+                'message' => 'Profession exclue pour parti politique: ' . $this->profession
+            ];
+        }
+
+        // Anomalies majeures
+        if (!empty($this->telephone) && !preg_match('/^[0-9]{8,9}$/', $this->telephone)) {
+            $anomalies['majeures'][] = [
+                'code' => 'telephone_invalide',
+                'message' => 'Format de téléphone incorrect'
+            ];
+        }
+
+        // Anomalies mineures
+        if (empty($this->profession)) {
+            $anomalies['mineures'][] = [
+                'code' => 'profession_manquante',
+                'message' => 'Profession non renseignée'
+            ];
+        }
+
+        return $anomalies;
     }
 
     /**
-     * Obtenir les organisations actives
+     * ⭐ NOUVELLE MÉTHODE - Obtenir les fonctions disponibles
      */
-    public function getActiveOrganisations()
+    public static function getFonctionsDisponibles(): array
     {
-        return Organisation::whereHas('adherents', function ($query) {
-            $query->where('nip', $this->nip)
-                  ->where('is_active', true);
-        })->get();
+        return [
+            self::FONCTION_MEMBRE,
+            self::FONCTION_PRESIDENT,
+            self::FONCTION_VICE_PRESIDENT,
+            self::FONCTION_SECRETAIRE_GENERAL,
+            self::FONCTION_TRESORIER,
+            self::FONCTION_COMMISSAIRE
+        ];
+    }
+
+    /**
+     * ⭐ NOUVELLE MÉTHODE - Statistiques de l'adhérent
+     */
+    public function getStatistiques(): array
+    {
+        return [
+            'age' => $this->getAge(),
+            'anciennete_jours' => $this->date_adhesion ? $this->date_adhesion->diffInDays(now()) : 0,
+            'is_responsable' => $this->is_responsable,
+            'has_anomalies' => !empty($this->detectAnomalies()['critiques']),
+            'profession_exclue' => $this->has_profession_exclue
+        ];
     }
 }

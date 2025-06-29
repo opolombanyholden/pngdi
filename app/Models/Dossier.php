@@ -14,15 +14,18 @@ class Dossier extends Model
 
     protected $fillable = [
         'organisation_id',
-        'type_operation',
-        'numero_dossier',
-        'statut',
-        'date_soumission',
-        'date_traitement',
-        'motif_rejet',
-        'current_step_id',
-        'is_active',
-        'metadata'
+    'type_operation',
+    'numero_dossier',
+    'statut',
+    'date_soumission',        // Ajouter cette ligne si manquante
+    'submitted_at',           // Colonne utilisée dans le contrôleur
+    'date_traitement',
+    'validated_at',           // Colonne utilisée dans le contrôleur
+    'motif_rejet',
+    'current_step_id',
+    'is_active',
+    'metadata',
+    'donnees_supplementaires' // Colonne utilisée pour QR Code
     ];
 
     protected $casts = [
@@ -186,10 +189,12 @@ public static function generateNumeroDossier($typeOperation): string
      */
     public function isLockedBy($userId): bool
     {
+        
+        
         return $this->lock()
-            ->where('is_active', true)
-            ->where('user_id', $userId)
-            ->exists();
+        ->where('is_active', true)
+        ->where('locked_by', $userId)  // Corrigé: utiliser 'locked_by' au lieu de 'user_id'
+        ->exists();
     }
 
     /**

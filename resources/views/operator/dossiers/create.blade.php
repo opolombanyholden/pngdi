@@ -1379,6 +1379,20 @@
                                                     J'autorise l'administration à vérifier les informations fournies
                                                 </label>
                                             </div>
+                                            <!-- Ajouter cette section dans l'ÉTAPE 9 du formulaire, dans la card "Déclaration sur l'honneur" -->
+
+<!-- Déclaration spécifique parti politique -->
+<div id="declaration_parti_politique" class="d-none_">
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" id="declaration_exclusivite_parti" name="declaration_exclusivite_parti">
+        <label class="form-check-label fw-bold" for="declaration_exclusivite_parti">
+            <i class="fas fa-vote-yea me-2 text-warning"></i>
+            Je déclare que les adhérents de ce parti politique ne sont membres d'aucun autre parti politique au Gabon
+        </label>
+    </div>
+</div>
+
+
                                         </div>
                                     </div>
                                 </div>
