@@ -1,0 +1,925 @@
+/* ========================================================================
+   PNGDI - Formulaire Création Organisation
+   Fichier: public/css/organisation-create.css
+   Compatible: Bootstrap 5 + Thématique Gabonaise
+   ======================================================================== */
+
+/* ========================================
+   1. VARIABLES CSS GABONAISES
+   ======================================== */
+   :root {
+    /* Couleurs officielles du Gabon */
+    --gabon-green: #009e3f;
+    --gabon-green-light: #00b347;
+    --gabon-green-dark: #006d2c;
+    --gabon-yellow: #ffcd00;
+    --gabon-yellow-light: #ffd700;
+    --gabon-yellow-dark: #b8930b;
+    --gabon-blue: #003f7f;
+    --gabon-blue-light: #0056b3;
+    --gabon-blue-dark: #002855;
+    
+    /* Gradients thématiques */
+    --primary-gradient: linear-gradient(135deg, var(--gabon-green) 0%, var(--gabon-green-light) 100%);
+    --warning-gradient: linear-gradient(135deg, var(--gabon-yellow) 0%, #fd7e14 100%);
+    --info-gradient: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+    --secondary-gradient: linear-gradient(135deg, var(--gabon-blue) 0%, var(--gabon-blue-light) 100%);
+    --purple-gradient: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+    
+    /* Couleurs système */
+    --success-color: #28a745;
+    --info-color: #17a2b8;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    
+    /* Espacements */
+    --border-radius-sm: 8px;
+    --border-radius-md: 12px;
+    --border-radius-lg: 16px;
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+    
+    /* Transitions */
+    --transition-fast: 0.2s ease;
+    --transition-normal: 0.3s ease;
+    --transition-slow: 0.5s ease;
+}
+
+/* ========================================
+   2. STYLES GÉNÉRAUX
+   ======================================== */
+body {
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+    line-height: 1.6;
+}
+
+.container-fluid {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+/* ========================================
+   3. ICÔNES D'ÉTAPES
+   ======================================== */
+.step-icon-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
+}
+
+.step-icon-large::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: inherit;
+    opacity: 0.9;
+    z-index: 1;
+}
+
+.step-icon-large i {
+    position: relative;
+    z-index: 2;
+}
+
+/* ========================================
+   4. INDICATEURS D'ÉTAPES
+   ======================================== */
+.step-indicators {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+}
+
+.step-indicator {
+    opacity: 0.5;
+    transition: all var(--transition-normal);
+    text-align: center;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: var(--border-radius-sm);
+    position: relative;
+}
+
+.step-indicator::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #e9ecef 0%, transparent 100%);
+    transform: translateY(-50%);
+    z-index: 0;
+}
+
+.step-indicator:last-child::before {
+    display: none;
+}
+
+.step-indicator.active {
+    opacity: 1;
+    background: rgba(0, 158, 63, 0.1);
+    transform: scale(1.05);
+}
+
+.step-indicator.completed {
+    opacity: 1;
+    background: rgba(0, 158, 63, 0.05);
+}
+
+.step-indicator.completed::before {
+    background: linear-gradient(90deg, var(--gabon-green) 0%, #e9ecef 100%);
+}
+
+.step-indicator.completed .step-icon {
+    color: var(--gabon-green) !important;
+}
+
+.step-icon {
+    font-size: 1.2rem;
+    color: #6c757d;
+    transition: all var(--transition-normal);
+    margin-bottom: 0.25rem;
+}
+
+.step-indicator.active .step-icon {
+    color: var(--gabon-green);
+    transform: scale(1.1);
+}
+
+.step-indicator small {
+    font-weight: 500;
+    letter-spacing: 0.025em;
+}
+
+/* ========================================
+   5. CARDS TYPE D'ORGANISATION
+   ======================================== */
+.organization-type-card {
+    transition: all var(--transition-normal);
+    cursor: pointer;
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius-md);
+    background: #fff;
+    position: relative;
+    overflow: hidden;
+}
+
+.organization-type-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left var(--transition-slow);
+}
+
+.organization-type-card:hover {
+    transform: translateY(-8px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--gabon-green);
+}
+
+.organization-type-card:hover::before {
+    left: 100%;
+}
+
+.organization-type-card.active {
+    border-color: var(--gabon-green) !important;
+    box-shadow: 0 0 0 0.25rem rgba(0, 158, 63, 0.15);
+    background: linear-gradient(135deg, rgba(0, 158, 63, 0.02) 0%, rgba(0, 158, 63, 0.05) 100%);
+}
+
+.organization-type-card.active .org-icon {
+    transform: scale(1.1);
+}
+
+.org-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    transition: all var(--transition-normal);
+    box-shadow: var(--shadow-sm);
+}
+
+.organization-type-card .features {
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: var(--border-radius-sm);
+    padding: 0.75rem;
+    margin: 0 -0.5rem;
+}
+
+/* ========================================
+   6. BARRE DE PROGRESSION
+   ======================================== */
+.progress {
+    border-radius: 50px;
+    background-color: #e9ecef;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar {
+    transition: width var(--transition-slow);
+    border-radius: 50px;
+    background: var(--primary-gradient);
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.2) 50%, transparent 70%);
+    animation: progressShine 2s infinite;
+}
+
+.progress-bar-animated {
+    animation: progressPulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes progressShine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+@keyframes progressPulse {
+    0% { opacity: 0.8; }
+    100% { opacity: 1; }
+}
+
+/* ========================================
+   7. FORMULAIRES ET CHAMPS
+   ======================================== */
+.form-control, .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius-sm);
+    padding: 0.75rem 1rem;
+    transition: all var(--transition-normal);
+    background-color: #fff;
+    font-size: 0.95rem;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--gabon-green);
+    box-shadow: 0 0 0 0.25rem rgba(0, 158, 63, 0.15);
+    background-color: #fff;
+}
+
+.form-control.is-valid, .form-select.is-valid {
+    border-color: var(--gabon-green);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%23009e3f' d='m2.3 6.73.61-.61L4.74 4.3l2.83-2.83L8.18 2 4.74 5.44 2.3 6.73z'/%3e%3c/svg%3e");
+}
+
+.form-control.is-invalid, .form-select.is-invalid {
+    border-color: var(--danger-color);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3e%3cpath fill='%23dc3545' d='M6 0C2.7 0 0 2.7 0 6s2.7 6 6 6 6-2.7 6-6S9.3 0 6 0zM8.5 7.9l-.6.6L6 6.6l-1.9 1.9-.6-.6L5.4 6 3.5 4.1l.6-.6L6 5.4l1.9-1.9.6.6L6.6 6l1.9 1.9z'/%3e%3c/svg%3e");
+}
+
+.input-group-text {
+    border: 2px solid #e9ecef;
+    background-color: #f8f9fa;
+    border-left: none;
+    padding: 0.75rem 1rem;
+}
+
+.form-control:focus + .input-group-text {
+    border-color: var(--gabon-green);
+}
+
+/* Labels avec indicateur requis */
+.form-label.required::after {
+    content: " *";
+    color: var(--danger-color);
+    font-weight: bold;
+}
+
+.form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.375rem;
+}
+
+/* ========================================
+   8. BOUTONS STYLISÉS
+   ======================================== */
+.btn {
+    border-radius: var(--border-radius-sm);
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    transition: all var(--transition-normal);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: all var(--transition-fast);
+}
+
+.btn:hover::before {
+    width: 300%;
+    height: 300%;
+}
+
+.btn-success {
+    background: var(--primary-gradient);
+    border: none;
+    color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, var(--gabon-green-light) 0%, var(--gabon-green) 100%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: white;
+}
+
+.btn-warning {
+    background: var(--warning-gradient);
+    border: none;
+    color: #000;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-warning:hover {
+    background: linear-gradient(135deg, #fd7e14 0%, var(--gabon-yellow) 100%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: #000;
+}
+
+.btn-light {
+    background: #fff;
+    border: 2px solid #e9ecef;
+    color: var(--dark-color);
+}
+
+.btn-light:hover {
+    background: #f8f9fa;
+    border-color: var(--gabon-green);
+    color: var(--gabon-green);
+    transform: translateY(-1px);
+}
+
+.btn-outline-secondary {
+    border: 2px solid #6c757d;
+    color: #6c757d;
+}
+
+.btn-outline-secondary:hover {
+    background: #6c757d;
+    border-color: #6c757d;
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* ========================================
+   9. CARTES ET SECTIONS
+   ======================================== */
+.card {
+    border: none;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-normal);
+    background: #fff;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.card-header {
+    border-radius: var(--border-radius-md) var(--border-radius-md) 0 0 !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    font-weight: 600;
+}
+
+.card-header.bg-primary {
+    background: var(--secondary-gradient) !important;
+    color: white;
+}
+
+.card-header.bg-success {
+    background: var(--primary-gradient) !important;
+    color: white;
+}
+
+.card-header.bg-warning {
+    background: var(--warning-gradient) !important;
+    color: #000;
+}
+
+.card-footer {
+    border-radius: 0 0 var(--border-radius-md) var(--border-radius-md) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    background-color: #f8f9fa;
+}
+
+/* ========================================
+   10. ANIMATIONS D'ENTRÉE
+   ======================================== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes bounceIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.step-content {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+.organization-type-card {
+    animation: fadeInUp 0.6s ease-out;
+    animation-fill-mode: both;
+}
+
+.organization-type-card:nth-child(1) { animation-delay: 0.1s; }
+.organization-type-card:nth-child(2) { animation-delay: 0.2s; }
+.organization-type-card:nth-child(3) { animation-delay: 0.3s; }
+.organization-type-card:nth-child(4) { animation-delay: 0.4s; }
+
+.step-icon-large {
+    animation: bounceIn 0.8s ease-out;
+}
+
+/* ========================================
+   11. ÉTATS DE VALIDATION VISUELS
+   ======================================== */
+.field-error {
+    border-color: var(--danger-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.15) !important;
+    animation: shake 0.5s ease-in-out;
+}
+
+.field-success {
+    border-color: var(--gabon-green) !important;
+    box-shadow: 0 0 0 0.25rem rgba(0, 158, 63, 0.15) !important;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--danger-color);
+    animation: slideInLeft 0.3s ease-out;
+}
+
+.valid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.375rem;
+    font-size: 0.875rem;
+    color: var(--gabon-green);
+    animation: slideInLeft 0.3s ease-out;
+}
+
+/* ========================================
+   12. LOADER GLOBAL
+   ======================================== */
+#global-loader {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+#global-loader .spinner-border {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.3em;
+    border-color: var(--gabon-green);
+    border-right-color: transparent;
+    animation: spinner-grow 1s linear infinite;
+}
+
+@keyframes spinner-grow {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ========================================
+   13. UTILITAIRES
+   ======================================== */
+.text-purple {
+    color: #6f42c1 !important;
+}
+
+.bg-purple {
+    background-color: #6f42c1 !important;
+}
+
+.border-gabon {
+    border-color: var(--gabon-green) !important;
+}
+
+.text-gabon {
+    color: var(--gabon-green) !important;
+}
+
+.bg-gabon {
+    background-color: var(--gabon-green) !important;
+}
+
+.text-gabon-yellow {
+    color: var(--gabon-yellow) !important;
+}
+
+.bg-gabon-yellow {
+    background-color: var(--gabon-yellow) !important;
+}
+
+.text-gabon-blue {
+    color: var(--gabon-blue) !important;
+}
+
+.bg-gabon-blue {
+    background-color: var(--gabon-blue) !important;
+}
+
+/* ========================================
+   14. DESIGN RESPONSIF
+   ======================================== */
+@media (max-width: 1200px) {
+    .step-indicators {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .step-indicator {
+        flex-basis: calc(20% - 0.4rem);
+    }
+}
+
+@media (max-width: 992px) {
+    .container-fluid {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    
+    .organization-type-card {
+        margin-bottom: 1.5rem;
+    }
+    
+    .step-icon-large {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .step-icon-large i {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .step-indicators {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.75rem;
+    }
+    
+    .step-indicator {
+        flex-basis: calc(33.333% - 0.5rem);
+        font-size: 0.875rem;
+    }
+    
+    .step-indicator::before {
+        display: none;
+    }
+    
+    .step-icon {
+        font-size: 1rem;
+    }
+    
+    .organization-type-card {
+        margin-bottom: 1rem;
+    }
+    
+    .org-icon {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .org-icon i {
+        font-size: 1.5rem;
+    }
+    
+    .card-body {
+        padding: 1rem;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .step-indicators {
+        gap: 0.5rem;
+    }
+    
+    .step-indicator {
+        flex-basis: calc(50% - 0.25rem);
+        padding: 0.375rem;
+        font-size: 0.8rem;
+    }
+    
+    .step-icon {
+        font-size: 0.875rem;
+        margin-bottom: 0.125rem;
+    }
+    
+    .step-icon-large {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .step-icon-large i {
+        font-size: 1.25rem;
+    }
+    
+    .organization-type-card .card-body {
+        padding: 1rem 0.75rem;
+    }
+    
+    .org-icon {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .org-icon i {
+        font-size: 1.25rem;
+    }
+    
+    .btn-group {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .btn-group .btn {
+        width: 100%;
+    }
+}
+
+/* ========================================
+   15. PRINT STYLES
+   ======================================== */
+@media print {
+    .btn, .card-footer, .step-indicators, .modal, #global-loader {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+    }
+    
+    .step-content {
+        display: block !important;
+        page-break-inside: avoid;
+    }
+    
+    body {
+        background: white !important;
+        font-size: 12pt;
+        line-height: 1.4;
+    }
+    
+    .container-fluid {
+        max-width: none !important;
+        padding: 0 !important;
+    }
+    
+    h1, h2, h3 {
+        color: black !important;
+    }
+    
+    .text-white {
+        color: black !important;
+    }
+}
+
+/* ========================================
+   16. FOCUS ET ACCESSIBILITÉ
+   ======================================== */
+.btn:focus,
+.form-control:focus,
+.form-select:focus {
+    outline: 2px solid var(--gabon-green);
+    outline-offset: 2px;
+}
+
+.organization-type-card:focus {
+    outline: 2px solid var(--gabon-green);
+    outline-offset: 2px;
+}
+
+.step-indicator:focus {
+    outline: 2px solid var(--gabon-green);
+    outline-offset: 2px;
+    background: rgba(0, 158, 63, 0.1);
+}
+
+/* Amélioration contraste pour l'accessibilité */
+.text-muted {
+    color: #495057 !important;
+}
+
+.small, small {
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+/* ========================================
+   17. ANIMATIONS DE LOADING
+   ======================================== */
+.loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* ========================================
+   18. MESSAGES ET NOTIFICATIONS
+   ======================================== */
+.alert {
+    border: none;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    animation: slideInLeft 0.5s ease-out;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, rgba(0, 158, 63, 0.1) 0%, rgba(0, 179, 71, 0.05) 100%);
+    border-left: 4px solid var(--gabon-green);
+    color: var(--gabon-green-dark);
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, rgba(255, 205, 0, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+    border-left: 4px solid var(--gabon-yellow);
+    color: var(--gabon-yellow-dark);
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(0, 63, 127, 0.1) 0%, rgba(23, 162, 184, 0.05) 100%);
+    border-left: 4px solid var(--gabon-blue);
+    color: var(--gabon-blue-dark);
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);
+    border-left: 4px solid var(--danger-color);
+    color: #721c24;
+}
+
+/* ========================================
+   19. ACCORDÉONS PERSONNALISÉS
+   ======================================== */
+.accordion-button:not(.collapsed) {
+    background: rgba(0, 158, 63, 0.1);
+    color: var(--gabon-green);
+    border-color: var(--gabon-green);
+}
+
+.accordion-button:focus {
+    box-shadow: 0 0 0 0.25rem rgba(0, 158, 63, 0.15);
+    border-color: var(--gabon-green);
+}
+
+.accordion-button::after {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23009e3f'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+}
+
+/* ========================================
+   20. FINALISATION ET OPTIMISATIONS
+   ======================================== */
+/* Amélioration performance avec will-change */
+.organization-type-card:hover,
+.btn:hover,
+.step-indicator.active {
+    will-change: transform;
+}
+
+/* Smooth scroll pour la navigation */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Réduction des animations pour les utilisateurs préférant moins d'animation */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .step-content {
+        animation: none;
+    }
+    
+    .organization-type-card {
+        animation: none;
+    }
+}
+
+/* Support du dark mode (préparation) */
+@media (prefers-color-scheme: dark) {
+    /* Variables pour le mode sombre à implémenter si nécessaire */
+    :root {
+        --dark-bg: #1a1a1a;
+        --dark-card: #2d2d2d;
+        --dark-text: #e9ecef;
+    }
+}
+
+/* FIN DU FICHIER CSS */

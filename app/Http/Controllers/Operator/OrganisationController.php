@@ -513,4 +513,30 @@ class OrganisationController extends Controller
             'Woleu-Ntem' => 'Woleu-Ntem'
         ];
     }
+
+
+    /**
+ * Vérifier si des NIP sont déjà membres actifs d'autres organisations
+ */
+public function checkExistingMembers(Request $request)
+{
+    $nips = $request->input('nips', []);
+    
+    if (empty($nips)) {
+        return response()->json(['existing_nips' => []]);
+    }
+    
+    $existingNips = \App\Models\Adherent::whereIn('nip', $nips)
+        ->where('is_active', true)
+        ->pluck('nip')
+        ->unique()
+        ->values()
+        ->toArray();
+    
+    return response()->json([
+        'existing_nips' => $existingNips,
+        'count' => count($existingNips)
+    ]);
+}
+
 }

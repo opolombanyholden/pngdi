@@ -463,3 +463,367 @@ if (file_exists(__DIR__.'/admin.php')) {
 if (file_exists(__DIR__.'/operator.php')) {
     require __DIR__.'/operator.php';
 }
+
+// ========================================================================
+// ROUTES API REQUISES POUR LA SECTION O JAVASCRIPT
+// À ajouter dans routes/api.php ou routes/web.php
+// ========================================================================
+
+/*
+|--------------------------------------------------------------------------
+| Routes API pour Validation en Temps Réel
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->group(function () {
+    
+    // ========================================
+    // VÉRIFICATIONS EN TEMPS RÉEL
+    // ========================================
+    
+    /**
+     * Vérification NIP gabonais
+     * POST /api/v1/verify-nip
+     */
+    Route::post('/verify-nip', function (Request $request) {
+        $request->validate([
+            'nip' => 'required|string|size:13|regex:/^[0-9]{13}$/'
+        ]);
+        
+        $nip = $request->input('nip');
+        
+        // Vérifier si le NIP existe déjà
+        $exists = \App\Models\User::where('nip', $nip)->exists() ||
+                 \App\Models\Adherent::where('nip', $nip)->exists() ||
+                 \App\Models\Fondateur::where('nip', $nip)->exists();
+        
+        return response()->json([
+            'success' => true,
+            'available' => !$exists,
+            'message' => $exists ? 'Ce NIP est déjà utilisé' : 'NIP disponible'
+        ]);
+    })->name('verify-nip');
+    
+    /**
+     * Vérification nom organisation
+     * POST /api/v1/verify-organization-name
+     */
+    Route::post('/verify-organization-name', function (Request $request) {
+        $request->validate([
+            'name' => 'required|string|min:3|max:255',
+            'type' => 'required|in:association,ong,parti_politique,confession_religieuse',
+            'suggest_alternatives' => 'boolean'
+        ]);
+        
+        $name = $request->input('name');
+        $type = $request->input('type');
+        $suggestAlternatives = $request->input('suggest_alternatives', false);
+        
+        // Vérifier si le nom existe déjà
+        $exists = \App\Models\Organisation::where('nom', $name)
+                                        ->where('type', $type)
+                                        ->exists();
+        
+        $response = [
+            'success' => true,
+            'available' => !$exists,
+            'message' => $exists ? 'Ce nom est déjà utilisé pour ce type d\'organisation' : 'Nom disponible'
+        ];
+        
+        // Générer des suggestions si demandé et si le nom existe
+        if ($suggestAlternatives && $exists) {
+            $suggestions = [];
+            
+            // Suggestions simples avec numéros
+            for ($i = 1; $i <= 3; $i++) {
+                $suggestion = $name . ' ' . $i;
+                if (!\App\Models\Organisation::where('nom', $suggestion)->where('type', $type)->exists()) {
+                    $suggestions[] = $suggestion;
+                }
+            }
+            
+            // Suggestions avec variantes
+            $variants = ['Nouvelle', 'Grande', 'Moderne'];
+            foreach ($variants as $variant) {
+                $suggestion = $variant . ' ' . $name;
+                if (!\App\Models\Organisation::where('nom', $suggestion)->where('type', $type)->exists()) {
+                    $suggestions[] = $suggestion;
+                    if (count($suggestions) >= 5) break;
+                }
+            }
+            
+            $response['suggestions'] = array_slice($suggestions, 0, 5);
+        }
+        
+        return response()->json($response);
+    })->name('verify-organization-name');
+    
+    /**
+     * Vérification adhérents avec conflits parti
+     * POST /api/v1/verify-members
+     */
+    Route::post('/verify-members', function (Request $request) {
+        $request->validate([
+            'members' => 'required|array',
+            'members.*.nip' => 'required|string|size:13',
+            'members.*.nom' => 'required|string',
+            'members.*.prenom' => 'required|string',
+            'organization_type' => 'required|string',
+            'check_party_conflicts' => 'boolean'
+        ]);
+        
+        $members = $request->input('members');
+        $organizationType = $request->input('organization_type');
+        $checkPartyConflicts = $request->input('check_party_conflicts', false);
+        
+        $conflicts = [];
+        $duplicates = [];
+        
+        // Vérifier les doublons dans la liste soumise
+        $nipCounts = array_count_values(array_column($members, 'nip'));
+        foreach ($nipCounts as $nip => $count) {
+            if ($count > 1) {
+                $duplicates[] = $nip;
+            }
+        }
+        
+        // Vérifier les conflits avec les partis politiques existants
+        if ($checkPartyConflicts && $organizationType === 'parti_politique') {
+            foreach ($members as $member) {
+                $existingMembership = \App\Models\Adherent::where('nip', $member['nip'])
+                    ->whereHas('organisation', function ($query) {
+                        $query->where('type', 'parti_politique')
+                              ->where('statut', '!=', 'radie');
+                    })
+                    ->with('organisation')
+                    ->first();
+                
+                if ($existingMembership) {
+                    $conflicts[] = [
+                        'nip' => $member['nip'],
+                        'nom_complet' => $member['nom'] . ' ' . $member['prenom'],
+                        'parti_actuel' => $existingMembership->organisation->nom,
+                        'date_adhesion' => $existingMembership->date_adhesion->format('d/m/Y')
+                    ];
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'total_members' => count($members),
+            'duplicates' => $duplicates,
+            'conflicts' => $conflicts,
+            'message' => count($conflicts) > 0 
+                ? count($conflicts) . ' conflit(s) détecté(s)'
+                : 'Aucun conflit détecté'
+        ]);
+    })->name('verify-members');
+    
+    // ========================================
+    // GESTION DOCUMENTS
+    // ========================================
+    
+    /**
+     * Upload de document
+     * POST /api/v1/upload-document
+     */
+    Route::post('/upload-document', function (Request $request) {
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120', // 5MB max
+            'document_type' => 'required|string',
+            'organization_id' => 'nullable|exists:organisations,id'
+        ]);
+        
+        $file = $request->file('file');
+        $documentType = $request->input('document_type');
+        $organizationId = $request->input('organization_id');
+        
+        // Générer un nom unique
+        $fileName = time() . '_' . $documentType . '.' . $file->getClientOriginalExtension();
+        
+        // Stocker le fichier
+        $path = $file->storeAs('documents/temp', $fileName, 'public');
+        
+        return response()->json([
+            'success' => true,
+            'file_path' => $path,
+            'file_name' => $fileName,
+            'file_size' => $file->getSize(),
+            'file_type' => $file->getMimeType(),
+            'message' => 'Document uploadé avec succès'
+        ]);
+    })->name('upload-document');
+    
+    /**
+     * Preview de document
+     * POST /api/v1/preview-document
+     */
+    Route::post('/preview-document', function (Request $request) {
+        $request->validate([
+            'file_path' => 'required|string',
+            'type' => 'required|string'
+        ]);
+        
+        $filePath = $request->input('file_path');
+        $type = $request->input('type');
+        
+        if (!Storage::disk('public')->exists($filePath)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Fichier non trouvé'
+            ], 404);
+        }
+        
+        $fullPath = Storage::disk('public')->path($filePath);
+        $mimeType = mime_content_type($fullPath);
+        
+        $previewUrl = Storage::disk('public')->url($filePath);
+        
+        return response()->json([
+            'success' => true,
+            'preview_url' => $previewUrl,
+            'file_type' => strpos($mimeType, 'pdf') !== false ? 'pdf' : 'image',
+            'mime_type' => $mimeType
+        ]);
+    })->name('preview-document');
+    
+    // ========================================
+    // SYSTÈME DE BROUILLONS
+    // ========================================
+    
+    /**
+     * Sauvegarde brouillon
+     * POST /api/v1/save-draft
+     */
+    Route::post('/save-draft', function (Request $request) {
+        $request->validate([
+            'form_data' => 'required|array',
+            'step' => 'required|integer|min:1|max:9',
+            'organization_type' => 'nullable|string'
+        ]);
+        
+        $userId = auth()->id();
+        $formData = $request->input('form_data');
+        $step = $request->input('step');
+        $organizationType = $request->input('organization_type');
+        
+        // Chercher un brouillon existant ou en créer un nouveau
+        $draft = \App\Models\OrganizationDraft::updateOrCreate([
+            'user_id' => $userId,
+            'organization_type' => $organizationType
+        ], [
+            'form_data' => $formData,
+            'current_step' => $step,
+            'last_saved_at' => now()
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'draft_id' => $draft->id,
+            'message' => 'Brouillon sauvegardé avec succès'
+        ]);
+    })->name('save-draft');
+    
+    /**
+     * Chargement brouillon
+     * GET /api/v1/load-draft/{id}
+     */
+    Route::get('/load-draft/{id}', function ($id) {
+        $userId = auth()->id();
+        
+        $draft = \App\Models\OrganizationDraft::where('id', $id)
+                                             ->where('user_id', $userId)
+                                             ->first();
+        
+        if (!$draft) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Brouillon non trouvé'
+            ], 404);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'form_data' => $draft->form_data,
+            'current_step' => $draft->current_step,
+            'organization_type' => $draft->organization_type,
+            'last_saved_at' => $draft->last_saved_at->toISOString()
+        ]);
+    })->name('load-draft');
+    
+    // ========================================
+    // ANALYTICS ET SUIVI
+    // ========================================
+    
+    /**
+     * Analytics de formulaire
+     * POST /api/v1/form-analytics
+     */
+    Route::post('/form-analytics', function (Request $request) {
+        $request->validate([
+            'session_duration' => 'required|integer',
+            'step_times' => 'required|array',
+            'interactions' => 'required|array',
+            'user_agent' => 'required|string',
+            'screen_resolution' => 'required|string',
+            'organization_type' => 'nullable|string',
+            'completion_rate' => 'required|numeric|min:0|max:100'
+        ]);
+        
+        // Enregistrer les analytics (vous pouvez créer un modèle FormAnalytics)
+        $analytics = [
+            'user_id' => auth()->id(),
+            'session_duration' => $request->input('session_duration'),
+            'step_times' => $request->input('step_times'),
+            'interactions' => $request->input('interactions'),
+            'user_agent' => $request->input('user_agent'),
+            'screen_resolution' => $request->input('screen_resolution'),
+            'organization_type' => $request->input('organization_type'),
+            'completion_rate' => $request->input('completion_rate'),
+            'created_at' => now()
+        ];
+        
+        // Log pour l'instant (vous pouvez sauvegarder en DB plus tard)
+        \Log::info('Form Analytics', $analytics);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Analytics enregistrées'
+        ]);
+    })->name('form-analytics');
+    
+    /**
+     * Validation complète avant soumission
+     * POST /api/v1/validate-complete-form
+     */
+    Route::post('/validate-complete-form', function (Request $request) {
+        $request->validate([
+            'form_data' => 'required|array'
+        ]);
+        
+        $formData = $request->input('form_data');
+        $errors = [];
+        
+        // Validation basique - vous pouvez étendre selon vos besoins
+        if (!isset($formData['metadata']['selectedOrgType']) || empty($formData['metadata']['selectedOrgType'])) {
+            $errors[] = 'Type d\'organisation non sélectionné';
+        }
+        
+        if (!isset($formData['steps'][3]['demandeur_nip']) || empty($formData['steps'][3]['demandeur_nip'])) {
+            $errors[] = 'NIP du demandeur manquant';
+        }
+        
+        if (!isset($formData['steps'][4]['org_nom']) || empty($formData['steps'][4]['org_nom'])) {
+            $errors[] = 'Nom de l\'organisation manquant';
+        }
+        
+        return response()->json([
+            'valid' => count($errors) === 0,
+            'errors' => $errors,
+            'message' => count($errors) === 0 
+                ? 'Formulaire valide' 
+                : 'Erreurs de validation détectées'
+        ]);
+    })->name('validate-complete-form');
+});

@@ -9,10 +9,13 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Notifications\CustomVerifyEmail;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
+    // SUPPRIMÉ: SoftDeletes (car colonne deleted_at n'existe pas)
 
     /**
      * The attributes that are mass assignable.
@@ -35,14 +38,23 @@ class User extends Authenticatable implements MustVerifyEmail
         'last_login_ip',
         'locked_until',
         'failed_login_attempts',
-        // Nouveaux champs pour PNGDI
+        // Champs PNGDI existants
         'nip',
         'date_naissance',
         'lieu_naissance',
         'sexe',
         'photo_path',
         'preferences',
-        'metadata'
+        'metadata',
+        // Nouveaux champs système avancé
+        'role_id',
+        'status',
+        'login_attempts',
+        'is_verified',
+        'verification_token',
+        'avatar',
+        'created_by',
+        'updated_by'
     ];
 
     /**
@@ -54,6 +66,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'remember_token',
         'two_factor_secret',
+        'verification_token',
     ];
 
     /**
@@ -71,10 +84,13 @@ class User extends Authenticatable implements MustVerifyEmail
         // Nouveaux casts
         'date_naissance' => 'date',
         'preferences' => 'array',
-        'metadata' => 'array'
+        'metadata' => 'array',
+        // Système avancé
+        'is_verified' => 'boolean',
+        'login_attempts' => 'integer',
     ];
 
-    // Constantes pour les rôles
+    // Constantes pour les rôles (ANCIEN SYSTÈME - Conservé pour compatibilité)
     const ROLE_ADMIN = 'admin';
     const ROLE_AGENT = 'agent';
     const ROLE_OPERATOR = 'operator';
@@ -83,6 +99,168 @@ class User extends Authenticatable implements MustVerifyEmail
     // Constantes pour les sexes
     const SEXE_MASCULIN = 'M';
     const SEXE_FEMININ = 'F';
+
+    /**
+     * Boot model events
+     */
+    protected static function boot()
+    {
+        parent::boot();
+        
+        // Auto-assign creating user
+        static::creating(function ($model) {
+            if (auth()->check()) {
+                $model->created_by = auth()->id();
+            }
+        });
+        
+        // Auto-assign updating user
+        static::updating(function ($model) {
+            if (auth()->check()) {
+                $model->updated_by = auth()->id();
+            }
+        });
+    }
+
+    // =================================================================
+    // RELATIONS SYSTÈME AVANCÉ (NOUVELLES)
+    // =================================================================
+
+    /**
+     * Relation avec le rôle PNGDI avancé
+     */
+    public function roleModel(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    /**
+     * Utilisateur créateur
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Utilisateur modificateur
+     */
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Sessions utilisateur avancées
+     */
+    public function userSessions(): HasMany
+    {
+        return $this->hasMany(UserSession::class);
+    }
+
+    /**
+     * Sessions actives avancées
+     */
+    public function activeUserSessions(): HasMany
+    {
+        return $this->userSessions()->where('is_active', true);
+    }
+
+    // =================================================================
+    // SYSTÈME PERMISSIONS AVANCÉ (NOUVEAU)
+    // =================================================================
+
+    /**
+     * Vérifier si l'utilisateur a un rôle avancé
+     */
+    public function hasAdvancedRole($roleName): bool
+    {
+        return $this->roleModel && $this->roleModel->name === $roleName;
+    }
+
+    /**
+     * Vérifier si l'utilisateur a une permission
+     */
+    public function hasPermission($permissionName): bool
+    {
+        if (!$this->roleModel) {
+            return false;
+        }
+        
+        return $this->roleModel->permissions()
+            ->where('name', $permissionName)
+            ->exists();
+    }
+
+    /**
+     * Vérifier si l'utilisateur a l'une des permissions
+     */
+    public function hasAnyPermission(array $permissions): bool
+    {
+        if (!$this->roleModel) {
+            return false;
+        }
+        
+        return $this->roleModel->permissions()
+            ->whereIn('name', $permissions)
+            ->exists();
+    }
+
+    /**
+     * Vérifier si l'utilisateur a toutes les permissions
+     */
+    public function hasAllPermissions(array $permissions): bool
+    {
+        if (!$this->roleModel) {
+            return false;
+        }
+        
+        $userPermissions = $this->roleModel->permissions()->pluck('name')->toArray();
+        return count(array_intersect($permissions, $userPermissions)) === count($permissions);
+    }
+
+    /**
+     * Obtenir toutes les permissions de l'utilisateur
+     */
+    public function getAllPermissions()
+    {
+        if (!$this->roleModel) {
+            return collect();
+        }
+        
+        return $this->roleModel->permissions;
+    }
+
+    /**
+     * Vérifier si l'utilisateur est super admin
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasAdvancedRole('super_admin');
+    }
+
+    /**
+     * Vérifier si l'utilisateur peut gérer le type d'organisation
+     */
+    public function canManageOrganisationType($type): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+        
+        $rolePermissions = [
+            'association' => 'admin_associations',
+            'confession_religieuse' => 'admin_religieuses',
+            'parti_politique' => 'admin_politiques'
+        ];
+        
+        return $this->hasAdvancedRole($rolePermissions[$type] ?? null) || 
+               $this->hasAdvancedRole('admin_general');
+    }
+
+    // =================================================================
+    // MÉTHODES EXISTANTES (CONSERVÉES ET AMÉLIORÉES)
+    // =================================================================
 
     /**
      * Send the email verification notification.
@@ -95,11 +273,13 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * Check if user is admin
+     * Check if user is admin (ANCIEN SYSTÈME - Conservé)
      */
     public function isAdmin(): bool
     {
-        return $this->role === 'admin';
+        // Compatibilité : ancien système OU nouveau système
+        return $this->role === 'admin' || 
+               $this->hasAnyPermission(['users.create', 'users.edit', 'users.delete']);
     }
 
     /**
@@ -107,7 +287,8 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function isAgent(): bool
     {
-        return $this->role === 'agent';
+        return $this->role === 'agent' || 
+               $this->hasAdvancedRole('moderateur');
     }
 
     /**
@@ -115,7 +296,8 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function isOperator(): bool
     {
-        return $this->role === 'operator';
+        return $this->role === 'operator' || 
+               $this->hasAdvancedRole('operateur');
     }
 
     /**
@@ -123,18 +305,24 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function isVisitor(): bool
     {
-        return $this->role === 'visitor';
+        return $this->role === 'visitor' || 
+               $this->hasAdvancedRole('auditeur');
     }
 
     /**
-     * Check if user has role
+     * Check if user has role (AMÉLIORÉ - supporte ancien et nouveau)
      */
     public function hasRole($role): bool
     {
         if (is_array($role)) {
-            return in_array($this->role, $role);
+            // Vérifier ancien système
+            $hasOldRole = in_array($this->role, $role);
+            // Vérifier nouveau système
+            $hasNewRole = $this->roleModel && in_array($this->roleModel->name, $role);
+            return $hasOldRole || $hasNewRole;
         }
-        return $this->role === $role;
+        
+        return $this->role === $role || $this->hasAdvancedRole($role);
     }
 
     /**
@@ -151,44 +339,63 @@ class User extends Authenticatable implements MustVerifyEmail
     public function lockAccount(int $minutes = 30): void
     {
         $this->update([
-            'locked_until' => now()->addMinutes($minutes)
+            'locked_until' => now()->addMinutes($minutes),
+            'status' => 'suspended'
         ]);
     }
 
     /**
-     * Increment failed login attempts
+     * Increment failed login attempts (AMÉLIORÉ)
      */
     public function incrementFailedAttempts(): void
     {
         $this->increment('failed_login_attempts');
+        $this->increment('login_attempts');
         
         // Lock account after 5 failed attempts
-        if ($this->failed_login_attempts >= 5) {
+        if ($this->failed_login_attempts >= 5 || $this->login_attempts >= 5) {
             $this->lockAccount();
         }
     }
 
     /**
-     * Reset failed login attempts
+     * Reset failed login attempts (AMÉLIORÉ)
      */
     public function resetFailedAttempts(): void
     {
         $this->update([
             'failed_login_attempts' => 0,
-            'locked_until' => null
+            'login_attempts' => 0,
+            'locked_until' => null,
+            'status' => 'active'
         ]);
     }
 
     /**
-     * Record successful login
+     * Record successful login (AMÉLIORÉ)
      */
     public function recordLogin($ip = null): void
     {
+        $request = request();
+        
         $this->update([
             'last_login_at' => now(),
-            'last_login_ip' => $ip ?? request()->ip(),
-            'failed_login_attempts' => 0
+            'last_login_ip' => $ip ?? $request->ip(),
+            'failed_login_attempts' => 0,
+            'login_attempts' => 0
         ]);
+
+        // Créer session avancée si table existe
+        if (Schema::hasTable('user_sessions')) {
+            UserSession::create([
+                'user_id' => $this->id,
+                'session_id' => session()->getId(),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+                'login_at' => now(),
+                'is_active' => true
+            ]);
+        }
     }
 
     /**
@@ -224,9 +431,10 @@ class User extends Authenticatable implements MustVerifyEmail
         ]);
     }
 
-    /**
-     * Relations PNGDI
-     */
+    // =================================================================
+    // RELATIONS PNGDI EXISTANTES (CONSERVÉES)
+    // =================================================================
+
     public function organisations(): HasMany
     {
         return $this->hasMany(Organisation::class);
@@ -238,114 +446,73 @@ class User extends Authenticatable implements MustVerifyEmail
             ->where('is_active', true);
     }
 
-    // ===== NOUVELLES RELATIONS POUR LE WORKFLOW ADMIN =====
+    // ===== RELATIONS WORKFLOW ADMIN EXISTANTES (CONSERVÉES) =====
 
-    /**
-     * Dossiers assignés à cet agent (RELATION MANQUANTE CORRIGÉE)
-     */
     public function assignedDossiers(): HasMany
     {
         return $this->hasMany(Dossier::class, 'assigned_to');
     }
 
-    /**
-     * Dossiers en cours assignés à cet agent
-     */
     public function dossiersEnCours(): HasMany
     {
         return $this->assignedDossiers()->where('statut', 'en_cours');
     }
 
-    /**
-     * Dossiers validés par cet agent
-     */
     public function dossiersValides(): HasMany
     {
         return $this->hasMany(DossierValidation::class, 'validated_by')
             ->whereNotNull('validated_at');
     }
 
-    /**
-     * Commentaires de dossiers créés par cet utilisateur
-     */
     public function dossierComments(): HasMany
     {
         return $this->hasMany(DossierComment::class, 'user_id');
     }
 
-    /**
-     * Opérations sur dossiers effectuées par cet utilisateur
-     */
     public function dossierOperations(): HasMany
     {
         return $this->hasMany(DossierOperation::class, 'user_id');
     }
 
-    /**
-     * Archives de dossiers créées par cet utilisateur
-     */
     public function dossierArchives(): HasMany
     {
         return $this->hasMany(DossierArchive::class, 'archived_by');
     }
 
-    /**
-     * Imports d'adhérents effectués par cet utilisateur
-     */
     public function adherentImports(): HasMany
     {
         return $this->hasMany(AdherentImport::class, 'imported_by');
     }
 
-    /**
-     * Liens d'inscription créés par cet utilisateur
-     */
     public function inscriptionLinks(): HasMany
     {
         return $this->hasMany(InscriptionLink::class, 'created_by');
     }
 
-    /**
-     * Exclusions d'adhérents validées par cet utilisateur
-     */
     public function validatedExclusions(): HasMany
     {
         return $this->hasMany(AdherentExclusion::class, 'validated_by');
     }
 
-    /**
-     * Historiques d'adhérents créés par cet utilisateur
-     */
     public function createdAdherentHistories(): HasMany
     {
         return $this->hasMany(AdherentHistory::class, 'created_by');
     }
 
-    /**
-     * Historiques d'adhérents validés par cet utilisateur
-     */
     public function validatedAdherentHistories(): HasMany
     {
         return $this->hasMany(AdherentHistory::class, 'validated_by');
     }
 
-    /**
-     * Déclarations soumises par cet utilisateur
-     */
     public function submittedDeclarations(): HasMany
     {
         return $this->hasMany(Declaration::class, 'submitted_by');
     }
 
-    /**
-     * Déclarations validées par cet utilisateur
-     */
     public function validatedDeclarations(): HasMany
     {
         return $this->hasMany(Declaration::class, 'validated_by');
     }
-
-    // ===== RELATIONS EXISTANTES (conservées) =====
 
     public function validations(): HasMany
     {
@@ -387,17 +554,23 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(EntityAgent::class);
     }
 
-    /**
-     * Scopes
-     */
+    // =================================================================
+    // SCOPES (CONSERVÉS ET AMÉLIORÉS)
+    // =================================================================
+
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where('is_active', true)
+                     ->where(function($q) {
+                         $q->where('status', 'active')
+                           ->orWhereNull('status');
+                     });
     }
 
     public function scopeBlocked($query)
     {
-        return $query->where('locked_until', '>', now());
+        return $query->where('locked_until', '>', now())
+                     ->orWhere('status', 'suspended');
     }
 
     public function scopeByRole($query, $role)
@@ -420,11 +593,47 @@ class User extends Authenticatable implements MustVerifyEmail
         return $query->where('role', self::ROLE_OPERATOR);
     }
 
-    /**
-     * Accesseurs
-     */
+    // NOUVEAUX SCOPES AVANCÉS
+
+    public function scopeVerified($query)
+    {
+        return $query->where('is_verified', true);
+    }
+
+    public function scopeByAdvancedRole($query, $roleId)
+    {
+        return $query->where('role_id', $roleId);
+    }
+
+    public function scopeSearch($query, $search)
+    {
+        return $query->where(function ($q) use ($search) {
+            $q->where('name', 'like', "%{$search}%")
+              ->orWhere('email', 'like', "%{$search}%")
+              ->orWhere('phone', 'like', "%{$search}%")
+              ->orWhere('nip', 'like', "%{$search}%");
+        });
+    }
+
+    public function scopeWithAdvancedRole($query, $roleName)
+    {
+        return $query->whereHas('roleModel', function ($q) use ($roleName) {
+            $q->where('name', $roleName);
+        });
+    }
+
+    // =================================================================
+    // ACCESSEURS (CONSERVÉS ET AMÉLIORÉS)
+    // =================================================================
+
     public function getRoleLabelAttribute(): string
     {
+        // Priorité au nouveau système
+        if ($this->roleModel) {
+            return $this->roleModel->display_name;
+        }
+        
+        // Fallback ancien système
         $labels = [
             self::ROLE_ADMIN => 'Administrateur',
             self::ROLE_AGENT => 'Agent',
@@ -448,15 +657,51 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function getPhotoUrlAttribute(): string
     {
+        // Priorité : avatar, puis photo_path, puis défaut gabonais
+        if ($this->avatar && file_exists(storage_path('app/public/avatars/' . $this->avatar))) {
+            return asset('storage/avatars/' . $this->avatar);
+        }
+        
         if ($this->photo_path && file_exists(storage_path('app/public/' . $this->photo_path))) {
             return asset('storage/' . $this->photo_path);
         }
-        return asset('images/default-avatar.png');
+        
+        // Avatar par défaut avec couleurs gabonaises
+        $initials = strtoupper(substr($this->name, 0, 2));
+        return "https://ui-avatars.com/api/?name={$initials}&background=009e3f&color=fff&size=128&font-size=0.5";
     }
 
-    /**
-     * Permissions et capacités
-     */
+    // NOUVEAUX ACCESSEURS AVANCÉS
+
+    public function getStatusLabelAttribute(): string
+    {
+        if (!$this->status) {
+            return $this->is_active ? 'Actif' : 'Inactif';
+        }
+        
+        $statuses = [
+            'active' => 'Actif',
+            'inactive' => 'Inactif',
+            'suspended' => 'Suspendu',
+            'pending' => 'En attente'
+        ];
+        
+        return $statuses[$this->status] ?? $this->status;
+    }
+
+    public function getFullRoleNameAttribute(): string
+    {
+        if ($this->roleModel) {
+            return $this->roleModel->display_name . ' (Nouveau système)';
+        }
+        
+        return $this->role_label . ' (Ancien système)';
+    }
+
+    // =================================================================
+    // MÉTHODES MÉTIER (CONSERVÉES ET AMÉLIORÉES)
+    // =================================================================
+
     public function canCreateOrganisation($type): bool
     {
         if (!$this->isOperator()) {
@@ -475,22 +720,78 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function canValidateDossiers(): bool
     {
-        return in_array($this->role, [self::ROLE_ADMIN, self::ROLE_AGENT]);
+        // Ancien système OU nouveau système
+        return in_array($this->role, [self::ROLE_ADMIN, self::ROLE_AGENT]) ||
+               $this->hasAnyPermission(['orgs.validate', 'workflow.validate']);
     }
 
     public function canManageUsers(): bool
     {
-        return $this->isAdmin();
+        return $this->isAdmin() || 
+               $this->hasAnyPermission(['users.create', 'users.edit', 'users.delete']);
     }
 
     public function canAccessBackoffice(): bool
     {
-        return in_array($this->role, [self::ROLE_ADMIN, self::ROLE_AGENT]);
+        return in_array($this->role, [self::ROLE_ADMIN, self::ROLE_AGENT]) ||
+               $this->hasAnyPermission(['workflow.view', 'orgs.view']);
+    }
+
+    // =================================================================
+    // MÉTHODES AVANCÉES SÉCURITÉ (NOUVELLES)
+    // =================================================================
+
+    /**
+     * Fermer toutes les sessions actives
+     */
+    public function logoutAllSessions(): void
+    {
+        if (Schema::hasTable('user_sessions')) {
+            $this->activeUserSessions()->update([
+                'logout_at' => now(),
+                'is_active' => false
+            ]);
+        }
     }
 
     /**
-     * Préférences utilisateur
+     * Vérifier si l'utilisateur peut se connecter
      */
+    public function canLogin(): bool
+    {
+        return $this->is_active &&
+               (!$this->status || in_array($this->status, ['active'])) && 
+               $this->login_attempts < 5 &&
+               (!$this->locked_until || $this->locked_until->isPast());
+    }
+
+    /**
+     * Générer un token de vérification
+     */
+    public function generateVerificationToken(): string
+    {
+        $token = bin2hex(random_bytes(32));
+        $this->update(['verification_token' => $token]);
+        return $token;
+    }
+
+    /**
+     * Marquer comme vérifié
+     */
+    public function markAsVerified(): void
+    {
+        $this->update([
+            'is_verified' => true,
+            'verification_token' => null,
+            'email_verified_at' => now(),
+            'status' => 'active'
+        ]);
+    }
+
+    // =================================================================
+    // MÉTHODES UTILITAIRES EXISTANTES (CONSERVÉES)
+    // =================================================================
+
     public function getPreference($key, $default = null)
     {
         return data_get($this->preferences, $key, $default);
@@ -503,11 +804,6 @@ class User extends Authenticatable implements MustVerifyEmail
         $this->update(['preferences' => $preferences]);
     }
 
-    // ===== NOUVELLES MÉTHODES UTILITAIRES POUR LE WORKFLOW =====
-
-    /**
-     * Obtenir le nombre de dossiers en cours assignés
-     */
     public function getDossiersEnCoursCount(): int
     {
         return $this->assignedDossiers()
@@ -515,9 +811,6 @@ class User extends Authenticatable implements MustVerifyEmail
             ->count();
     }
 
-    /**
-     * Obtenir le nombre de dossiers validés ce mois
-     */
     public function getDossiersValidesThisMonth(): int
     {
         return $this->dossiersValides()
@@ -529,9 +822,6 @@ class User extends Authenticatable implements MustVerifyEmail
             ->count();
     }
 
-    /**
-     * Obtenir la charge de travail actuelle de l'agent
-     */
     public function getChargeActuelle(): int
     {
         return $this->assignedDossiers()
@@ -539,17 +829,11 @@ class User extends Authenticatable implements MustVerifyEmail
             ->count();
     }
 
-    /**
-     * Vérifier si l'agent peut recevoir de nouveaux dossiers
-     */
     public function canReceiveNewDossiers(int $capaciteMax = 5): bool
     {
         return $this->getChargeActuelle() < $capaciteMax;
     }
 
-    /**
-     * Obtenir les statistiques de performance de l'agent
-     */
     public function getPerformanceStats(): array
     {
         if (!$this->canValidateDossiers()) {
@@ -571,20 +855,15 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
-    /**
-     * Vérifier si l'agent est disponible pour assignation
-     */
     public function isAvailableForAssignment(): bool
     {
-        return $this->isActive() && 
+        return $this->is_active && 
                $this->canValidateDossiers() && 
                $this->canReceiveNewDossiers() &&
-               !$this->isLocked();
+               !$this->isLocked() &&
+               $this->canLogin();
     }
 
-    /**
-     * Statistiques utilisateur
-     */
     public function getStatistics(): array
     {
         $stats = [
@@ -602,16 +881,22 @@ class User extends Authenticatable implements MustVerifyEmail
                 'completed' => $this->validations()->whereNotNull('decision')->count()
             ];
 
-            // Ajouter les statistiques de performance
             $stats['performance'] = $this->getPerformanceStats();
+        }
+
+        // Ajouter statistiques avancées
+        if ($this->roleModel) {
+            $stats['advanced'] = [
+                'role_level' => $this->roleModel->level,
+                'permissions_count' => $this->getAllPermissions()->count(),
+                'sessions_count' => $this->userSessions()->count(),
+                'last_activity' => $this->last_login_at,
+            ];
         }
 
         return $stats;
     }
 
-    /**
-     * Activité
-     */
     public function logActivity($action, $description = null, $properties = []): void
     {
         $this->activityLogs()->create([
@@ -623,8 +908,59 @@ class User extends Authenticatable implements MustVerifyEmail
         ]);
     }
 
+    // =================================================================
+    // MÉTHODES UTILITAIRES AVANCÉES (NOUVELLES)
+    // =================================================================
+
     /**
-     * Obtenir les rôles disponibles
+     * Obtenir les statistiques complètes utilisateur
+     */
+    public function getAdvancedStatsAttribute(): array
+    {
+        return [
+            'organisations_created' => $this->organisations()->count(),
+            'last_activity' => $this->last_login_at,
+            'sessions_count' => $this->userSessions()->count(),
+            'role_level' => $this->roleModel ? $this->roleModel->level : 0,
+            'permissions_count' => $this->getAllPermissions()->count(),
+            'is_verified' => $this->is_verified,
+            'login_attempts' => $this->login_attempts,
+            'performance' => $this->getPerformanceStats(),
+        ];
+    }
+
+    /**
+     * Vérifier si l'utilisateur est gabonais
+     */
+    public function isGabonese(): bool
+    {
+        return $this->country === 'Gabon' || 
+               (isset($this->metadata['nationalite']) && $this->metadata['nationalite'] === 'Gabonaise');
+    }
+
+    /**
+     * Formatter pour l'export
+     */
+    public function toExportArray(): array
+    {
+        return [
+            'ID' => $this->id,
+            'Nom' => $this->name,
+            'Email' => $this->email,
+            'NIP' => $this->nip,
+            'Téléphone' => $this->phone,
+            'Rôle Ancien' => $this->role,
+            'Rôle Nouveau' => $this->roleModel ? $this->roleModel->display_name : 'N/A',
+            'Statut' => $this->status_label,
+            'Vérifié' => $this->is_verified ? 'Oui' : 'Non',
+            'Actif' => $this->is_active ? 'Oui' : 'Non',
+            'Dernière connexion' => $this->last_login_at ? $this->last_login_at->format('d/m/Y H:i') : 'Jamais',
+            'Créé le' => $this->created_at->format('d/m/Y H:i'),
+        ];
+    }
+
+    /**
+     * Obtenir les rôles disponibles (CONSERVÉ)
      */
     public static function getRoles(): array
     {
@@ -634,5 +970,25 @@ class User extends Authenticatable implements MustVerifyEmail
             self::ROLE_OPERATOR => 'Opérateur',
             self::ROLE_VISITOR => 'Visiteur'
         ];
+    }
+
+    // =================================================================
+    // MUTATEURS (NOUVEAUX)
+    // =================================================================
+
+    /**
+     * Mutateur pour le téléphone
+     */
+    public function setPhoneAttribute($value): void
+    {
+        $this->attributes['phone'] = preg_replace('/[^0-9+]/', '', $value);
+    }
+
+    /**
+     * Mutateur pour l'email (lowercase)
+     */
+    public function setEmailAttribute($value): void
+    {
+        $this->attributes['email'] = strtolower($value);
     }
 }
