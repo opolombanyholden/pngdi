@@ -4178,7 +4178,7 @@ if (analysis.fieldCount > 1000) {
                     }, 3000);
                 } else {
                     setTimeout(() => {
-                        window.location.href = '/operator/organisations';
+                        window.location.href = '/operator/dossiers';
                     }, 3000);
                 }
                 

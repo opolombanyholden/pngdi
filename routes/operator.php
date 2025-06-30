@@ -55,7 +55,16 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::post('/{dossier}/commentaires', [DossierController::class, 'addComment'])->name('commentaires.store');
         Route::put('/commentaires/{comment}', [DossierController::class, 'updateComment'])->name('commentaires.update');
         Route::delete('/commentaires/{comment}', [DossierController::class, 'deleteComment'])->name('commentaires.delete');
+    
         
+        // Page de confirmation après soumission
+        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])->name('confirmation');
+        
+        // Gestion des anomalies
+        Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
+        Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
+
+
         // Duplication et modèles
         Route::post('/{dossier}/duplicate', [DossierController::class, 'duplicate'])->name('duplicate');
         Route::post('/{dossier}/save-as-template', [DossierController::class, 'saveAsTemplate'])->name('save-template');

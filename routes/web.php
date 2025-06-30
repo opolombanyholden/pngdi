@@ -267,6 +267,11 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
     Route::get('/', function () {
         return view('operator.dashboard');
     })->name('dashboard');
+
+     // ✅ AJOUTER CETTE LIGNE
+    Route::get('/dashboard', function () {
+        return view('operator.dashboard');
+    })->name('dashboard.full');
     
     // Profil opérateur
     Route::prefix('profile')->name('profile.')->group(function () {
@@ -302,11 +307,20 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
     });
     
-    // Gestion des dossiers avec verrouillage
+    // ✅ GESTION DES DOSSIERS AVEC CORRECTIONS COMPLÈTES
     Route::prefix('dossiers')->name('dossiers.')->middleware(['dossier.lock'])->group(function () {
+        
+        // ✅ ROUTES SPÉCIFIQUES AVANT LES ROUTES DYNAMIQUES
+        Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
+        Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
+        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])->name('confirmation');
+        
+        // Routes existantes
         Route::get('/', [DossierController::class, 'index'])->name('index');
         Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
         Route::post('/', [DossierController::class, 'store'])->name('store');
+        
+        // ✅ ROUTES DYNAMIQUES À LA FIN
         Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
         Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
         Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');

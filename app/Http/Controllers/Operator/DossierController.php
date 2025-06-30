@@ -114,6 +114,8 @@ class DossierController extends Controller
         return view('operator.dossiers.create', compact('type', 'fullType', 'provinces', 'guides', 'documentTypes'));
     }
 
+    
+
     /**
      * Enregistrer un nouveau dossier
      */
@@ -707,4 +709,98 @@ class DossierController extends Controller
             'rejetes' => 0
         ]);
     }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE - Page de confirmation
+     */
+    public function confirmation($dossierId)
+    {
+        try {
+            $dossier = Dossier::with(['organisation', 'documents'])->findOrFail($dossierId);
+
+            if ($dossier->organisation->user_id !== auth()->id()) {
+                abort(403, 'Accès non autorisé à ce dossier.');
+            }
+
+            $confirmationData = [
+                'organisation' => $dossier->organisation,
+                'dossier' => $dossier,
+                'numero_recepisse' => $dossier->organisation->numero_recepisse,
+                'delai_traitement' => '72 heures ouvrées',
+                'message_confirmation' => 'Votre dossier a été soumis avec succès.'
+            ];
+
+            return view('operator.dossiers.confirmation', compact('confirmationData'));
+
+        } catch (\Exception $e) {
+            \Log::error('Erreur page confirmation: ' . $e->getMessage());
+            return redirect()->route('operator.dashboard')
+                ->with('error', 'Impossible d\'afficher la page de confirmation.');
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE - Gestion des anomalies
+     */
+    public function anomalies(Request $request)
+    {
+        $query = \App\Models\Adherent::where('has_anomalies', true)
+            ->whereHas('organisation', function($q) {
+                $q->where('user_id', auth()->id());
+            });
+
+        if ($request->has('severity')) {
+            $query->where('anomalies_severity', $request->severity);
+        }
+
+        if ($request->has('organisation_id')) {
+            $query->where('organisation_id', $request->organisation_id);
+        }
+
+        $anomalies = $query->with(['organisation'])->paginate(15);
+
+        $organisations = \App\Models\Organisation::where('user_id', auth()->id())->get();
+
+        return view('operator.dossiers.anomalies', compact('anomalies', 'organisations'));
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE - Résoudre une anomalie
+     */
+    public function resolveAnomalie(Request $request, $adherentId)
+    {
+        $request->validate([
+            'anomalie_code' => 'required|string',
+            'resolution_details' => 'required|string',
+            'action' => 'required|in:resolve,exclude,update'
+        ]);
+
+        try {
+            $adherent = \App\Models\Adherent::findOrFail($adherentId);
+
+            if ($adherent->organisation->user_id !== auth()->id()) {
+                abort(403);
+            }
+
+            $result = $adherent->resolveAnomalie(
+                $request->anomalie_code,
+                [
+                    'action' => $request->action,
+                    'details' => $request->resolution_details,
+                    'resolved_by' => auth()->id()
+                ]
+            );
+
+            if ($result) {
+                return redirect()->back()->with('success', 'Anomalie résolue avec succès');
+            } else {
+                return redirect()->back()->with('error', 'Impossible de résoudre cette anomalie');
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('Erreur résolution anomalie: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Erreur lors de la résolution de l\'anomalie');
+        }
+    }
+
 }
