@@ -1,0 +1,1 @@
+|        | GET|HEAD  | operator/dossiers/confirmation/{dossier}                                   | operator.dossiers.confirmation                    | App\Http\Controllers\Operator\DossierController@confirmation                       | web                                                  |

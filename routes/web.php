@@ -258,7 +258,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
 /*
 |--------------------------------------------------------------------------
-| Routes Operator - CONSERVÉES INTÉGRALEMENT AVEC CORRECTIONS
+| Routes Operator - CORRECTION APPLIQUÉE POUR MIDDLEWARE dossier.lock
 |--------------------------------------------------------------------------
 */
 Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
@@ -268,7 +268,7 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         return view('operator.dashboard');
     })->name('dashboard');
 
-     // ✅ AJOUTER CETTE LIGNE
+    // ✅ AJOUTER CETTE LIGNE
     Route::get('/dashboard', function () {
         return view('operator.dashboard');
     })->name('dashboard.full');
@@ -295,9 +295,6 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
         Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
         
-        // ✅ PAGE DE CONFIRMATION APRÈS CRÉATION
-        Route::get('/confirmation/{dossier}', [OrganisationController::class, 'confirmation'])->name('confirmation');
-        
         // ✅ TÉLÉCHARGEMENT ACCUSÉ DE RÉCEPTION
         Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
         
@@ -307,29 +304,42 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
     });
     
-    // ✅ GESTION DES DOSSIERS AVEC CORRECTIONS COMPLÈTES
-    Route::prefix('dossiers')->name('dossiers.')->middleware(['dossier.lock'])->group(function () {
+    // ========================================
+    // 🔧 CORRECTION MAJEURE : GESTION DES DOSSIERS
+    // ========================================
+    Route::prefix('dossiers')->name('dossiers.')->group(function () {
         
-        // ✅ ROUTES SPÉCIFIQUES AVANT LES ROUTES DYNAMIQUES
-        Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
-        Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
-        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])->name('confirmation');
+        // ✅ SOLUTION 1 : ROUTE CONFIRMATION SANS MIDDLEWARE dossier.lock
+        // Cette route est accessible en LECTURE SEULE, même si le dossier est verrouillé
+        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])
+            ->name('confirmation')
+            ->middleware(['throttle:60,1']); // Protection contre les abus seulement
         
-        // Routes existantes
-        Route::get('/', [DossierController::class, 'index'])->name('index');
-        Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
-        Route::post('/', [DossierController::class, 'store'])->name('store');
-        
-        // ✅ ROUTES DYNAMIQUES À LA FIN
-        Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
-        Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
-        Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
-        Route::post('/{dossier}/submit', [DossierController::class, 'submit'])->name('submit');
-        Route::delete('/{dossier}', [DossierController::class, 'destroy'])->name('destroy');
-        
-        // Gestion des verrous (AJAX)
-        Route::post('/{dossier}/extend-lock', [DossierController::class, 'extendLock'])->name('extend-lock');
-        Route::post('/{dossier}/release-lock', [DossierController::class, 'releaseLock'])->name('release-lock');
+        // ========================================
+        // ROUTES AVEC MIDDLEWARE dossier.lock (Routes nécessitant modification)
+        // ========================================
+        Route::middleware(['dossier.lock'])->group(function () {
+            
+            // ✅ ROUTES SPÉCIFIQUES AVANT LES ROUTES DYNAMIQUES
+            Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
+            Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
+            
+            // Routes existantes
+            Route::get('/', [DossierController::class, 'index'])->name('index');
+            Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
+            Route::post('/', [DossierController::class, 'store'])->name('store');
+            
+            // ✅ ROUTES DYNAMIQUES À LA FIN
+            Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
+            Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
+            Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
+            Route::post('/{dossier}/submit', [DossierController::class, 'submit'])->name('submit');
+            Route::delete('/{dossier}', [DossierController::class, 'destroy'])->name('destroy');
+            
+            // Gestion des verrous (AJAX)
+            Route::post('/{dossier}/extend-lock', [DossierController::class, 'extendLock'])->name('extend-lock');
+            Route::post('/{dossier}/release-lock', [DossierController::class, 'releaseLock'])->name('release-lock');
+        });
     });
     
     // Gestion des adhérents
@@ -1223,10 +1233,61 @@ Route::prefix('api/v1/accuses')->name('api.accuses.')->middleware(['auth'])->gro
 
 /*
 |--------------------------------------------------------------------------
-| Routes de test (développement uniquement)
+| Routes de test (développement uniquement) - TEMPORAIRES 🧪
 |--------------------------------------------------------------------------
 */
 if (config('app.debug')) {
+    
+    // ========================================
+    // 🚀 ROUTE DE TEST POUR VALIDATION DE LA CORRECTION
+    // ========================================
+    Route::get('/test-correction-middleware', function() {
+        echo "<style>
+            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+            h2 { color: #28a745; border-bottom: 2px solid #28a745; padding-bottom: 10px; }
+            h3 { color: #FFA500; margin-top: 25px; }
+            .success { color: #28a745; font-weight: bold; }
+            .error { color: #dc3545; font-weight: bold; }
+            .warning { color: #ffc107; font-weight: bold; }
+            .info { color: #17a2b8; }
+            .test-link { background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 5px; }
+            .test-link:hover { background: #218838; color: white; }
+        </style>";
+        
+        echo "<h2>🎉 TEST DE VALIDATION - CORRECTION MIDDLEWARE APPLIQUÉE</h2>";
+        echo "<p><strong>Solution 1 implémentée :</strong> Route confirmation exclue du middleware dossier.lock</p>";
+        
+        echo "<h3>✅ Tests à effectuer :</h3>";
+        
+        echo "<p><strong>Test 1 :</strong> Accès direct à la page de confirmation (sans middleware bloquant)</p>";
+        echo "<a href='/operator/dossiers/confirmation/19' class='test-link' target='_blank'>➤ Tester la page de confirmation</a>";
+        echo "<p><em>Devrait maintenant fonctionner et afficher la page !</em></p>";
+        
+        echo "<p><strong>Test 2 :</strong> Simulation de redirection (pour confirmer le fix)</p>";
+        echo "<a href='/test-redirect-simulation' class='test-link'>➤ Tester la redirection</a>";
+        echo "<p><em>La redirection devrait maintenant aboutir sur la bonne page</em></p>";
+        
+        echo "<h3>🔍 Changements apportés :</h3>";
+        echo "<ul>";
+        echo "<li>✅ Route <code>/confirmation/{dossier}</code> sortie du groupe <code>middleware(['dossier.lock'])</code></li>";
+        echo "<li>✅ Ajout du middleware <code>throttle:60,1</code> pour protection anti-abus</li>";
+        echo "<li>✅ Les autres routes restent protégées par le middleware dossier.lock</li>";
+        echo "<li>✅ La page de confirmation est maintenant accessible en lecture seule</li>";
+        echo "</ul>";
+        
+        echo "<h3>📋 Résultats attendus :</h3>";
+        echo "<ul>";
+        echo "<li><strong>✅ Page de confirmation accessible</strong> même si le dossier est verrouillé</li>";
+        echo "<li><strong>✅ Logs générés</strong> dans laravel.log lors de l'accès</li>";
+        echo "<li><strong>✅ Redirection fonctionnelle</strong> depuis OrganisationController::store()</li>";
+        echo "<li><strong>✅ Sécurité maintenue</strong> pour les autres opérations sur les dossiers</li>";
+        echo "</ul>";
+        
+        return "";
+        
+    })->middleware(['auth'])->name('test.correction.middleware');
+    
+    // Routes de test existantes
     Route::get('/test', function () {
         return [
             'laravel_version' => app()->version(),
@@ -1298,6 +1359,59 @@ if (config('app.debug')) {
             'data' => $request->all()
         ]);
     })->name('test-organisation-debug');
+    
+    // Routes de debug existantes (conservées pour compatibilité)
+    Route::get('/debug-route-test', function() {
+        echo "<h2>Test diagnostic des routes</h2>";
+        echo "<h3>⚠️ ROUTE DÉPRÉCIÉE</h3>";
+        echo "<p>Utilisez plutôt <a href='/test-correction-middleware'>la nouvelle route de test</a></p>";
+        return "";
+    })->middleware(['auth'])->name('debug.route.test');
+
+    Route::get('/quick-debug', function() {
+        $dossier = \App\Models\Dossier::with('organisation')->find(19);
+        $user = auth()->user();
+        
+        return response()->json([
+            'dossier_exists' => $dossier ? true : false,
+            'dossier_user_id' => $dossier ? $dossier->organisation->user_id : null,
+            'dossier_user_id_type' => $dossier ? gettype($dossier->organisation->user_id) : null,
+            'auth_user_id' => $user ? $user->id : null,
+            'auth_user_id_type' => $user ? gettype($user->id) : null,
+            'comparison_result' => $dossier && $user ? ((int)$dossier->organisation->user_id === (int)$user->id) : false,
+            'raw_comparison' => $dossier && $user ? ($dossier->organisation->user_id === $user->id) : false
+        ]);
+    })->middleware(['auth']);
+    
+    // ========================================
+    // 🔄 SIMULATION DE REDIRECTION - CORRIGÉE
+    // ========================================
+    Route::get('/test-redirect-simulation', function() {
+        try {
+            \Log::info('=== TEST REDIRECTION SIMULATION ===', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()
+            ]);
+            
+            // Simuler la redirection exacte depuis OrganisationController::store()
+            return redirect()->route('operator.dossiers.confirmation', 19)
+                ->with('success', 'Test de redirection depuis simulation - Correction appliquée');
+            
+        } catch (\Exception $e) {
+            \Log::error('=== ERREUR SIMULATION REDIRECTION ===', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return response()->json([
+                'error' => 'Erreur simulation redirection',
+                'message' => $e->getMessage(),
+                'file' => basename($e->getFile()),
+                'line' => $e->getLine()
+            ]);
+        }
+    })->middleware(['auth'])->name('test.redirect.simulation');
 }
 
 // Inclure les routes admin supplémentaires

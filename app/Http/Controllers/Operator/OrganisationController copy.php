@@ -846,15 +846,7 @@ class OrganisationController extends Controller
                 'adherents_stats' => $sessionData['adherents_stats'] ?? $this->calculateAdherentsStats($dossier),
                 'accuse_reception_path' => $this->getAccuseReceptionPath($dossier),
                 'delai_traitement' => '72 heures ouvrées',
-                // MESSAGE CONFORME À LA LOI N° 016/2025 du 27 Juin 2025
-                'message_confirmation' => 'Votre dossier numérique a été soumis avec succès. Aux fins de recevoir votre accusé de réception, conformément aux dispositions de l\'article 26 de la loi N° 016/2025 du 27 Juin 2025 relative aux partis politiques en République Gabonaise, vous êtes invité à déposer votre dossier physique, en 3 exemplaires, auprès des services de la Direction Générale des Élections et des Libertés Publiques du Ministère de l\'Intérieur, de la Sécurité et de la Décentralisation, en application des dispositions de l\'article 24 de la loi suscitée.',
-                'message_legal' => [
-                    'loi_reference' => 'Loi N° 016/2025 du 27 Juin 2025',
-                    'article_reference' => 'Articles 24 et 26',
-                    'depot_requis' => 'Dossier physique en 3 exemplaires',
-                    'service_depot' => 'Direction Générale des Élections et des Libertés Publiques',
-                    'ministere' => 'Ministère de l\'Intérieur, de la Sécurité et de la Décentralisation'
-                ]
+                'message_confirmation' => 'Votre dossier a été soumis avec succès. Un accusé de réception sera disponible sous 72 heures ouvrées.'
             ];
 
             session()->forget('success_data');
@@ -863,8 +855,7 @@ class OrganisationController extends Controller
                 'user_id' => auth()->id(),
                 'dossier_id' => $dossier->id,
                 'organisation_nom' => $dossier->organisation->nom,
-                'access_time' => now(),
-                'numero_dossier' => $dossier->numero_dossier
+                'access_time' => now()
             ]);
 
             return view('operator.dossiers.confirmation', compact('confirmationData'));

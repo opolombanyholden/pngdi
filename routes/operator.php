@@ -55,15 +55,10 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::post('/{dossier}/commentaires', [DossierController::class, 'addComment'])->name('commentaires.store');
         Route::put('/commentaires/{comment}', [DossierController::class, 'updateComment'])->name('commentaires.update');
         Route::delete('/commentaires/{comment}', [DossierController::class, 'deleteComment'])->name('commentaires.delete');
-    
         
-        // Page de confirmation après soumission
-        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])->name('confirmation');
-        
-        // Gestion des anomalies
-        Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
-        Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
-
+        // Gestion des anomalies - DÉJÀ DÉFINIES DANS web.php
+        // Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
+        // Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
 
         // Duplication et modèles
         Route::post('/{dossier}/duplicate', [DossierController::class, 'duplicate'])->name('duplicate');
@@ -145,6 +140,9 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
             ->name('initiate-dissolution');
         Route::post('/{organisation}/transfer-members/{target}', [OrganisationController::class, 'transferMembers'])
             ->name('transfer-members');
+
+        // ✅ PAGE DE CONFIRMATION SUPPRIMÉE D'ICI - DÉJÀ DANS web.php VIA DossierController
+        // Route::get('/confirmation/{dossier}', [OrganisationController::class, 'confirmation'])->name('confirmation');
     });
     
     /*

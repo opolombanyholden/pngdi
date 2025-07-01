@@ -11,27 +11,10 @@
                 <div class="card-body text-center py-5">
                     <i class="fas fa-check-circle fa-5x mb-3 opacity-75"></i>
                     <h1 class="card-title h2 mb-3">🎉 Félicitations !</h1>
-                    <h2 class="h4 mb-2">Votre dossier numérique a été soumis avec succès</h2>
-                    <p class="lead mb-3">
-                        Numéro de dossier : <strong>{{ $confirmationData['numero_recepisse'] ?? 'N/A' }}</strong>
+                    <h2 class="h4 mb-2">Votre dossier a été soumis avec succès</h2>
+                    <p class="lead mb-0">
+                        Numéro de récépissé : <strong>{{ $confirmationData['numero_recepisse'] }}</strong>
                     </p>
-                    
-                    <!-- Message légal officiel -->
-                    <div class="alert alert-info text-start mt-4">
-                        <h6 class="alert-heading">
-                            <i class="fas fa-info-circle me-2"></i>
-                            Prochaine étape obligatoire - Dépôt physique
-                        </h6>
-                        <p class="mb-2">
-                            <strong>Aux fins de recevoir votre accusé de réception</strong>, conformément aux dispositions de l'article 26 de la loi N° 016/2025 du 27 Juin 2025 relative aux partis politiques en République Gabonaise, vous êtes invité à <strong>déposer votre dossier physique, en 3 exemplaires</strong>, auprès des services de la Direction Générale des Élections et des Libertés Publiques du Ministère de l'Intérieur, de la Sécurité et de la Décentralisation, en application des dispositions de l'article 24 de la loi suscitée.
-                        </p>
-                        <div class="mt-3 p-2 bg-warning bg-opacity-10 border border-warning rounded">
-                            <small class="text-dark">
-                                <i class="fas fa-exclamation-triangle me-1"></i>
-                                <strong>Important :</strong> Le dépôt numérique ne dispense pas du dépôt physique obligatoire.
-                            </small>
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -52,9 +35,9 @@
                     <div class="row">
                         <div class="col-md-6">
                             <h6 class="text-muted mb-2">Organisation</h6>
-                            <p class="fw-bold mb-3">{{ $confirmationData['organisation']->nom ?? 'N/A' }}</p>
+                            <p class="fw-bold mb-3">{{ $confirmationData['organisation']->nom }}</p>
                             
-                            @if(isset($confirmationData['organisation']->sigle) && $confirmationData['organisation']->sigle)
+                            @if($confirmationData['organisation']->sigle)
                             <h6 class="text-muted mb-2">Sigle</h6>
                             <p class="fw-bold mb-3">{{ $confirmationData['organisation']->sigle }}</p>
                             @endif
@@ -62,34 +45,16 @@
                             <h6 class="text-muted mb-2">Type d'organisation</h6>
                             <p class="mb-3">
                                 <span class="badge bg-info fs-6">
-                                    {{ isset($confirmationData['organisation']->type) ? ucfirst(str_replace('_', ' ', $confirmationData['organisation']->type)) : 'N/A' }}
+                                    {{ ucfirst(str_replace('_', ' ', $confirmationData['organisation']->type)) }}
                                 </span>
                             </p>
                         </div>
                         <div class="col-md-6">
                             <h6 class="text-muted mb-2">Numéro de dossier</h6>
-                            <p class="fw-bold mb-3">{{ $confirmationData['dossier']->numero_dossier ?? 'N/A' }}</p>
+                            <p class="fw-bold mb-3">{{ $confirmationData['dossier']->numero_dossier }}</p>
 
                             <h6 class="text-muted mb-2">Date de soumission</h6>
-                            <p class="mb-3">
-                                @if(isset($confirmationData['dossier']->submitted_at))
-                                    @php
-                                        // ✅ CORRECTION : Gestion sécurisée des dates
-                                        try {
-                                            if (is_string($confirmationData['dossier']->submitted_at)) {
-                                                $submittedDate = \Carbon\Carbon::parse($confirmationData['dossier']->submitted_at);
-                                            } else {
-                                                $submittedDate = $confirmationData['dossier']->submitted_at;
-                                            }
-                                            echo $submittedDate->format('d/m/Y à H:i');
-                                        } catch (Exception $e) {
-                                            echo date('d/m/Y à H:i');
-                                        }
-                                    @endphp
-                                @else
-                                    {{ date('d/m/Y à H:i') }}
-                                @endif
-                            </p>
+                            <p class="mb-3">{{ $confirmationData['dossier']->submitted_at->format('d/m/Y à H:i') }}</p>
 
                             <h6 class="text-muted mb-2">Statut</h6>
                             <p class="mb-3">
@@ -102,7 +67,7 @@
                     </div>
 
                     <!-- QR Code de vérification -->
-                    @if(isset($confirmationData['qr_code']) && $confirmationData['qr_code'])
+                    @if(isset($confirmationData['qr_code']))
                     <div class="row mt-4">
                         <div class="col-12">
                             <div class="alert alert-info">
@@ -120,7 +85,7 @@
             </div>
 
             <!-- Statistiques des adhérents -->
-            @if(isset($confirmationData['adherents_stats']) && $confirmationData['adherents_stats'])
+            @if(isset($confirmationData['adherents_stats']))
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-secondary text-white">
                     <h5 class="card-title mb-0">
@@ -132,33 +97,33 @@
                     <div class="row text-center">
                         <div class="col-md-3">
                             <div class="border-end">
-                                <h3 class="text-primary mb-1">{{ $confirmationData['adherents_stats']['total'] ?? 0 }}</h3>
+                                <h3 class="text-primary mb-1">{{ $confirmationData['adherents_stats']['total'] }}</h3>
                                 <small class="text-muted">Total</small>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="border-end">
-                                <h3 class="text-success mb-1">{{ $confirmationData['adherents_stats']['valides'] ?? 0 }}</h3>
+                                <h3 class="text-success mb-1">{{ $confirmationData['adherents_stats']['valides'] }}</h3>
                                 <small class="text-muted">Valides</small>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="border-end">
                                 <h3 class="text-warning mb-1">
-                                    {{ ($confirmationData['adherents_stats']['anomalies_majeures'] ?? 0) + ($confirmationData['adherents_stats']['anomalies_mineures'] ?? 0) }}
+                                    {{ $confirmationData['adherents_stats']['anomalies_majeures'] + $confirmationData['adherents_stats']['anomalies_mineures'] }}
                                 </h3>
                                 <small class="text-muted">Anomalies</small>
                             </div>
                         </div>
                         <div class="col-md-3">
-                            <h3 class="text-danger mb-1">{{ $confirmationData['adherents_stats']['anomalies_critiques'] ?? 0 }}</h3>
+                            <h3 class="text-danger mb-1">{{ $confirmationData['adherents_stats']['anomalies_critiques'] }}</h3>
                             <small class="text-muted">Critiques</small>
                         </div>
                     </div>
 
-                    @if(($confirmationData['adherents_stats']['anomalies_critiques'] ?? 0) > 0 || 
-                        ($confirmationData['adherents_stats']['anomalies_majeures'] ?? 0) > 0 || 
-                        ($confirmationData['adherents_stats']['anomalies_mineures'] ?? 0) > 0)
+                    @if($confirmationData['adherents_stats']['anomalies_critiques'] > 0 || 
+                        $confirmationData['adherents_stats']['anomalies_majeures'] > 0 || 
+                        $confirmationData['adherents_stats']['anomalies_mineures'] > 0)
                     <div class="alert alert-warning mt-3">
                         <h6 class="alert-heading">
                             <i class="fas fa-exclamation-triangle me-2"></i>
@@ -195,16 +160,7 @@
                             </div>
                             <div class="timeline-content">
                                 <h6 class="mb-1">Soumission</h6>
-                                <small class="text-muted">
-                                    Complétée le 
-                                    @php
-                                        try {
-                                            echo \Carbon\Carbon::now()->format('d/m/Y à H:i');
-                                        } catch (Exception $e) {
-                                            echo date('d/m/Y à H:i');
-                                        }
-                                    @endphp
-                                </small>
+                                <small class="text-muted">Complétée le {{ now()->format('d/m/Y à H:i') }}</small>
                             </div>
                         </div>
                         
@@ -297,23 +253,12 @@
                             Retour au Dashboard
                         </a>
                         
-                        @if(isset($confirmationData['accuse_reception_path']) && $confirmationData['accuse_reception_path'])
-                            @php
-                                // ✅ VÉRIFICATION EXISTENCE DE LA ROUTE
-                                $downloadRouteExists = Route::has('operator.documents.download');
-                            @endphp
-                            @if($downloadRouteExists)
-                                <a href="{{ route('operator.documents.download', ['path' => basename($confirmationData['accuse_reception_path'])]) }}" 
-                                   class="btn btn-success" target="_blank">
-                                    <i class="fas fa-download me-2"></i>
-                                    Télécharger l'Accusé
-                                </a>
-                            @else
-                                <button type="button" class="btn btn-outline-success" disabled title="Fonction de téléchargement en cours de développement">
-                                    <i class="fas fa-download me-2"></i>
-                                    Télécharger l'Accusé
-                                </button>
-                            @endif
+                        @if(isset($confirmationData['accuse_reception_path']))
+                        <a href="{{ route('operator.documents.download', ['path' => basename($confirmationData['accuse_reception_path'])]) }}" 
+                           class="btn btn-success" target="_blank">
+                            <i class="fas fa-download me-2"></i>
+                            Télécharger l'Accusé
+                        </a>
                         @endif
                         
                         <a href="{{ route('operator.organisations.create') }}" class="btn btn-outline-secondary">

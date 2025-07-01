@@ -114,6 +114,8 @@ class DossierController extends Controller
         return view('operator.dossiers.create', compact('type', 'fullType', 'provinces', 'guides', 'documentTypes'));
     }
 
+    
+
     /**
      * Enregistrer un nouveau dossier
      */
@@ -458,211 +460,150 @@ class DossierController extends Controller
         return view('operator.dossiers.subventions.show', compact('declaration'));
     }
     
-    /**
-     * ✅ MÉTHODE CONFIRMATION FINALE - CORRIGÉE COMPLÈTEMENT ET RENFORCÉE
-     * Afficher la page de confirmation après soumission d'organisation
-     */
-    public function confirmation(Request $request, $dossier)
-    {
-        try {
-            // ✅ LOGS DE DEBUG RENFORCÉS - ENTRÉE MÉTHODE
-            \Log::info("=== DÉBUT CONFIRMATION METHOD DEBUG ===", [
-                'dossier_param' => $dossier,
-                'dossier_type' => gettype($dossier),
-                'dossier_value' => is_object($dossier) ? get_class($dossier) : $dossier,
-                'user_id' => auth()->id(),
-                'user_email' => auth()->user()->email ?? 'Unknown',
-                'request_url' => $request->fullUrl(),
-                'request_method' => $request->method(),
-                'timestamp' => now()->toDateTimeString(),
-                'all_request_params' => $request->all()
-            ]);
+   /**
+ * ✅ MÉTHODE CONFIRMATION CORRIGÉE - DossierController.php
+ * Remplacer la méthode confirmation() existante par cette version corrigée
+ */
+public function confirmation(Request $request, $dossier)
+{
+    try {
+        // ✅ LOGS DE DEBUG RENFORCÉS
+        \Log::info("=== DÉBUT CONFIRMATION METHOD DEBUG ===", [
+            'dossier_param' => $dossier,
+            'dossier_type' => gettype($dossier),
+            'user_id' => auth()->id(),
+            'user_email' => auth()->user()->email,
+            'request_url' => $request->fullUrl(),
+            'request_method' => $request->method(),
+            'timestamp' => now()->toDateTimeString()
+        ]);
 
-            // ✅ CORRECTION 1: Gérer le cas où $dossier est déjà un objet OU un ID
-            if (is_object($dossier) && is_a($dossier, 'App\Models\Dossier')) {
-                // $dossier est déjà un objet Dossier (binding automatique Laravel)
-                $dossierObj = $dossier;
-                \Log::info("=== DOSSIER REÇU COMME OBJET ===", [
-                    'dossier_id' => $dossierObj->id,
-                    'class' => get_class($dossierObj)
-                ]);
-            } else {
-                // $dossier est un ID, on doit le charger
-                $dossierId = is_numeric($dossier) ? (int)$dossier : $dossier;
-                
-                \Log::info("=== CHARGEMENT DOSSIER PAR ID ===", [
-                    'dossier_id_param' => $dossierId,
-                    'is_numeric' => is_numeric($dossier)
-                ]);
-                
-                try {
-                    $dossierObj = Dossier::with([
-                        'organisation.adherents',
-                        'organisation.fondateurs',
-                        'documents'
-                    ])->findOrFail($dossierId);
-                    
-                    \Log::info("=== DOSSIER CHARGÉ AVEC SUCCÈS ===", [
-                        'dossier_loaded_id' => $dossierObj->id
-                    ]);
-                    
-                } catch (\Exception $e) {
-                    \Log::error("=== ERREUR CHARGEMENT DOSSIER ===", [
-                        'dossier_id_param' => $dossierId,
-                        'error' => $e->getMessage()
-                    ]);
-                    throw $e;
-                }
-            }
-
-            // ✅ LOGS DÉTAILLÉS DU DOSSIER CHARGÉ
-            \Log::info("=== DÉTAILS DOSSIER CHARGÉ ===", [
-                'dossier_id' => $dossierObj->id,
-                'dossier_numero' => $dossierObj->numero_dossier,
-                'organisation_id' => $dossierObj->organisation_id,
-                'organisation_nom' => $dossierObj->organisation->nom ?? 'Unknown',
-                'organisation_user_id' => $dossierObj->organisation->user_id ?? 'Unknown',
-                'organisation_user_id_type' => gettype($dossierObj->organisation->user_id ?? null),
-                'organisation_exists' => isset($dossierObj->organisation)
-            ]);
-
-            // ✅ CORRECTION 2: Vérification d'accès avec conversion de type ET logs détaillés
-            $authUserId = (int)auth()->id();
-            $orgUserId = (int)($dossierObj->organisation->user_id ?? 0);
+        // ✅ CORRECTION 1: Gérer le cas où $dossier est déjà un objet
+        if (is_object($dossier) && get_class($dossier) === 'App\Models\Dossier') {
+            // $dossier est déjà un objet Dossier (binding automatique Laravel)
+            $dossierObj = $dossier;
+            \Log::info("Dossier reçu comme objet", ['dossier_id' => $dossierObj->id]);
+        } else {
+            // $dossier est un ID, on doit le charger
+            $dossierId = is_numeric($dossier) ? (int)$dossier : $dossier;
             
-            \Log::info("=== VÉRIFICATION ACCÈS DÉTAILLÉE ===", [
-                'auth_user_id' => $authUserId,
-                'auth_user_id_type' => gettype($authUserId),
-                'auth_user_raw' => auth()->id(),
-                'org_user_id' => $orgUserId,
-                'org_user_id_type' => gettype($orgUserId),
-                'org_user_raw' => $dossierObj->organisation->user_id ?? null,
-                'strict_comparison' => ($orgUserId === $authUserId),
-                'loose_comparison' => ($orgUserId == $authUserId),
-                'both_are_integers' => (is_int($authUserId) && is_int($orgUserId))
-            ]);
-
-            // ✅ VÉRIFICATION AVEC LOGS EXPLICITES
-            if ($orgUserId !== $authUserId) {
-                \Log::warning("=== ACCÈS REFUSÉ - ANALYSE COMPLÈTE ===", [
-                    'reason' => 'User ID mismatch après conversion',
-                    'expected_user_id' => $orgUserId,
-                    'actual_user_id' => $authUserId,
-                    'dossier_id' => $dossierObj->id,
-                    'organisation_nom' => $dossierObj->organisation->nom ?? 'Unknown',
-                    'organisation_id' => $dossierObj->organisation_id,
-                    'difference' => abs($orgUserId - $authUserId),
-                    'auth_check' => auth()->check(),
-                    'user_exists' => auth()->user() !== null
-                ]);
-                
-                return redirect()->route('operator.dossiers.index')
-                    ->with('error', 'Vous n\'êtes pas autorisé à consulter ce dossier (User ID: ' . $authUserId . ' ≠ Org User ID: ' . $orgUserId . ')');
-            }
-
-            \Log::info("=== ACCÈS AUTORISÉ - CONSTRUCTION DONNÉES ===", [
-                'user_match_confirmed' => true,
-                'proceeding_to_data_construction' => true
-            ]);
-
-            // ✅ CORRECTION 3: Vérification délai avec logs (temporairement désactivée)
-            if (false) { // Désactivé temporairement pour debug complet
-                if ($dossierObj->submitted_at && $dossierObj->submitted_at->diffInHours(now()) > 24) {
-                    \Log::info("=== DÉLAI DÉPASSÉ ===", [
-                        'submitted_at' => $dossierObj->submitted_at->toDateTimeString(),
-                        'hours_diff' => $dossierObj->submitted_at->diffInHours(now()),
-                        'limit_hours' => 24
-                    ]);
-                    
-                    return redirect()->route('operator.dashboard')
-                        ->with('warning', 'Cette page de confirmation n\'est plus disponible (délai dépassé).');
-                }
-            }
-
-            // ✅ RÉCUPÉRATION/RECONSTRUCTION DES DONNÉES
-            $sessionData = session('success_data');
+            \Log::info("Chargement dossier par ID", ['dossier_id' => $dossierId]);
             
-            if (!$sessionData) {
-                \Log::info("=== RECONSTRUCTION DONNÉES SESSION ===");
-                $sessionData = $this->reconstructConfirmationData($dossierObj);
-                \Log::info("=== DONNÉES SESSION RECONSTRUITES ===", [
-                    'has_adherents_stats' => isset($sessionData['adherents_stats']),
-                    'has_anomalies' => isset($sessionData['anomalies'])
-                ]);
-            } else {
-                \Log::info("=== DONNÉES SESSION TROUVÉES ===", [
-                    'session_data_keys' => array_keys($sessionData)
-                ]);
-            }
-
-            // ✅ CONSTRUCTION DES DONNÉES DE CONFIRMATION AVEC LOGS
-            \Log::info("=== DÉBUT CONSTRUCTION CONFIRMATION DATA ===");
-            
-            $confirmationData = [
-                'organisation' => $dossierObj->organisation,
-                'dossier' => $dossierObj,
-                'numero_recepisse' => $dossierObj->organisation->numero_recepisse ?? 'Non attribué',
-                'numero_dossier' => $dossierObj->numero_dossier ?? 'Non attribué',
-                'qr_code' => $this->getQrCodeForDossier($dossierObj),
-                'adherents_stats' => $sessionData['adherents_stats'] ?? $this->calculateAdherentsStats($dossierObj),
-                'anomalies' => $sessionData['anomalies'] ?? $this->getAnomaliesFromDossier($dossierObj),
-                'accuse_reception_path' => $this->getAccuseReceptionPath($dossierObj),
-                'accuse_reception_url' => $this->getAccuseReceptionDownloadUrl($dossierObj),
-                'delai_traitement' => '72 heures ouvrées',
-                'message_legal' => $this->getMessageLegal(),
-                'prochaines_etapes' => $this->getProchainesEtapes(),
-                'contact_support' => $this->getContactSupport(),
-                'submitted_at' => $dossierObj->submitted_at ?? $dossierObj->created_at ?? now(),
-                'estimated_completion' => $this->calculateEstimatedCompletion($dossierObj)
-            ];
-
-            \Log::info("=== CONFIRMATION DATA CONSTRUITE ===", [
-                'data_keys' => array_keys($confirmationData),
-                'organisation_name' => $confirmationData['organisation']->nom ?? 'Unknown',
-                'dossier_numero' => $confirmationData['numero_dossier']
-            ]);
-
-            // Nettoyer la session
-            session()->forget('success_data');
-            \Log::info("=== SESSION NETTOYÉE ===");
-
-            // ✅ LOG FINAL DE SUCCÈS
-            \Log::info('=== PAGE CONFIRMATION CONSULTÉE AVEC SUCCÈS ===', [
-                'user_id' => auth()->id(),
-                'dossier_id' => $dossierObj->id,
-                'organisation_nom' => $dossierObj->organisation->nom ?? 'Unknown',
-                'access_time' => now()->toDateTimeString(),
-                'organisation_type' => $dossierObj->organisation->type ?? 'Unknown',
-                'success' => true
-            ]);
-
-            \Log::info("=== RETOUR VUE CONFIRMATION ===", [
-                'view_name' => 'operator.dossiers.confirmation',
-                'compact_variable' => 'confirmationData'
-            ]);
-
-            // ✅ RETOUR DE LA VUE
-            return view('operator.dossiers.confirmation', compact('confirmationData'));
-
-        } catch (\Exception $e) {
-            // ✅ GESTION D'ERREUR COMPLÈTE AVEC LOGS DÉTAILLÉS
-            \Log::error('=== ERREUR CRITIQUE MÉTHODE CONFIRMATION ===', [
-                'user_id' => auth()->id(),
-                'dossier_param' => $dossier,
-                'dossier_type' => gettype($dossier),
-                'error_message' => $e->getMessage(),
-                'error_file' => $e->getFile(),
-                'error_line' => $e->getLine(),
-                'error_class' => get_class($e),
-                'request_url' => $request->fullUrl() ?? 'Unknown',
-                'timestamp' => now()->toDateTimeString(),
-                'trace_preview' => substr($e->getTraceAsString(), 0, 500)
-            ]);
-
-            return redirect()->route('operator.dashboard')
-                ->with('error', 'Impossible d\'afficher la page de confirmation. Erreur: ' . $e->getMessage() . ' (Ligne: ' . $e->getLine() . ')');
+            $dossierObj = Dossier::with([
+                'organisation.adherents',
+                'organisation.fondateurs',
+                'documents'
+            ])->findOrFail($dossierId);
         }
+
+        \Log::info("=== DOSSIER CHARGÉ ===", [
+            'dossier_id' => $dossierObj->id,
+            'dossier_numero' => $dossierObj->numero_dossier,
+            'organisation_id' => $dossierObj->organisation_id,
+            'organisation_nom' => $dossierObj->organisation->nom,
+            'organisation_user_id' => $dossierObj->organisation->user_id,
+            'organisation_user_id_type' => gettype($dossierObj->organisation->user_id)
+        ]);
+
+        // ✅ CORRECTION 2: Vérification d'accès avec conversion de type ET logs détaillés
+        $authUserId = (int)auth()->id();
+        $orgUserId = (int)$dossierObj->organisation->user_id;
+        
+        \Log::info("=== VÉRIFICATION ACCÈS ===", [
+            'auth_user_id' => $authUserId,
+            'org_user_id' => $orgUserId,
+            'auth_user_id_type' => gettype($authUserId),
+            'org_user_id_type' => gettype($orgUserId),
+            'strict_comparison' => ($orgUserId === $authUserId),
+            'loose_comparison' => ($orgUserId == $authUserId)
+        ]);
+
+        if ($orgUserId !== $authUserId) {
+            \Log::warning("=== ACCÈS REFUSÉ - DÉTAILS ===", [
+                'reason' => 'User ID mismatch',
+                'expected_user_id' => $orgUserId,
+                'actual_user_id' => $authUserId,
+                'dossier_id' => $dossierObj->id,
+                'organisation_nom' => $dossierObj->organisation->nom
+            ]);
+            
+            return redirect()->route('operator.dossiers.index')
+                ->with('error', 'Vous n\'êtes pas autorisé à consulter ce dossier');
+        }
+
+        \Log::info("=== ACCÈS AUTORISÉ - CONSTRUCTION DONNÉES ===");
+
+        // ✅ CORRECTION 3: Vérification délai temporairement désactivée pour debug
+        if (false) { // Désactivé temporairement pour tests
+            if ($dossierObj->submitted_at && $dossierObj->submitted_at->diffInHours(now()) > 24) {
+                \Log::info("=== DÉLAI DÉPASSÉ ===", [
+                    'submitted_at' => $dossierObj->submitted_at->toDateTimeString(),
+                    'hours_diff' => $dossierObj->submitted_at->diffInHours(now())
+                ]);
+                
+                return redirect()->route('operator.dashboard')
+                    ->with('warning', 'Cette page de confirmation n\'est plus disponible.');
+            }
+        }
+
+        // Récupérer les données de session ou les reconstituer
+        $sessionData = session('success_data');
+        
+        if (!$sessionData) {
+            \Log::info("=== RECONSTRUCTION DONNÉES SESSION ===");
+            $sessionData = $this->reconstructConfirmationData($dossierObj);
+        } else {
+            \Log::info("=== DONNÉES SESSION TROUVÉES ===");
+        }
+
+        // ✅ CONSTRUCTION DES DONNÉES DE CONFIRMATION
+        $confirmationData = [
+            'organisation' => $dossierObj->organisation,
+            'dossier' => $dossierObj,
+            'numero_recepisse' => $dossierObj->organisation->numero_recepisse,
+            'numero_dossier' => $dossierObj->numero_dossier,
+            'qr_code' => $this->getQrCodeForDossier($dossierObj),
+            'adherents_stats' => $sessionData['adherents_stats'] ?? $this->calculateAdherentsStats($dossierObj),
+            'anomalies' => $sessionData['anomalies'] ?? $this->getAnomaliesFromDossier($dossierObj),
+            'accuse_reception_path' => $this->getAccuseReceptionPath($dossierObj),
+            'accuse_reception_url' => $this->getAccuseReceptionDownloadUrl($dossierObj),
+            'delai_traitement' => '72 heures ouvrées',
+            'message_legal' => $this->getMessageLegal(),
+            'prochaines_etapes' => $this->getProchainesEtapes(),
+            'contact_support' => $this->getContactSupport(),
+            'submitted_at' => $dossierObj->submitted_at ?? $dossierObj->created_at ?? now(),
+            'estimated_completion' => $this->calculateEstimatedCompletion($dossierObj)
+        ];
+
+        // Nettoyer la session
+        session()->forget('success_data');
+
+        \Log::info('=== PAGE CONFIRMATION CONSULTÉE AVEC SUCCÈS ===', [
+            'user_id' => auth()->id(),
+            'dossier_id' => $dossierObj->id,
+            'organisation_nom' => $dossierObj->organisation->nom,
+            'access_time' => now(),
+            'organisation_type' => $dossierObj->organisation->type
+        ]);
+
+        \Log::info("=== RETOUR VUE CONFIRMATION ===");
+
+        return view('operator.dossiers.confirmation', compact('confirmationData'));
+
+    } catch (\Exception $e) {
+        \Log::error('=== ERREUR MÉTHODE CONFIRMATION ===', [
+            'user_id' => auth()->id(),
+            'dossier_param' => $dossier,
+            'error_message' => $e->getMessage(),
+            'error_file' => $e->getFile(),
+            'error_line' => $e->getLine(),
+            'error_trace' => $e->getTraceAsString()
+        ]);
+
+        return redirect()->route('operator.dashboard')
+            ->with('error', 'Impossible d\'afficher la page de confirmation. Erreur: ' . $e->getMessage());
     }
+}
 
     /**
      * ✅ MÉTHODE AUXILIAIRE - Reconstituer les données de confirmation
@@ -756,43 +697,13 @@ class DossierController extends Controller
     }
 
     /**
-     * ✅ MÉTHODE CORRIGÉE - Obtenir le QR Code pour le dossier
-     * CORRECTION: Utiliser la relation polymorphique au lieu de dossier_id
+     * ✅ MÉTHODE AUXILIAIRE - Obtenir le QR Code pour le dossier
      */
     private function getQrCodeForDossier(Dossier $dossier)
     {
-        try {
-            \Log::info('=== RECHERCHE QR CODE POUR DOSSIER ===', [
-                'dossier_id' => $dossier->id,
-                'using_polymorphic_relation' => true
-            ]);
-
-            // ✅ CORRECTION: Utiliser la relation polymorphique correcte
-            $qrCode = \App\Models\QrCode::where('verifiable_type', 'App\\Models\\Dossier')
-                ->where('verifiable_id', $dossier->id)
-                ->where('type', 'dossier')
-                ->where('is_active', 1)
-                ->first();
-
-            \Log::info('=== QR CODE RÉSULTAT ===', [
-                'dossier_id' => $dossier->id,
-                'qr_code_found' => $qrCode !== null,
-                'qr_code_id' => $qrCode ? $qrCode->id : null,
-                'qr_code_code' => $qrCode ? $qrCode->code : null
-            ]);
-
-            return $qrCode;
-
-        } catch (\Exception $e) {
-            \Log::error('=== ERREUR RECHERCHE QR CODE ===', [
-                'dossier_id' => $dossier->id,
-                'error' => $e->getMessage(),
-                'line' => $e->getLine()
-            ]);
-
-            // Retourner null en cas d'erreur pour ne pas bloquer la page
-            return null;
-        }
+        return \App\Models\QrCode::where('dossier_id', $dossier->id)
+            ->where('type', 'dossier')
+            ->first();
     }
 
     /**
