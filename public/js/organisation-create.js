@@ -4217,7 +4217,7 @@ function validateAllSteps() {
 }
 
 /**
- * Soumission finale du formulaire avec rapport d'anomalies
+ * ✅ SOUMISSION FINALE CORRIGÉE - Avec redirection dossier_id
  */
 async function submitForm() {
     console.log('📤 Début de la soumission du formulaire avec rapport d\'anomalies...');
@@ -4228,24 +4228,18 @@ async function submitForm() {
         return false;
     }
 
-    // ✅ AJOUTER ICI :
-const analysis = analyzeFormData();
-if (analysis.fieldCount > 1000) {
-    console.warn('⚠️ Trop de champs:', analysis.fieldCount);
-}
+    // Analyser les données du formulaire pour diagnostic
+    const analysis = analyzeFormDataForDebug();
+    if (analysis.fieldCount > 1000) {
+        console.warn('⚠️ Trop de champs:', analysis.fieldCount);
+        showNotification(`Attention: ${analysis.fieldCount} champs détectés (limite recommandée: 1000)`, 'warning');
+    }
+    if (analysis.totalSize > 50 * 1024 * 1024) { // 50MB
+        console.warn('⚠️ Taille importante:', (analysis.totalSize / 1024 / 1024).toFixed(2) + ' MB');
+        showNotification(`Attention: ${(analysis.totalSize / 1024 / 1024).toFixed(2)} MB de données à envoyer`, 'warning');
+    }
     
     try {
-        // Afficher le loader
-        const analysis = analyzeFormData();
-        if (analysis.fieldCount > 1000) {
-            console.warn('⚠️ Trop de champs:', analysis.fieldCount);
-            showNotification(`Attention: ${analysis.fieldCount} champs détectés (limite recommandée: 1000)`, 'warning');
-        }
-        if (analysis.totalSize > 50 * 1024 * 1024) { // 50MB
-            console.warn('⚠️ Taille importante:', (analysis.totalSize / 1024 / 1024).toFixed(2) + ' MB');
-            showNotification(`Attention: ${(analysis.totalSize / 1024 / 1024).toFixed(2)} MB de données à envoyer`, 'warning');
-        }
-        
         // Afficher le loader
         showGlobalLoader(true);
         updateSaveIndicator('saving');
@@ -4318,6 +4312,9 @@ if (analysis.fieldCount > 1000) {
             const result = await response.json();
             
             if (result.success) {
+                // ✅ CORRECTION PRINCIPALE : Gestion de la redirection avec dossier_id
+                console.log('🎯 CORRECTION REDIRECTION - Analyse de la réponse serveur:', result);
+                
                 // Succès avec message amélioré
                 let successMsg = '🎉 Dossier soumis avec succès !';
                 if (OrganisationApp.rapportAnomalies.enabled) {
@@ -4335,40 +4332,79 @@ if (analysis.fieldCount > 1000) {
                     submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Dossier soumis';
                 }
                 
-                // Redirection
-                if (result.redirect) {
-                    setTimeout(() => {
-                        window.location.href = result.redirect;
-                    }, 3000);
+                // ✅ REDIRECTION CORRIGÉE - Priorité aux données structurées
+                let redirectUrl = null;
+                
+                // PRIORITÉ 1 : Utiliser redirect_url si fourni explicitement
+                if (result.data && result.data.redirect_url) {
+                    redirectUrl = result.data.redirect_url;
+                    console.log('✅ REDIRECTION via result.data.redirect_url:', redirectUrl);
+                    
+                // PRIORITÉ 2 : Construire avec dossier_id si disponible
+                } else if (result.data && result.data.dossier_id) {
+                    redirectUrl = `/operator/dossiers/confirmation/${result.data.dossier_id}`;
+                    console.log('✅ REDIRECTION construite avec dossier_id:', result.data.dossier_id, '→', redirectUrl);
+                    
+                // PRIORITÉ 3 : Utiliser result.redirect si fourni
+                } else if (result.redirect) {
+                    redirectUrl = result.redirect;
+                    console.log('✅ REDIRECTION via result.redirect:', redirectUrl);
+                    
+                    // ⚠️ VÉRIFICATION : S'assurer que result.redirect utilise dossier_id
+                    if (result.data && result.data.organisation_id && redirectUrl.includes(result.data.organisation_id)) {
+                        console.warn('⚠️ ATTENTION: result.redirect semble utiliser organisation_id au lieu de dossier_id');
+                        
+                        // Corriger automatiquement si dossier_id est disponible
+                        if (result.data.dossier_id) {
+                            redirectUrl = redirectUrl.replace(result.data.organisation_id, result.data.dossier_id);
+                            console.log('🔧 CORRECTION AUTOMATIQUE: Remplacement organisation_id par dossier_id:', redirectUrl);
+                        }
+                    }
+                    
+                // PRIORITÉ 4 : URL par défaut
                 } else {
-                    setTimeout(() => {
-                        window.location.href = '/operator/dossiers';
-                    }, 3000);
+                    redirectUrl = '/operator/dossiers';
+                    console.log('✅ REDIRECTION par défaut vers la liste des dossiers');
                 }
                 
+                // ✅ LOG FINAL POUR DEBUG
+                console.log('📊 DONNÉES DE REDIRECTION FINALES:', {
+                    redirectUrl: redirectUrl,
+                    resultData: result.data,
+                    resultRedirect: result.redirect,
+                    organisationId: result.data?.organisation_id,
+                    dossierId: result.data?.dossier_id,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Effectuer la redirection
+                setTimeout(() => {
+                    console.log('🚀 REDIRECTION VERS:', redirectUrl);
+                    window.location.href = redirectUrl;
+                }, 3000);
+                
             } else {
-                // Erreur métier
-                // ✅ ERREUR MÉTIER AVEC DEBUG DÉTAILLÉ
-    const errorMessage = result.message || 'Erreur lors de la soumission';
-    
-    // Afficher d'abord la notification basique
-    showNotification(errorMessage, 'danger');
-    
-    // Puis afficher le modal de debug avec tous les détails
-    showErrorModal(
-        'Erreur de Validation',
-        errorMessage,
-        {
-            success: result.success,
-            message: result.message,
-            errors: result.errors,
-            data: result.data,
-            debug: result.debug,
-            timestamp: new Date().toISOString(),
-            formAnalysis: analyzeFormDataForDebug()
-        },
-        true
-    );
+                // Erreur métier avec debug détaillé
+                const errorMessage = result.message || 'Erreur lors de la soumission';
+                
+                // Afficher d'abord la notification basique
+                showNotification(errorMessage, 'danger');
+                
+                // Puis afficher le modal de debug avec tous les détails
+                showErrorModal(
+                    'Erreur de Validation',
+                    errorMessage,
+                    {
+                        success: result.success,
+                        message: result.message,
+                        errors: result.errors,
+                        data: result.data,
+                        debug: result.debug,
+                        timestamp: new Date().toISOString(),
+                        formAnalysis: analyzeFormDataForDebug()
+                    },
+                    true
+                );
                 
                 if (result.errors) {
                     Object.keys(result.errors).forEach(field => {
@@ -4381,86 +4417,87 @@ if (analysis.fieldCount > 1000) {
                 }
             }
         } else {
-             // ✅ GESTION AMÉLIORÉE DES ERREURS HTTP
-    let errorResponse = null;
-    try {
-        errorResponse = await response.json();
-    } catch (e) {
-        try {
-            errorResponse = await response.text();
-        } catch (e2) {
-            errorResponse = 'Impossible de lire la réponse du serveur';
-        }
-    }
-    
-    const errorDetails = {
-        status: response.status,
-        statusText: response.statusText,
-        url: response.url,
-        headers: Object.fromEntries(response.headers.entries()),
-        response: errorResponse,
-        timestamp: new Date().toISOString()
-    };
-    
-    // Afficher le modal de debug au lieu de juste lancer une erreur
-    showErrorModal(
-        `Erreur HTTP ${response.status}`,
-        `Le serveur a retourné une erreur : ${response.status} ${response.statusText}`,
-        errorDetails,
-        true
-    );
-    
-    return; // Sortir de la fonction au lieu de throw
+            // Gestion améliorée des erreurs HTTP
+            let errorResponse = null;
+            try {
+                errorResponse = await response.json();
+            } catch (e) {
+                try {
+                    errorResponse = await response.text();
+                } catch (e2) {
+                    errorResponse = 'Impossible de lire la réponse du serveur';
+                }
+            }
+            
+            const errorDetails = {
+                status: response.status,
+                statusText: response.statusText,
+                url: response.url,
+                headers: Object.fromEntries(response.headers.entries()),
+                response: errorResponse,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Afficher le modal de debug au lieu de juste lancer une erreur
+            showErrorModal(
+                `Erreur HTTP ${response.status}`,
+                `Le serveur a retourné une erreur : ${response.status} ${response.statusText}`,
+                errorDetails,
+                true
+            );
+            
+            return; // Sortir de la fonction au lieu de throw
         }
         
     } catch (error) {
         console.error('❌ Erreur soumission:', error);
-    
-    // ✅ GESTION AVANCÉE DES ERREURS AVEC DEBUG
-    let errorTitle = 'Erreur de Soumission';
-    let errorMessage = 'Une erreur est survenue lors de la soumission du formulaire.';
-    let serverResponse = null;
-    
-    try {
-        // Analyser la réponse si c'est une erreur fetch
-        if (error.response) {
-            serverResponse = error.response;
-            errorMessage = error.message || 'Erreur de communication avec le serveur.';
-        } else if (error.message) {
-            errorMessage = error.message;
+        
+        // Gestion avancée des erreurs avec debug
+        let errorTitle = 'Erreur de Soumission';
+        let errorMessage = 'Une erreur est survenue lors de la soumission du formulaire.';
+        let serverResponse = null;
+        
+        try {
+            // Analyser la réponse si c'est une erreur fetch
+            if (error.response) {
+                serverResponse = error.response;
+                errorMessage = error.message || 'Erreur de communication avec le serveur.';
+            } else if (error.message) {
+                errorMessage = error.message;
+                serverResponse = {
+                    error: error.name,
+                    message: error.message,
+                    stack: error.stack,
+                    timestamp: new Date().toISOString()
+                };
+            }
+            
+            // Ajouter l'analyse du formulaire au debug
+            const analysisResult = analyzeFormDataForDebug();
+            if (serverResponse) {
+                serverResponse.formAnalysis = analysisResult;
+            } else {
+                serverResponse = { formAnalysis: analysisResult };
+            }
+            
+        } catch (debugError) {
+            console.warn('Erreur lors de l\'analyse debug:', debugError);
             serverResponse = {
-                error: error.name,
-                message: error.message,
-                stack: error.stack,
+                originalError: error.toString(),
+                debugError: debugError.toString(),
                 timestamp: new Date().toISOString()
             };
         }
         
-        // Ajouter l'analyse du formulaire au debug
-        const analysisResult = analyzeFormDataForDebug();
-        if (serverResponse) {
-            serverResponse.formAnalysis = analysisResult;
-        } else {
-            serverResponse = { formAnalysis: analysisResult };
-        }
-        
-    } catch (debugError) {
-        console.warn('Erreur lors de l\'analyse debug:', debugError);
-        serverResponse = {
-            originalError: error.toString(),
-            debugError: debugError.toString(),
-            timestamp: new Date().toISOString()
-        };
-    }
-    
-    // Afficher le modal d'erreur avec tous les détails
-    showErrorModal(errorTitle, errorMessage, serverResponse, true);
+        // Afficher le modal d'erreur avec tous les détails
+        showErrorModal(errorTitle, errorMessage, serverResponse, true);
 
     } finally {
         showGlobalLoader(false);
         updateSaveIndicator('success');
     }
 }
+
 
 /**
  * Afficher/masquer le loader global
