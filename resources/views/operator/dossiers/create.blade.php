@@ -1468,4 +1468,6 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="{{ asset('js/organisation-create.js') }}"></script>
+    <!-- NOUVEAU : Système de chunking -->
+    <script src="{{ asset('js/chunking-import.js') }}"></script>
 @endpush

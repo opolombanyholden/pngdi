@@ -1,4 +1,149 @@
-# Augmenter les limites de requête
-LimitRequestBody 52428800
-LimitRequestFields 5000
-LimitRequestFieldSize 8190
+# ========================================================================
+# SOLUTION 3 - CONFIGURATION .HTACCESS AVANCÉE POUR GROS VOLUMES
+# ========================================================================
+# Fichier: public/.htaccess (à la racine du projet Laravel)
+
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+# ========================================================================
+# CONFIGURATION PHP POUR GROS VOLUMES - OVERRIDES SPÉCIFIQUES
+# ========================================================================
+
+<IfModule mod_php7.c>
+    # LIMITES PRINCIPALES - DÉPASSEMENT php.ini si nécessaire
+    php_value post_max_size 2048M
+    php_value upload_max_filesize 1024M
+    php_value max_input_vars 500000
+    php_value memory_limit 4096M
+    
+    # LIMITES TEMPORELLES - IMPORTS TRÈS LONGS
+    php_value max_execution_time 3600
+    php_value max_input_time 3600
+    php_value default_socket_timeout 3600
+    
+    # OPTIMISATIONS PERFORMANCE
+    php_value max_input_nesting_level 256
+    php_value max_file_uploads 100
+    php_value output_buffering 16384
+    
+    # GESTION ERREURS POUR DEBUG
+    php_value log_errors On
+    php_value display_errors Off
+    php_value error_reporting "E_ALL & ~E_NOTICE & ~E_STRICT & ~E_DEPRECATED"
+</IfModule>
+
+# ========================================================================
+# CONFIGURATION APACHE POUR GRANDES REQUÊTES
+# ========================================================================
+
+<IfModule mod_reqtimeout.c>
+    # Augmenter les timeouts pour uploads volumineux
+    RequestReadTimeout header=600,MinRate=500 body=1800,MinRate=500
+</IfModule>
+
+<IfModule mod_security.c>
+    # Désactiver mod_security pour les uploads volumineux (si installé)
+    SecRequestBodyLimit 2147483647
+    SecRequestBodyNoFilesLimit 131072
+</IfModule>
+
+# ========================================================================
+# RÈGLES SPÉCIFIQUES POUR ROUTES D'IMPORT
+# ========================================================================
+
+# Configuration spéciale pour les routes d'organisations
+<Files "index.php">
+    <If "%{QUERY_STRING} =~ /organisations/ || %{REQUEST_URI} =~ /operator\/organisations/">
+        php_value post_max_size 4096M
+        php_value upload_max_filesize 2048M
+        php_value max_execution_time 7200
+        php_value memory_limit 8192M
+    </If>
+</Files>
+
+# ========================================================================
+# HEADERS DE SÉCURITÉ ET OPTIMISATION
+# ========================================================================
+
+<IfModule mod_headers.c>
+    # Augmenter les limites côté client
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-Frame-Options DENY
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Timeout personnalisé pour requêtes longues
+    Header always set Keep-Alive "timeout=1800, max=1000"
+</IfModule>
+
+# ========================================================================
+# GESTION CACHE POUR GROS FICHIERS
+# ========================================================================
+
+<IfModule mod_expires.c>
+    ExpiresActive on
+    
+    # Pas de cache pour les uploads/imports
+    <FilesMatch "\.(php)$">
+        ExpiresDefault "access plus 0 seconds"
+    </FilesMatch>
+</IfModule>
+
+# ========================================================================
+# COMPRESSION - DÉSACTIVÉE POUR UPLOADS VOLUMINEUX
+# ========================================================================
+
+<IfModule mod_deflate.c>
+    # Désactiver la compression pour les uploads volumineux
+    SetEnvIfNoCase Request_URI "\/operator\/organisations" no-gzip dont-vary
+    SetEnvIfNoCase Request_URI "\/api\/organisations" no-gzip dont-vary
+    SetEnvIfNoCase Request_URI "\/import\/" no-gzip dont-vary
+</IfModule>
+
+# ========================================================================
+# INSTRUCTIONS D'APPLICATION:
+# ========================================================================
+# 
+# 1. Créer ou modifier le fichier: public/.htaccess
+# 
+# 2. Copier la configuration ci-dessus
+# 
+# 3. Adapter les chemins selon votre structure:
+#    - Vérifier que les routes correspondent à votre application
+#    - Ajuster les limites selon vos besoins
+# 
+# 4. Tester la configuration:
+#    - Redémarrer Apache si nécessaire
+#    - Vérifier avec phpinfo() que les valeurs sont appliquées
+# 
+# 5. Surveiller les logs d'erreur Apache/PHP
+# 
+# AVANTAGES:
+# - Configuration granulaire par route
+# - Overrides spécifiques pour imports massifs
+# - Compatible avec la plupart des hébergeurs
+# - Logs détaillés pour debug
+# 
+# INCONVÉNIENTS:
+# - Dépend de la configuration Apache
+# - Peut ne pas fonctionner sur tous les serveurs
+# - Nécessite mod_php (pas PHP-FPM)

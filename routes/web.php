@@ -1423,3 +1423,79 @@ if (file_exists(__DIR__.'/admin.php')) {
 if (file_exists(__DIR__.'/operator.php')) {
     require __DIR__.'/operator.php';
 }
+
+// Routes pour gestion CSRF longue durée
+Route::get('/csrf-token', function () {
+    return response()->json([
+        'csrf_token' => csrf_token(),
+        'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString()
+    ]);
+})->middleware('auth');
+
+/*
+|--------------------------------------------------------------------------
+| ROUTES CHUNKING - Import de gros volumes d'adhérents (WEB ALTERNATIVE)
+| Compatible avec authentification session Laravel standard
+|--------------------------------------------------------------------------
+*/
+
+use App\Http\Controllers\Api\ChunkProcessorController;
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    
+    /**
+     * Traitement des chunks d'adhérents (MODE WEB ALTERNATIVE)
+     * POST /chunking/process-chunk
+     */
+    Route::post('/chunking/process-chunk', [ChunkProcessorController::class, 'processChunk'])
+        ->name('web.chunking.process-chunk');
+    
+    /**
+     * Rafraîchissement du token CSRF (MODE WEB ALTERNATIVE)
+     * GET /chunking/csrf-refresh
+     */
+    Route::get('/chunking/csrf-refresh', [ChunkProcessorController::class, 'refreshCSRF'])
+        ->name('web.chunking.csrf-refresh');
+    
+    /**
+     * Statistiques de performance du chunking (MODE WEB ALTERNATIVE)
+     * GET /chunking/performance
+     */
+    Route::get('/chunking/performance', [ChunkProcessorController::class, 'getPerformanceStats'])
+        ->name('web.chunking.performance');
+    
+    /**
+     * Health check pour le chunking (MODE WEB ALTERNATIVE)
+     * GET /chunking/health
+     */
+    Route::get('/chunking/health', function () {
+        return response()->json([
+            'success' => true,
+            'system' => 'chunking',
+            'status' => 'operational',
+            'mode' => 'web_routes_alternative',
+            'version' => '1.2',
+            'timestamp' => now()->toISOString(),
+            'user_authenticated' => auth()->check(),
+            'user_id' => auth()->id(),
+            'user_role' => auth()->user()->role ?? 'N/A',
+            'limits' => [
+                'max_chunk_size' => 100,
+                'max_execution_time' => 25,
+                'memory_limit' => '256M'
+            ],
+            'middleware' => 'web + auth + verified (session-based)',
+            'debug_info' => [
+                'csrf_token_present' => !empty(csrf_token()),
+                'session_id' => session()->getId(),
+                'session_lifetime' => config('session.lifetime')
+            ]
+        ]);
+    })->name('web.chunking.health');
+    
+});
+
+// Route publique pour refresh CSRF (sans auth) - Alternative Web
+Route::get('/chunking/csrf-refresh-public', [ChunkProcessorController::class, 'refreshCSRF'])
+    ->middleware(['throttle:10,1'])
+    ->name('web.chunking.csrf-refresh-public');
