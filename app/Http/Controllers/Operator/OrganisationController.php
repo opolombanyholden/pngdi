@@ -417,6 +417,11 @@ class OrganisationController extends Controller
      */
     public function store(Request $request)
     {
+       
+        // ✅ FORCE EXTENSION TIMEOUT
+        @set_time_limit(0); // Pas de limite de temps
+        @ini_set('memory_limit', '1G'); // 1GB de mémoire
+        
         // Log de débogage pour diagnostiquer
         \Log::info('Début soumission organisation v3', [
             'user_id' => auth()->id(),

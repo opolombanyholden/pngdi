@@ -4219,16 +4219,8 @@ function validateAllSteps() {
 /**
  * ✅ SOUMISSION FINALE CORRIGÉE - Avec redirection dossier_id
  */
-/**
- * ✅ CORRECTION TIMEOUT - Soumission adaptative par chunks
- * À intégrer dans organisation-create.js
- */
-
-/**
- * ✅ SOUMISSION FINALE CORRIGÉE - Avec chunking adaptatif pour gros volumes
- */
 async function submitForm() {
-    console.log('📤 Début de la soumission du formulaire avec détection volume...');
+    console.log('📤 Début de la soumission du formulaire avec rapport d\'anomalies...');
     
     // Validation finale complète
     if (!validateAllSteps()) {
@@ -4236,236 +4228,44 @@ async function submitForm() {
         return false;
     }
 
-    // ✅ NOUVEAU : Détection automatique du volume pour chunking
-    const totalAdherents = OrganisationApp.adherents.length;
-    const CHUNKING_THRESHOLD = 200; // Seuil pour activation chunking
-    
-    console.log(`📊 Volume détecté: ${totalAdherents} adhérents (seuil: ${CHUNKING_THRESHOLD})`);
-    
-    // Décision automatique : chunking ou soumission normale
-    if (totalAdherents >= CHUNKING_THRESHOLD) {
-        console.log('📦 Gros volume détecté - Soumission par chunks activée');
-        return await submitFormWithChunking();
-    } else {
-        console.log('📋 Volume standard - Soumission normale');
-        return await submitFormNormal();
+    // Analyser les données du formulaire pour diagnostic
+    const analysis = analyzeFormDataForDebug();
+    if (analysis.fieldCount > 1000) {
+        console.warn('⚠️ Trop de champs:', analysis.fieldCount);
+        showNotification(`Attention: ${analysis.fieldCount} champs détectés (limite recommandée: 1000)`, 'warning');
     }
-}
-
-/**
- * ✅ NOUVELLE FONCTION : Soumission avec chunking pour gros volumes
- */
-/**
- * ✅ CORRECTION FONCTION submitFormWithChunking()
- * À remplacer dans organisation-create.js ligne ~2900
- */
-
-async function submitFormWithChunking() {
-    try {
-        showGlobalLoader(true);
-        showNotification('📦 Gros volume détecté - Soumission par lots en cours...', 'info', 8000);
-        
-        const CHUNK_SIZE = 500; // Adhérents par chunk
-        const totalAdherents = OrganisationApp.adherents.length;
-        const totalChunks = Math.ceil(totalAdherents / CHUNK_SIZE);
-        
-        console.log(`📊 Division soumission: ${totalChunks} chunks de ${CHUNK_SIZE} adhérents max`);
-        
-        // Données de base (sans les adhérents)
-        const baseFormData = new FormData();
-        const data = collectFormData();
-        
-        // Token CSRF
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        if (csrfToken) {
-            baseFormData.append('_token', csrfToken);
-        }
-        
-        // Données de base
-        Object.keys(data).forEach(key => {
-            if (data[key] !== null && data[key] !== undefined) {
-                baseFormData.append(key, data[key]);
-            }
-        });
-        
-        // Fondateurs et métadonnées
-        baseFormData.append('fondateurs', JSON.stringify(OrganisationApp.fondateurs));
-        baseFormData.append('selectedOrgType', OrganisationApp.selectedOrgType);
-        baseFormData.append('totalFondateurs', OrganisationApp.fondateurs.length);
-        baseFormData.append('totalAdherents', totalAdherents);
-        baseFormData.append('totalDocuments', Object.keys(OrganisationApp.documents).length);
-        
-        // ✅ CORRECTION PRINCIPALE : Ajouter tous les adhérents même pour chunking
-        baseFormData.append('adherents', JSON.stringify(OrganisationApp.adherents));
-        
-        // ✅ CHUNKING : Marquer comme soumission par chunks
-        baseFormData.append('is_chunked_submission', 'true');
-        baseFormData.append('total_chunks', totalChunks);
-        baseFormData.append('chunk_size', CHUNK_SIZE);
-        
-        // Rapport d'anomalies si présent
-        if (OrganisationApp.rapportAnomalies.enabled) {
-            const rapport = generateRapportAnomalies();
-            const rapportHTML = generateRapportAnomaliesHTML();
-            
-            baseFormData.append('rapport_anomalies_json', JSON.stringify(rapport));
-            baseFormData.append('rapport_anomalies_html', rapportHTML);
-            baseFormData.append('has_anomalies', 'true');
-        } else {
-            baseFormData.append('has_anomalies', 'false');
-        }
-        
-        // Documents
-        Object.keys(OrganisationApp.documents).forEach(docType => {
-            const doc = OrganisationApp.documents[docType];
-            if (doc.file) {
-                baseFormData.append(`documents[${docType}]`, doc.file);
-            }
-        });
-        
-        // ✅ SOUMISSION PAR CHUNKS - AVEC ADHERENTS COMPLET
-        let allResults = [];
-        const formElement = document.getElementById('organisationForm');
-        
-        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-            const startIndex = chunkIndex * CHUNK_SIZE;
-            const endIndex = Math.min(startIndex + CHUNK_SIZE, totalAdherents);
-            const chunkAdherents = OrganisationApp.adherents.slice(startIndex, endIndex);
-            
-            console.log(`📤 Envoi chunk ${chunkIndex + 1}/${totalChunks}: adhérents ${startIndex}-${endIndex-1}`);
-            
-            // Créer FormData pour ce chunk
-            const chunkFormData = new FormData();
-            
-            // Copier les données de base
-            for (let [key, value] of baseFormData.entries()) {
-                chunkFormData.append(key, value);
-            }
-            
-            // Ajouter les métadonnées du chunk (en plus du tableau complet)
-            chunkFormData.append('adherents_chunk', JSON.stringify(chunkAdherents));
-            chunkFormData.append('chunk_index', chunkIndex);
-            chunkFormData.append('is_final_chunk', chunkIndex === totalChunks - 1 ? 'true' : 'false');
-            
-            // Envoyer le chunk
-            const response = await fetch(formElement.action, {
-                method: 'POST',
-                body: chunkFormData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`❌ Erreur chunk ${chunkIndex + 1}:`, errorText);
-                throw new Error(`Erreur chunk ${chunkIndex + 1}: ${response.status} ${response.statusText}`);
-            }
-            
-            const result = await response.json();
-            allResults.push(result);
-            
-            // Mise à jour progression
-            const progress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
-            showNotification(`📊 Progression: ${progress}% (chunk ${chunkIndex + 1}/${totalChunks})`, 'info', 3000);
-            
-            // Pause entre chunks pour éviter surcharge serveur
-            if (chunkIndex < totalChunks - 1) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-        }
-        
-        // ✅ TRAITEMENT RÉSULTAT FINAL
-        const finalResult = allResults[allResults.length - 1]; // Dernier chunk contient la réponse finale
-        
-        if (finalResult.success) {
-            // ✅ CORRECTION REDIRECTION : Utiliser dossier_id
-            let redirectUrl = null;
-            
-            if (finalResult.data && finalResult.data.redirect_url) {
-                redirectUrl = finalResult.data.redirect_url;
-                console.log('✅ REDIRECTION via result.data.redirect_url:', redirectUrl);
-            } else if (finalResult.data && finalResult.data.dossier_id) {
-                redirectUrl = `/operator/dossiers/confirmation/${finalResult.data.dossier_id}`;
-                console.log('✅ REDIRECTION construite avec dossier_id:', finalResult.data.dossier_id, '→', redirectUrl);
-            } else if (finalResult.redirect) {
-                redirectUrl = finalResult.redirect;
-                console.log('✅ REDIRECTION via result.redirect:', redirectUrl);
-            } else {
-                redirectUrl = '/operator/dossiers';
-                console.log('✅ REDIRECTION par défaut vers la liste des dossiers');
-            }
-            
-            // Message de succès
-            let successMsg = '🎉 Dossier soumis avec succès par chunks !';
-            if (OrganisationApp.rapportAnomalies.enabled) {
-                successMsg += '\n📋 Le rapport d\'anomalies a été transmis automatiquement.';
-            }
-            successMsg += `\n📊 ${totalAdherents} adhérents traités en ${totalChunks} lots.`;
-            
-            showNotification(successMsg, 'success', 10000);
-            
-            // Nettoyer et rediriger
-            localStorage.removeItem('pngdi_organisation_draft');
-            
-            setTimeout(() => {
-                console.log('🚀 REDIRECTION VERS:', redirectUrl);
-                window.location.href = redirectUrl;
-            }, 3000);
-            
-        } else {
-            throw new Error(finalResult.message || 'Erreur lors de la soumission par chunks');
-        }
-        
-    } catch (error) {
-        console.error('❌ Erreur soumission par chunks:', error);
-        
-        // Afficher le debug modal avec détails complets
-        if (typeof showErrorModal === 'function') {
-            showErrorModal('Erreur Soumission Chunking', error.message, {
-                totalAdherents: OrganisationApp.adherents.length,
-                chunksDetected: Math.ceil(OrganisationApp.adherents.length / 500),
-                errorDetails: error.toString(),
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
-        }
-        
-    } finally {
-        showGlobalLoader(false);
+    if (analysis.totalSize > 50 * 1024 * 1024) { // 50MB
+        console.warn('⚠️ Taille importante:', (analysis.totalSize / 1024 / 1024).toFixed(2) + ' MB');
+        showNotification(`Attention: ${(analysis.totalSize / 1024 / 1024).toFixed(2)} MB de données à envoyer`, 'warning');
     }
-}
-
-/**
- * ✅ FONCTION : Soumission normale (volumes < 200 adhérents)
- */
-async function submitFormNormal() {
+    
     try {
+        // Afficher le loader
         showGlobalLoader(true);
+        updateSaveIndicator('saving');
         
-        // Préparation des données standard
+        // Préparation des données
         const formData = new FormData();
         const data = collectFormData();
         
-        // Token CSRF
+        // Ajouter le token CSRF
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         if (csrfToken) {
             formData.append('_token', csrfToken);
         }
         
-        // Données de base
+        // Ajouter les données de base
         Object.keys(data).forEach(key => {
             if (data[key] !== null && data[key] !== undefined) {
                 formData.append(key, data[key]);
             }
         });
         
-        // Fondateurs et adhérents (volume normal)
+        // Ajouter les fondateurs et adhérents
         formData.append('fondateurs', JSON.stringify(OrganisationApp.fondateurs));
         formData.append('adherents', JSON.stringify(OrganisationApp.adherents));
         
-        // Rapport d'anomalies si présent
+        // Ajouter le rapport d'anomalies si présent
         if (OrganisationApp.rapportAnomalies.enabled) {
             const rapport = generateRapportAnomalies();
             const rapportHTML = generateRapportAnomaliesHTML();
@@ -4473,18 +4273,20 @@ async function submitFormNormal() {
             formData.append('rapport_anomalies_json', JSON.stringify(rapport));
             formData.append('rapport_anomalies_html', rapportHTML);
             formData.append('has_anomalies', 'true');
+            
+            console.log('📋 Rapport d\'anomalies inclus dans la soumission');
         } else {
             formData.append('has_anomalies', 'false');
         }
         
-        // Métadonnées
+        // Ajouter les métadonnées
         formData.append('selectedOrgType', OrganisationApp.selectedOrgType);
         formData.append('totalFondateurs', OrganisationApp.fondateurs.length);
         formData.append('totalAdherents', OrganisationApp.adherents.length);
         formData.append('totalDocuments', Object.keys(OrganisationApp.documents).length);
-        formData.append('is_chunked_submission', 'false');
+        formData.append('qualiteAdherents', getQualiteStatut());
         
-        // Documents
+        // Ajouter les documents
         Object.keys(OrganisationApp.documents).forEach(docType => {
             const doc = OrganisationApp.documents[docType];
             if (doc.file) {
@@ -4492,9 +4294,9 @@ async function submitFormNormal() {
             }
         });
         
-        console.log('📋 Données préparées pour soumission normale');
+        console.log('📋 Données préparées pour soumission v1.2');
         
-        // Soumettre
+        // Soumettre via fetch
         const formElement = document.getElementById('organisationForm');
         const response = await fetch(formElement.action, {
             method: 'POST',
@@ -4504,53 +4306,197 @@ async function submitFormNormal() {
             }
         });
         
+        console.log('📡 Réponse reçue du serveur:', response.status);
+        
         if (response.ok) {
             const result = await response.json();
             
             if (result.success) {
-                // Succès - même logique de redirection
-                let redirectUrl = null;
+                // ✅ CORRECTION PRINCIPALE : Gestion de la redirection avec dossier_id
+                console.log('🎯 CORRECTION REDIRECTION - Analyse de la réponse serveur:', result);
                 
-                if (result.data && result.data.redirect_url) {
-                    redirectUrl = result.data.redirect_url;
-                } else if (result.data && result.data.dossier_id) {
-                    redirectUrl = `/operator/dossiers/confirmation/${result.data.dossier_id}`;
-                } else if (result.redirect) {
-                    redirectUrl = result.redirect;
-                } else {
-                    redirectUrl = '/operator/dossiers';
-                }
-                
+                // Succès avec message amélioré
                 let successMsg = '🎉 Dossier soumis avec succès !';
                 if (OrganisationApp.rapportAnomalies.enabled) {
                     successMsg += '\n📋 Le rapport d\'anomalies a été transmis automatiquement.';
                 }
                 showNotification(successMsg, 'success', 10000);
                 
+                // Nettoyer les données sauvegardées
                 localStorage.removeItem('pngdi_organisation_draft');
                 
+                // Désactiver le formulaire
+                const submitBtn = document.getElementById('submitBtn');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Dossier soumis';
+                }
+                
+                // ✅ REDIRECTION CORRIGÉE - Priorité aux données structurées
+                let redirectUrl = null;
+                
+                // PRIORITÉ 1 : Utiliser redirect_url si fourni explicitement
+                if (result.data && result.data.redirect_url) {
+                    redirectUrl = result.data.redirect_url;
+                    console.log('✅ REDIRECTION via result.data.redirect_url:', redirectUrl);
+                    
+                // PRIORITÉ 2 : Construire avec dossier_id si disponible
+                } else if (result.data && result.data.dossier_id) {
+                    redirectUrl = `/operator/dossiers/confirmation/${result.data.dossier_id}`;
+                    console.log('✅ REDIRECTION construite avec dossier_id:', result.data.dossier_id, '→', redirectUrl);
+                    
+                // PRIORITÉ 3 : Utiliser result.redirect si fourni
+                } else if (result.redirect) {
+                    redirectUrl = result.redirect;
+                    console.log('✅ REDIRECTION via result.redirect:', redirectUrl);
+                    
+                    // ⚠️ VÉRIFICATION : S'assurer que result.redirect utilise dossier_id
+                    if (result.data && result.data.organisation_id && redirectUrl.includes(result.data.organisation_id)) {
+                        console.warn('⚠️ ATTENTION: result.redirect semble utiliser organisation_id au lieu de dossier_id');
+                        
+                        // Corriger automatiquement si dossier_id est disponible
+                        if (result.data.dossier_id) {
+                            redirectUrl = redirectUrl.replace(result.data.organisation_id, result.data.dossier_id);
+                            console.log('🔧 CORRECTION AUTOMATIQUE: Remplacement organisation_id par dossier_id:', redirectUrl);
+                        }
+                    }
+                    
+                // PRIORITÉ 4 : URL par défaut
+                } else {
+                    redirectUrl = '/operator/dossiers';
+                    console.log('✅ REDIRECTION par défaut vers la liste des dossiers');
+                }
+                
+                // ✅ LOG FINAL POUR DEBUG
+                console.log('📊 DONNÉES DE REDIRECTION FINALES:', {
+                    redirectUrl: redirectUrl,
+                    resultData: result.data,
+                    resultRedirect: result.redirect,
+                    organisationId: result.data?.organisation_id,
+                    dossierId: result.data?.dossier_id,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Effectuer la redirection
                 setTimeout(() => {
+                    console.log('🚀 REDIRECTION VERS:', redirectUrl);
                     window.location.href = redirectUrl;
                 }, 3000);
                 
             } else {
-                throw new Error(result.message || 'Erreur lors de la soumission');
+                // Erreur métier avec debug détaillé
+                const errorMessage = result.message || 'Erreur lors de la soumission';
+                
+                // Afficher d'abord la notification basique
+                showNotification(errorMessage, 'danger');
+                
+                // Puis afficher le modal de debug avec tous les détails
+                showErrorModal(
+                    'Erreur de Validation',
+                    errorMessage,
+                    {
+                        success: result.success,
+                        message: result.message,
+                        errors: result.errors,
+                        data: result.data,
+                        debug: result.debug,
+                        timestamp: new Date().toISOString(),
+                        formAnalysis: analyzeFormDataForDebug()
+                    },
+                    true
+                );
+                
+                if (result.errors) {
+                    Object.keys(result.errors).forEach(field => {
+                        const fieldElement = document.querySelector(`[name="${field}"]`) || 
+                                           document.getElementById(field);
+                        if (fieldElement) {
+                            showFieldError(fieldElement, result.errors[field][0]);
+                        }
+                    });
+                }
             }
         } else {
-            throw new Error(`Erreur HTTP ${response.status}: ${response.statusText}`);
+            // Gestion améliorée des erreurs HTTP
+            let errorResponse = null;
+            try {
+                errorResponse = await response.json();
+            } catch (e) {
+                try {
+                    errorResponse = await response.text();
+                } catch (e2) {
+                    errorResponse = 'Impossible de lire la réponse du serveur';
+                }
+            }
+            
+            const errorDetails = {
+                status: response.status,
+                statusText: response.statusText,
+                url: response.url,
+                headers: Object.fromEntries(response.headers.entries()),
+                response: errorResponse,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Afficher le modal de debug au lieu de juste lancer une erreur
+            showErrorModal(
+                `Erreur HTTP ${response.status}`,
+                `Le serveur a retourné une erreur : ${response.status} ${response.statusText}`,
+                errorDetails,
+                true
+            );
+            
+            return; // Sortir de la fonction au lieu de throw
         }
         
     } catch (error) {
-        console.error('❌ Erreur soumission normale:', error);
-        showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
+        console.error('❌ Erreur soumission:', error);
         
+        // Gestion avancée des erreurs avec debug
+        let errorTitle = 'Erreur de Soumission';
+        let errorMessage = 'Une erreur est survenue lors de la soumission du formulaire.';
+        let serverResponse = null;
+        
+        try {
+            // Analyser la réponse si c'est une erreur fetch
+            if (error.response) {
+                serverResponse = error.response;
+                errorMessage = error.message || 'Erreur de communication avec le serveur.';
+            } else if (error.message) {
+                errorMessage = error.message;
+                serverResponse = {
+                    error: error.name,
+                    message: error.message,
+                    stack: error.stack,
+                    timestamp: new Date().toISOString()
+                };
+            }
+            
+            // Ajouter l'analyse du formulaire au debug
+            const analysisResult = analyzeFormDataForDebug();
+            if (serverResponse) {
+                serverResponse.formAnalysis = analysisResult;
+            } else {
+                serverResponse = { formAnalysis: analysisResult };
+            }
+            
+        } catch (debugError) {
+            console.warn('Erreur lors de l\'analyse debug:', debugError);
+            serverResponse = {
+                originalError: error.toString(),
+                debugError: debugError.toString(),
+                timestamp: new Date().toISOString()
+            };
+        }
+        
+        // Afficher le modal d'erreur avec tous les détails
+        showErrorModal(errorTitle, errorMessage, serverResponse, true);
+
     } finally {
         showGlobalLoader(false);
+        updateSaveIndicator('success');
     }
 }
-
-// ✅ CONSERVATION DE LA FONCTION ORIGINALE (window.originalSubmitForm pour compatibilité)
-window.originalSubmitForm = window.submitForm;
 
 
 /**

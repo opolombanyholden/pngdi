@@ -4255,11 +4255,6 @@ async function submitForm() {
 /**
  * ✅ NOUVELLE FONCTION : Soumission avec chunking pour gros volumes
  */
-/**
- * ✅ CORRECTION FONCTION submitFormWithChunking()
- * À remplacer dans organisation-create.js ligne ~2900
- */
-
 async function submitFormWithChunking() {
     try {
         showGlobalLoader(true);
@@ -4295,9 +4290,6 @@ async function submitFormWithChunking() {
         baseFormData.append('totalAdherents', totalAdherents);
         baseFormData.append('totalDocuments', Object.keys(OrganisationApp.documents).length);
         
-        // ✅ CORRECTION PRINCIPALE : Ajouter tous les adhérents même pour chunking
-        baseFormData.append('adherents', JSON.stringify(OrganisationApp.adherents));
-        
         // ✅ CHUNKING : Marquer comme soumission par chunks
         baseFormData.append('is_chunked_submission', 'true');
         baseFormData.append('total_chunks', totalChunks);
@@ -4323,7 +4315,7 @@ async function submitFormWithChunking() {
             }
         });
         
-        // ✅ SOUMISSION PAR CHUNKS - AVEC ADHERENTS COMPLET
+        // ✅ SOUMISSION PAR CHUNKS
         let allResults = [];
         const formElement = document.getElementById('organisationForm');
         
@@ -4342,7 +4334,7 @@ async function submitFormWithChunking() {
                 chunkFormData.append(key, value);
             }
             
-            // Ajouter les métadonnées du chunk (en plus du tableau complet)
+            // Ajouter les adhérents de ce chunk
             chunkFormData.append('adherents_chunk', JSON.stringify(chunkAdherents));
             chunkFormData.append('chunk_index', chunkIndex);
             chunkFormData.append('is_final_chunk', chunkIndex === totalChunks - 1 ? 'true' : 'false');
@@ -4357,8 +4349,6 @@ async function submitFormWithChunking() {
             });
             
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`❌ Erreur chunk ${chunkIndex + 1}:`, errorText);
                 throw new Error(`Erreur chunk ${chunkIndex + 1}: ${response.status} ${response.statusText}`);
             }
             
@@ -4419,18 +4409,7 @@ async function submitFormWithChunking() {
         
     } catch (error) {
         console.error('❌ Erreur soumission par chunks:', error);
-        
-        // Afficher le debug modal avec détails complets
-        if (typeof showErrorModal === 'function') {
-            showErrorModal('Erreur Soumission Chunking', error.message, {
-                totalAdherents: OrganisationApp.adherents.length,
-                chunksDetected: Math.ceil(OrganisationApp.adherents.length / 500),
-                errorDetails: error.toString(),
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
-        }
+        showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
         
     } finally {
         showGlobalLoader(false);
