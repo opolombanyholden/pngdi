@@ -602,21 +602,25 @@ class OrganisationController extends Controller
 
             // Gestion des réponses AJAX vs Navigation classique
             if ($request->ajax() || $request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Organisation créée avec succès',
-                    'data' => [
-                        'organisation_id' => $organisation->id,
-                        'dossier_id' => $dossier->id,
-                        'numero_recepisse' => $numeroRecepisse,
-                        'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
-                    ],
-                    'confirmation_data' => $confirmationData
-                ]);
-            } else {
-                return redirect()->route('operator.dossiers.confirmation', $dossier->id)
-                    ->with('success_data', $confirmationData);
-            }
+    return response()->json([
+        'success' => true,
+        'message' => 'Organisation créée avec succès',
+        'data' => [
+            'organisation_id' => $organisation->id,
+            'dossier_id' => $dossier->id,
+            'numero_recepisse' => $numeroRecepisse,
+            'redirect_url' => route('operator.dossiers.confirmation', $dossier->id),
+            // 🎯 AJOUT: URL de redirection explicite avec ID dossier
+            'confirmation_url' => route('operator.dossiers.confirmation', $dossier->id),
+            'confirmation_dossier_id' => $dossier->id  // 🎯 ID explicite pour JS
+        ],
+        'confirmation_data' => $confirmationData
+    ]);
+} else {
+    // 🎯 REDIRECTION CLASSIQUE: TOUJOURS AVEC DOSSIER ID
+    return redirect()->route('operator.dossiers.confirmation', $dossier->id)
+        ->with('success_data', $confirmationData);
+}
 
         } catch (\Exception $e) {
             \DB::rollback();
@@ -986,352 +990,491 @@ class OrganisationController extends Controller
         return ['success' => true];
     }
 
-    /**
-     * Validation complète des données des 9 étapes - VERSION CORRIGÉE
-     */
-    private function validateCompleteOrganisationData(Request $request, $type)
-    {
-        // Log des données reçues pour debugging
-        \Log::info('Validation DB v3 - Données reçues', [
-            'keys' => array_keys($request->all()),
-            'type' => $type,
-            'org_objet_length' => strlen($request->input('org_objet', '')),
-            'has_fondateurs' => $request->has('fondateurs'),
-            'has_adherents' => $request->has('adherents'),
-            'fondateurs_raw_type' => gettype($request->input('fondateurs')),
-            'adherents_raw_type' => gettype($request->input('adherents')),
-            'json_last_error_initial' => json_last_error_msg()
-        ]);
+ /**
+ * Validation complète des données - VERSION CONFORME À LA RÈGLE MÉTIER NIP
+ * ✅ Enregistre TOUS les adhérents, même avec des NIP invalides
+ * ✅ Marque les anomalies sans bloquer le processus
+ */
+private function validateCompleteOrganisationData(Request $request, $type)
+{
+    // Log des données reçues pour debugging
+    \Log::info('Validation DB v5 - Règle métier NIP appliquée', [
+        'keys' => array_keys($request->all()),
+        'type' => $type,
+        'regle_metier' => 'Enregistrement de tous les adhérents avec détection anomalies',
+        'version' => 'conforme_PNGDI_v5'
+    ]);
 
-        $rules = [
-            // ÉTAPE 1 : Type
-            'type_organisation' => 'required|in:association,ong,parti_politique,confession_religieuse',
+    $rules = [
+        // ÉTAPE 1 : Type
+        'type_organisation' => 'required|in:association,ong,parti_politique,confession_religieuse',
 
-            // ÉTAPE 2 : Guide
-            'guide_read_confirm' => 'sometimes|accepted',
-            
-            // ÉTAPE 3 : Demandeur - COLONNES CONFORMES À USERS TABLE
-            'demandeur_nip' => 'required|digits:13',
-            'demandeur_nom' => 'required|string|max:255',
-            'demandeur_prenom' => 'required|string|max:255',
-            'demandeur_email' => 'required|email|max:255',
-            'demandeur_telephone' => 'required|string|max:20',
-            'demandeur_role' => 'sometimes|string',
-            'demandeur_civilite' => 'sometimes|in:M,Mme,Mlle',
-            'demandeur_date_naissance' => 'sometimes|date|before:-18 years',
-            'demandeur_nationalite' => 'sometimes|string|max:255',
-            'demandeur_adresse' => 'sometimes|string|max:500',
-            'demandeur_profession' => 'sometimes|string|max:255',
-            
-            // ÉTAPE 4 : Organisation - COLONNES CONFORMES À ORGANISATIONS TABLE
-            'org_nom' => 'required|string|max:255|unique:organisations,nom',
-            'org_sigle' => 'nullable|string|max:255|unique:organisations,sigle',
-            'org_objet' => 'required|string|min:50',
-            'org_date_creation' => 'required|date',
-            'org_telephone' => 'required|string|max:255',
-            'org_email' => 'nullable|email|max:255',
-            'org_site_web' => 'nullable|url|max:255',
-            'org_domaine' => 'sometimes|string|max:255',
-            
-            // ÉTAPE 5 : Coordonnées - COLONNES CONFORMES À ORGANISATIONS TABLE
-            'org_adresse_complete' => 'required|string|max:255',
-            'org_province' => 'required|string|max:255',
-            'org_departement' => 'nullable|string|max:255',
-            'org_prefecture' => 'required|string|max:255',
-            'org_zone_type' => 'required|in:urbaine,rurale',
-            'org_latitude' => 'nullable|numeric|between:-3.978,2.318',
-            'org_longitude' => 'nullable|numeric|between:8.695,14.502',
-            
-            // ÉTAPE 6 : Fondateurs - VALIDATION AVEC DÉCODAGE JSON SÉCURISÉ
-            'fondateurs' => [
-                'required',
-                function ($attribute, $value, $fail) use ($type) {
-                    // Décoder JSON si c'est une string
-                    if (is_string($value)) {
-                        $decoded = json_decode($value, true);
-                        if (json_last_error() !== JSON_ERROR_NONE) {
-                            $fail('Les données des fondateurs sont invalides (JSON malformé): ' . json_last_error_msg());
-                            return;
-                        }
-                        $value = $decoded;
-                        // Mettre à jour la requête avec les données décodées
-                        request()->merge(['fondateurs' => $value]);
-                    }
-                    
-                    if (!is_array($value)) {
-                        $fail('Les fondateurs doivent être un tableau.');
+        // ÉTAPE 2 : Guide
+        'guide_read_confirm' => 'sometimes|accepted',
+        
+        // ÉTAPE 3 : Demandeur - COLONNES CONFORMES À USERS TABLE
+        'demandeur_nip' => 'required|digits:13',
+        'demandeur_nom' => 'required|string|max:255',
+        'demandeur_prenom' => 'required|string|max:255',
+        'demandeur_email' => 'required|email|max:255',
+        'demandeur_telephone' => 'required|string|max:20',
+        'demandeur_role' => 'sometimes|string',
+        'demandeur_civilite' => 'sometimes|in:M,Mme,Mlle',
+        'demandeur_date_naissance' => 'sometimes|date|before:-18 years',
+        'demandeur_nationalite' => 'sometimes|string|max:255',
+        'demandeur_adresse' => 'sometimes|string|max:500',
+        'demandeur_profession' => 'sometimes|string|max:255',
+        
+        // ÉTAPE 4 : Organisation - COLONNES CONFORMES À ORGANISATIONS TABLE
+        'org_nom' => 'required|string|max:255|unique:organisations,nom',
+        'org_sigle' => 'nullable|string|max:255|unique:organisations,sigle',
+        'org_objet' => 'required|string|min:50',
+        'org_date_creation' => 'required|date',
+        'org_telephone' => 'required|string|max:255',
+        'org_email' => 'nullable|email|max:255',
+        'org_site_web' => 'nullable|url|max:255',
+        'org_domaine' => 'sometimes|string|max:255',
+        
+        // ÉTAPE 5 : Coordonnées - COLONNES CONFORMES À ORGANISATIONS TABLE
+        'org_adresse_complete' => 'required|string|max:255',
+        'org_province' => 'required|string|max:255',
+        'org_departement' => 'nullable|string|max:255',
+        'org_prefecture' => 'required|string|max:255',
+        'org_zone_type' => 'required|in:urbaine,rurale',
+        'org_latitude' => 'nullable|numeric|between:-3.978,2.318',
+        'org_longitude' => 'nullable|numeric|between:8.695,14.502',
+        
+        // ÉTAPE 6 : Fondateurs - VALIDATION AVEC RÈGLE MÉTIER APPLIQUÉE
+        'fondateurs' => [
+            'required',
+            function ($attribute, $value, $fail) use ($type) {
+                // Décoder JSON si c'est une string
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $fail('Les données des fondateurs sont invalides (JSON malformé): ' . json_last_error_msg());
                         return;
                     }
-                    
-                    $minRequired = $this->getMinFondateurs($type);
-                    if (count($value) < $minRequired) {
-                        $fail("Minimum {$minRequired} fondateurs requis pour ce type d'organisation.");
-                    }
-                    
-                    // Validation détaillée des fondateurs
-                    foreach ($value as $index => $fondateur) {
-                        if (!is_array($fondateur)) {
-                            $fail("Le fondateur ligne " . ($index + 1) . " doit être un objet valide.");
-                            continue;
-                        }
-                        
-                        if (empty($fondateur['nip']) || !preg_match('/^[0-9]{13}$/', $fondateur['nip'])) {
-                            $fail("Le NIP du fondateur ligne " . ($index + 1) . " est invalide (13 chiffres requis).");
-                        }
-                        if (empty($fondateur['nom']) || empty($fondateur['prenom'])) {
-                            $fail("Le nom et prénom du fondateur ligne " . ($index + 1) . " sont obligatoires.");
-                        }
-                        if (empty($fondateur['fonction'])) {
-                            $fail("La fonction du fondateur ligne " . ($index + 1) . " est obligatoire.");
-                        }
-                        if (empty($fondateur['telephone'])) {
-                            $fail("Le téléphone du fondateur ligne " . ($index + 1) . " est obligatoire.");
-                        }
-                    }
-                }
-            ],
-            
-            // ÉTAPE 7 : Adhérents - VALIDATION AVEC DÉCODAGE JSON SÉCURISÉ
-            'adherents' => [
-                'required',
-                function ($attribute, $value, $fail) use ($type) {
-                    // Décoder JSON si c'est une string
-                    if (is_string($value)) {
-                        $decoded = json_decode($value, true);
-                        if (json_last_error() !== JSON_ERROR_NONE) {
-                            $fail('Les données des adhérents sont invalides (JSON malformé): ' . json_last_error_msg());
-                            return;
-                        }
-                        $value = $decoded;
-                        // Mettre à jour la requête avec les données décodées
-                        request()->merge(['adherents' => $value]);
-                    }
-                    
-                    if (!is_array($value)) {
-                        $fail('Les adhérents doivent être un tableau.');
-                        return;
-                    }
-                    
-                    $minRequired = $this->getMinAdherents($type);
-                    if (count($value) < $minRequired) {
-                        $fail("Minimum {$minRequired} adhérents requis pour ce type d'organisation.");
-                    }
-                    
-                    // Validation détaillée des adhérents
-                    foreach ($value as $index => $adherent) {
-                        if (!is_array($adherent)) {
-                            $fail("L'adhérent ligne " . ($index + 1) . " doit être un objet valide.");
-                            continue;
-                        }
-                        
-                        // NIP obligatoire et format correct
-                        if (empty($adherent['nip']) || !preg_match('/^[0-9]{13}$/', $adherent['nip'])) {
-                            $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " est invalide (13 chiffres requis).");
-                        }
-                        
-                        // Nom et prénom obligatoires
-                        if (empty($adherent['nom']) || empty($adherent['prenom'])) {
-                            $fail("Le nom et prénom de l'adhérent ligne " . ($index + 1) . " sont obligatoires.");
-                        }
-                        
-                        // Profession obligatoire (colonne ajoutée dans COLUMNS_v2)
-                        if (empty($adherent['profession'])) {
-                            $fail("La profession de l'adhérent ligne " . ($index + 1) . " est obligatoire.");
-                        }
-                        
-                        // Vérification des professions exclues pour parti politique
-                        if ($type === 'parti_politique' && !empty($adherent['profession'])) {
-                            $professionsExclues = $this->getProfessionsExcluesParti();
-                            if (in_array(strtolower($adherent['profession']), array_map('strtolower', $professionsExclues))) {
-                                $fail("L'adhérent ligne " . ($index + 1) . " a une profession exclue pour les partis politiques: {$adherent['profession']}");
-                            }
-                        }
-                    }
-                }
-            ],
-            
-            // ÉTAPE 9 : Déclarations finales
-            'declaration_veracite' => 'sometimes|accepted',
-            'declaration_conformite' => 'sometimes|accepted',
-            'declaration_autorisation' => 'sometimes|accepted'
-        ];
-
-        // Règles spécifiques pour parti politique
-        if ($type === 'parti_politique') {
-            $rules['declaration_exclusivite_parti'] = 'required|accepted';
-            $rules['adherents'][] = function ($attribute, $value, $fail) {
-                // Validation supplémentaire pour minimum 50 adhérents pour parti politique
-                if (is_array($value) && count($value) < 50) {
-                    $fail("Un parti politique doit avoir au minimum 50 adhérents.");
-                }
-            };
-        }
-
-        $messages = [
-            'demandeur_nip.digits' => 'Le NIP doit contenir exactement 13 chiffres.',
-            'demandeur_nip.required' => 'Le NIP du demandeur est obligatoire.',
-            'org_nom.unique' => 'Ce nom d\'organisation est déjà utilisé.',
-            'org_sigle.unique' => 'Ce sigle est déjà utilisé.',
-            'org_objet.min' => 'L\'objet de l\'organisation doit contenir au moins 50 caractères.',
-            'org_objet.required' => 'L\'objet de l\'organisation est obligatoire.',
-            'declaration_exclusivite_parti.required' => 'La déclaration d\'exclusivité pour parti politique est obligatoire.',
-            'declaration_exclusivite_parti.accepted' => 'Vous devez accepter la déclaration d\'exclusivité.',
-            '*.accepted' => 'Cette déclaration est obligatoire.',
-            '*.required' => 'Ce champ est obligatoire.'
-        ];
-
-        try {
-            $validated = $request->validate($rules, $messages);
-            
-            // Post-traitement avec vérification de type sécurisée
-            if (isset($validated['fondateurs'])) {
-                if (is_string($validated['fondateurs'])) {
-                    $decoded = json_decode($validated['fondateurs'], true);
-                    $validated['fondateurs'] = $decoded ?? [];
-                }
-                if (!is_array($validated['fondateurs'])) {
-                    $validated['fondateurs'] = [];
-                }
-            }
-            
-            if (isset($validated['adherents'])) {
-                if (is_string($validated['adherents'])) {
-                    $decoded = json_decode($validated['adherents'], true);
-                    $validated['adherents'] = $decoded ?? [];
-                }
-                if (!is_array($validated['adherents'])) {
-                    $validated['adherents'] = [];
+                    $value = $decoded;
+                    request()->merge(['fondateurs' => $value]);
                 }
                 
-                // Assurer la fonction par défaut pour les adhérents
-                foreach ($validated['adherents'] as &$adherent) {
-                    if (empty($adherent['fonction'])) {
-                        $adherent['fonction'] = 'Membre'; // Default selon la DB
+                if (!is_array($value)) {
+                    $fail('Les fondateurs doivent être un tableau.');
+                    return;
+                }
+                
+                $minRequired = $this->getMinFondateurs($type);
+                if (count($value) < $minRequired) {
+                    $fail("Minimum {$minRequired} fondateurs requis pour ce type d'organisation.");
+                }
+                
+                // ✅ VALIDATION SOUPLE POUR FONDATEURS - CONFORME RÈGLE MÉTIER
+                foreach ($value as $index => $fondateur) {
+                    if (!is_array($fondateur)) {
+                        $fail("Le fondateur ligne " . ($index + 1) . " doit être un objet valide.");
+                        continue;
+                    }
+                    
+                    // ✅ NIP : VALIDATION NON-BLOQUANTE
+                    // Les anomalies NIP seront détectées lors de la création, pas ici
+                    if (empty($fondateur['nip'])) {
+                        $fail("Le NIP du fondateur ligne " . ($index + 1) . " ne peut pas être vide.");
+                    }
+                    
+                    // Autres validations obligatoires
+                    if (empty($fondateur['nom']) || empty($fondateur['prenom'])) {
+                        $fail("Le nom et prénom du fondateur ligne " . ($index + 1) . " sont obligatoires.");
+                    }
+                    if (empty($fondateur['fonction'])) {
+                        $fail("La fonction du fondateur ligne " . ($index + 1) . " est obligatoire.");
+                    }
+                    if (empty($fondateur['telephone'])) {
+                        $fail("Le téléphone du fondateur ligne " . ($index + 1) . " est obligatoire.");
                     }
                 }
             }
-            
-            // Ajouter des valeurs par défaut pour les champs optionnels
-            $validated['org_departement'] = $request->input('org_departement');
-            $validated['declaration_veracite'] = $request->has('declaration_veracite');
-            $validated['declaration_conformite'] = $request->has('declaration_conformite');
-            $validated['declaration_autorisation'] = $request->has('declaration_autorisation');
-            $validated['guide_read_confirm'] = $request->has('guide_read_confirm');
-            
-            \Log::info('Validation v3 réussie', [
-                'fondateurs_count' => count($validated['fondateurs'] ?? []),
-                'adherents_count' => count($validated['adherents'] ?? []),
-                'type' => $type,
-                'db_version' => 'COLUMNS_v2 - profession/fonction disponibles - JSON sécurisé v3'
-            ]);
-            
-            return $validated;
-            
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            \Log::error('Erreur validation v3 détaillée', [
-                'errors' => $e->errors(),
-                'input_keys' => array_keys($request->all()),
-                'type' => $type,
-                'json_last_error' => json_last_error_msg(),
-                'fondateurs_type' => gettype($request->input('fondateurs')),
-                'adherents_type' => gettype($request->input('adherents')),
-                'db_version' => 'COLUMNS_v2',
-                'profession_column_available' => true,
-                'fonction_column_available' => true
-            ]);
-            
-            throw $e;
-        }
+        ],
+        
+        // ÉTAPE 7 : Adhérents - VALIDATION CONFORME À LA RÈGLE MÉTIER NIP
+        'adherents' => [
+            'required',
+            function ($attribute, $value, $fail) use ($type) {
+                // Décoder JSON si c'est une string
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() !== JSON_ERROR_NONE) {
+                        $fail('Les données des adhérents sont invalides (JSON malformé): ' . json_last_error_msg());
+                        return;
+                    }
+                    $value = $decoded;
+                    request()->merge(['adherents' => $value]);
+                }
+                
+                if (!is_array($value)) {
+                    $fail('Les adhérents doivent être un tableau.');
+                    return;
+                }
+                
+                $minRequired = $this->getMinAdherents($type);
+                if (count($value) < $minRequired) {
+                    $fail("Minimum {$minRequired} adhérents requis pour ce type d'organisation.");
+                }
+                
+                // ✅ VALIDATION CONFORME RÈGLE MÉTIER : PAS DE BLOCAGE POUR NIP
+                foreach ($value as $index => $adherent) {
+                    if (!is_array($adherent)) {
+                        $fail("L'adhérent ligne " . ($index + 1) . " doit être un objet valide.");
+                        continue;
+                    }
+                    
+                    // ✅ NIP : VALIDATION NON-BLOQUANTE SELON RÈGLE MÉTIER
+                    // Seule vérification : ne peut pas être complètement vide
+                    if (empty($adherent['nip']) || trim($adherent['nip']) === '') {
+                        $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " ne peut pas être vide.");
+                    }
+                    // ✅ Les anomalies de format (13 chiffres, doublons, etc.) seront détectées 
+                    // lors de la création et marquées comme anomalies sans bloquer
+                    
+                    // Nom et prénom obligatoires
+                    if (empty($adherent['nom']) || empty($adherent['prenom'])) {
+                        $fail("Le nom et prénom de l'adhérent ligne " . ($index + 1) . " sont obligatoires.");
+                    }
+                    
+                    // Profession obligatoire
+                    if (empty($adherent['profession'])) {
+                        $fail("La profession de l'adhérent ligne " . ($index + 1) . " est obligatoire.");
+                    }
+                    
+                    // ✅ PROFESSIONS EXCLUES : TRAITEMENT COMME ANOMALIE CRITIQUE NON-BLOQUANTE
+                    // Conforme à la règle métier PNGDI : enregistrer avec anomalie critique
+                    // La vérification des professions exclues sera faite lors de la détection d'anomalies
+                }
+            }
+        ],
+        
+        // ÉTAPE 9 : Déclarations finales
+        'declaration_veracite' => 'sometimes|accepted',
+        'declaration_conformite' => 'sometimes|accepted',
+        'declaration_autorisation' => 'sometimes|accepted'
+    ];
+
+    // Règles spécifiques pour parti politique
+    if ($type === 'parti_politique') {
+        $rules['declaration_exclusivite_parti'] = 'required|accepted';
+        $rules['adherents'][] = function ($attribute, $value, $fail) {
+            if (is_array($value) && count($value) < 50) {
+                $fail("Un parti politique doit avoir au minimum 50 adhérents.");
+            }
+        };
     }
 
-    /**
-     * Créer les adhérents avec système d'anomalies révolutionnaire - VERSION CORRIGÉE
-     */
-    private function createAdherents(Organisation $organisation, array $adherentsData)
-    {
-        $stats = [
-            'total' => count($adherentsData),
-            'valides' => 0,
-            'anomalies_critiques' => 0,
-            'anomalies_majeures' => 0,
-            'anomalies_mineures' => 0
+    $messages = [
+        'demandeur_nip.digits' => 'Le NIP du demandeur doit contenir exactement 13 chiffres.',
+        'demandeur_nip.required' => 'Le NIP du demandeur est obligatoire.',
+        'org_nom.unique' => 'Ce nom d\'organisation est déjà utilisé.',
+        'org_sigle.unique' => 'Ce sigle est déjà utilisé.',
+        'org_objet.min' => 'L\'objet de l\'organisation doit contenir au moins 50 caractères.',
+        'org_objet.required' => 'L\'objet de l\'organisation est obligatoire.',
+        'declaration_exclusivite_parti.required' => 'La déclaration d\'exclusivité pour parti politique est obligatoire.',
+        'declaration_exclusivite_parti.accepted' => 'Vous devez accepter la déclaration d\'exclusivité.',
+        '*.accepted' => 'Cette déclaration est obligatoire.',
+        '*.required' => 'Ce champ est obligatoire.'
+    ];
+
+    try {
+        $validated = $request->validate($rules, $messages);
+        
+        // Post-traitement avec nettoyage des données
+        if (isset($validated['fondateurs'])) {
+            if (is_string($validated['fondateurs'])) {
+                $decoded = json_decode($validated['fondateurs'], true);
+                $validated['fondateurs'] = $decoded ?? [];
+            }
+            if (!is_array($validated['fondateurs'])) {
+                $validated['fondateurs'] = [];
+            }
+            
+            // ✅ NETTOYER LES NIP DES FONDATEURS
+            foreach ($validated['fondateurs'] as &$fondateur) {
+                if (isset($fondateur['nip'])) {
+                    $fondateur['nip'] = $this->cleanNipForStorage($fondateur['nip']);
+                }
+            }
+        }
+        
+        if (isset($validated['adherents'])) {
+            if (is_string($validated['adherents'])) {
+                $decoded = json_decode($validated['adherents'], true);
+                $validated['adherents'] = $decoded ?? [];
+            }
+            if (!is_array($validated['adherents'])) {
+                $validated['adherents'] = [];
+            }
+            
+            // ✅ NETTOYER LES NIP DES ADHÉRENTS
+            foreach ($validated['adherents'] as &$adherent) {
+                if (isset($adherent['nip'])) {
+                    $adherent['nip'] = $this->cleanNipForStorage($adherent['nip']);
+                }
+                
+                // Assurer la fonction par défaut
+                if (empty($adherent['fonction'])) {
+                    $adherent['fonction'] = 'Membre';
+                }
+            }
+        }
+        
+        // Ajouter des valeurs par défaut
+        $validated['org_departement'] = $request->input('org_departement');
+        $validated['declaration_veracite'] = $request->has('declaration_veracite');
+        $validated['declaration_conformite'] = $request->has('declaration_conformite');
+        $validated['declaration_autorisation'] = $request->has('declaration_autorisation');
+        $validated['guide_read_confirm'] = $request->has('guide_read_confirm');
+        
+        \Log::info('Validation v5 réussie - Règle métier NIP appliquée', [
+            'fondateurs_count' => count($validated['fondateurs'] ?? []),
+            'adherents_count' => count($validated['adherents'] ?? []),
+            'type' => $type,
+            'validation_version' => 'conforme_regle_metier_PNGDI_v5',
+            'nip_validation' => 'non_bloquante_avec_detection_anomalies'
+        ]);
+        
+        return $validated;
+        
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Erreur validation v5 avec règle métier', [
+            'errors' => $e->errors(),
+            'type' => $type,
+            'validation_version' => 'conforme_regle_metier_PNGDI_v5'
+        ]);
+        
+        throw $e;
+    }
+}
+
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Nettoyer un NIP pour stockage
+ * Conforme à la règle métier PNGDI
+ */
+private function cleanNipForStorage($nip)
+{
+    if (empty($nip)) {
+        return '';
+    }
+    
+    // Supprimer espaces, tirets et caractères non-numériques
+    $cleaned = preg_replace('/[^0-9]/', '', $nip);
+    
+    // Log du nettoyage pour traçabilité
+    if ($cleaned !== $nip) {
+        \Log::info('NIP nettoyé pour stockage', [
+            'original' => $nip,
+            'cleaned' => $cleaned
+        ]);
+    }
+    
+    return $cleaned;
+}
+
+/**
+ * ✅ MÉTHODE MISE À JOUR : Créer les adhérents avec détection d'anomalies NIP
+ * Conforme à la règle métier PNGDI
+ */
+private function createAdherents(Organisation $organisation, array $adherentsData)
+{
+    $stats = [
+        'total' => count($adherentsData),
+        'valides' => 0,
+        'anomalies_critiques' => 0,
+        'anomalies_majeures' => 0,
+        'anomalies_mineures' => 0
+    ];
+
+    $anomalies = [];
+    $adherentsCreated = [];
+
+    foreach ($adherentsData as $index => $adherentData) {
+        // ✅ DÉTECTER LES ANOMALIES NIP SELON LA RÈGLE MÉTIER
+        $anomaliesDetectees = $this->detectAndManageNipAnomalies($adherentData, $organisation->type, $organisation->id);
+
+        // Historique conforme à la règle métier
+        $historiqueData = [
+            'creation' => now()->toISOString(),
+            'anomalies_detectees' => $anomaliesDetectees,
+            'source' => 'creation_organisation',
+            'regle_metier' => 'enregistrement_avec_anomalies_PNGDI',
+            'profession_originale' => $adherentData['profession'] ?? null,
+            'fonction_originale' => $adherentData['fonction'] ?? 'Membre'
         ];
 
-        $anomalies = [];
-        $adherentsCreated = [];
+        // ✅ ENREGISTRER L'ADHÉRENT MÊME AVEC ANOMALIES NIP
+        $adherentDataCleaned = [
+            'organisation_id' => $organisation->id,
+            'nip' => $adherentData['nip'], // NIP tel que fourni
+            'nom' => strtoupper($adherentData['nom']),
+            'prenom' => $adherentData['prenom'],
+            'profession' => $adherentData['profession'] ?? null,
+            'fonction' => $adherentData['fonction'] ?? 'Membre',
+            'telephone' => $adherentData['telephone'] ?? null,
+            'email' => $adherentData['email'] ?? null,
+            'date_adhesion' => now(),
+            
+            // ✅ MARQUER LES ANOMALIES SELON LA RÈGLE MÉTIER
+            'has_anomalies' => !empty($anomaliesDetectees),
+            'anomalies_data' => json_encode($anomaliesDetectees, JSON_UNESCAPED_UNICODE),
+            'anomalies_severity' => $this->resolveSeverity($anomaliesDetectees),
+            
+            // ✅ RESTE ACTIF MÊME AVEC ANOMALIES (sauf critiques)
+            'is_active' => empty($anomaliesDetectees['critiques']),
+            
+            'historique' => json_encode($historiqueData, JSON_UNESCAPED_UNICODE),
+            'created_at' => now(),
+            'updated_at' => now()
+        ];
 
-        foreach ($adherentsData as $index => $adherentData) {
-            // Détecter les anomalies avant création
-            $anomaliesDetectees = $this->detectAnomaliesAdherent($adherentData, $organisation->type);
+        $adherent = \App\Models\Adherent::create($adherentDataCleaned);
+        $adherentsCreated[] = $adherent;
 
-            // S'assurer que les données historique sont correctement formatées
-            $historiqueData = [
-                'creation' => now()->toISOString(),
-                'anomalies_detectees' => $anomaliesDetectees,
-                'source' => 'creation_organisation',
-                'profession_originale' => $adherentData['profession'] ?? null,
-                'fonction_originale' => $adherentData['fonction'] ?? 'Membre'
-            ];
+        // Comptabiliser selon les anomalies détectées
+        if (empty($anomaliesDetectees)) {
+            $stats['valides']++;
+        } else {
+            if (!empty($anomaliesDetectees['critiques'])) {
+                $stats['anomalies_critiques']++;
+            }
+            if (!empty($anomaliesDetectees['majeures'])) {
+                $stats['anomalies_majeures']++;
+            }
+            if (!empty($anomaliesDetectees['mineures'])) {
+                $stats['anomalies_mineures']++;
+            }
 
-            // Nettoyer les données avant insertion
-            $adherentDataCleaned = [
-                'organisation_id' => $organisation->id,
+            $anomalies[] = [
+                'adherent_id' => $adherent->id,
+                'ligne' => $index + 1,
                 'nip' => $adherentData['nip'],
-                'nom' => strtoupper($adherentData['nom']),
-                'prenom' => $adherentData['prenom'],
-                
-                // ✅ NOUVELLES COLONNES DISPONIBLES DANS COLUMNS_v2
+                'nom_complet' => $adherentData['nom'] . ' ' . $adherentData['prenom'],
                 'profession' => $adherentData['profession'] ?? null,
                 'fonction' => $adherentData['fonction'] ?? 'Membre',
-                
-                // Autres colonnes existantes
-                'telephone' => $adherentData['telephone'] ?? null,
-                'email' => $adherentData['email'] ?? null,
-                'date_adhesion' => now(),
-                'is_active' => empty($anomaliesDetectees['critiques']), // Actif seulement si pas d'anomalies critiques
-                
-                // Encoder explicitement l'historique en JSON
-                'historique' => json_encode($historiqueData, JSON_UNESCAPED_UNICODE),
-                
-                'created_at' => now(),
-                'updated_at' => now()
+                'anomalies' => $anomaliesDetectees,
+                'severity' => $this->resolveSeverity($anomaliesDetectees)
             ];
-
-            $adherent = \App\Models\Adherent::create($adherentDataCleaned);
-            $adherentsCreated[] = $adherent;
-
-            // Comptabiliser les anomalies
-            if (empty($anomaliesDetectees['critiques']) && empty($anomaliesDetectees['majeures']) && empty($anomaliesDetectees['mineures'])) {
-                $stats['valides']++;
-            } else {
-                if (!empty($anomaliesDetectees['critiques'])) {
-                    $stats['anomalies_critiques']++;
-                }
-                if (!empty($anomaliesDetectees['majeures'])) {
-                    $stats['anomalies_majeures']++;
-                }
-                if (!empty($anomaliesDetectees['mineures'])) {
-                    $stats['anomalies_mineures']++;
-                }
-
-                $anomalies[] = [
-                    'adherent_id' => $adherent->id,
-                    'ligne' => $index + 1,
-                    'nip' => $adherentData['nip'],
-                    'nom_complet' => $adherentData['nom'] . ' ' . $adherentData['prenom'],
-                    'profession' => $adherentData['profession'] ?? null,
-                    'fonction' => $adherentData['fonction'] ?? 'Membre',
-                    'anomalies' => $anomaliesDetectees
-                ];
-            }
         }
+    }
 
-        return [
-            'adherents' => $adherentsCreated,
-            'stats' => $stats,
-            'anomalies' => $anomalies
+    \Log::info('Adhérents créés avec règle métier NIP', [
+        'total_crees' => count($adherentsCreated),
+        'stats' => $stats,
+        'anomalies_count' => count($anomalies),
+        'regle_metier' => 'PNGDI_enregistrement_avec_anomalies'
+    ]);
+
+    return [
+        'adherents' => $adherentsCreated,
+        'stats' => $stats,
+        'anomalies' => $anomalies
+    ];
+}
+
+/**
+ * ✅ MÉTHODE MISE À JOUR : Détecter les anomalies selon la règle métier PNGDI
+ * Inclut maintenant les professions exclues comme anomalie critique
+ */
+private function detectAndManageNipAnomalies(array $adherentData, string $typeOrganisation, int $organisationId)
+{
+    $anomalies = [
+        'critiques' => [],
+        'majeures' => [],
+        'mineures' => []
+    ];
+
+    $nip = $adherentData['nip'] ?? '';
+    $profession = $adherentData['profession'] ?? '';
+
+    // ✅ ANOMALIE : FORMAT NIP INCORRECT
+    if (!preg_match('/^[0-9]{13}$/', $nip)) {
+        $anomalies['majeures'][] = [
+            'code' => 'NIP_INVALID',
+            'message' => 'Le NIP doit contenir exactement 13 chiffres.',
+            'nip_fourni' => $nip,
+            'longueur_actuelle' => strlen($nip)
         ];
     }
+
+    // ✅ ANOMALIE : NIP DÉJÀ DANS UN AUTRE PARTI POLITIQUE
+    if ($typeOrganisation === 'parti_politique') {
+        $existingInOtherParty = \App\Models\Adherent::whereHas('organisation', function($query) use ($organisationId) {
+            $query->where('type', 'parti_politique')
+                  ->where('id', '!=', $organisationId);
+        })->where('nip', $nip)->exists();
+
+        if ($existingInOtherParty) {
+            $anomalies['critiques'][] = [
+                'code' => 'NIP_DUPLICATE_OTHER_PARTY',
+                'message' => 'Ce NIP appartient déjà à un autre parti politique.',
+                'nip' => $nip
+            ];
+        }
+    }
+
+    // ✅ ANOMALIE CRITIQUE : PROFESSION EXCLUE POUR PARTI POLITIQUE
+    if ($typeOrganisation === 'parti_politique' && !empty($profession)) {
+        $professionsExclues = $this->getProfessionsExcluesParti();
+        if (in_array(strtolower($profession), array_map('strtolower', $professionsExclues))) {
+            $anomalies['critiques'][] = [
+                'code' => 'PROFESSION_EXCLUE_PARTI',
+                'message' => 'Profession exclue pour les partis politiques: ' . $profession,
+                'profession_fournie' => $profession,
+                'type_organisation' => $typeOrganisation,
+                'regle_legale' => 'Article 15 - Loi N° 016/2025'
+            ];
+        }
+    }
+
+    // ✅ ANOMALIE : DOUBLON DANS LA MÊME ORGANISATION
+    $existingInSameOrg = \App\Models\Adherent::where('organisation_id', $organisationId)
+        ->where('nip', $nip)
+        ->exists();
+
+    if ($existingInSameOrg) {
+        $anomalies['majeures'][] = [
+            'code' => 'NIP_DUPLICATE_SAME_ORG',
+            'message' => 'Ce NIP apparaît plusieurs fois dans cette organisation.',
+            'nip' => $nip
+        ];
+    }
+
+    // ✅ ANOMALIE MINEURE : INFORMATIONS DE CONTACT MANQUANTES
+    if (empty($adherentData['telephone']) && empty($adherentData['email'])) {
+        $anomalies['mineures'][] = [
+            'code' => 'CONTACT_INCOMPLET',
+            'message' => 'Aucun moyen de contact fourni (téléphone ou email).',
+            'telephone' => $adherentData['telephone'] ?? null,
+            'email' => $adherentData['email'] ?? null
+        ];
+    }
+
+    return $anomalies;
+}
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Résoudre la sévérité des anomalies
+ */
+private function resolveSeverity(array $anomalies)
+{
+    if (!empty($anomalies['critiques'])) {
+        return 'critique';
+    }
+    if (!empty($anomalies['majeures'])) {
+        return 'majeure';
+    }
+    if (!empty($anomalies['mineures'])) {
+        return 'mineure';
+    }
+    return null;
+}
 
     /**
      * Méthode d'aide pour nettoyer les données JSON

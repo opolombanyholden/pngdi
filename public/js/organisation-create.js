@@ -4035,6 +4035,170 @@ function showCustomNotification(htmlContent, type = 'info', duration = 5000) {
 }
 
 // ========================================
+// 10.1. SYSTÈME DE DEBUG AVANCÉ
+// ========================================
+
+/**
+ * ✅ FONCTION AMÉLIORÉE : Afficher les erreurs détaillées du serveur
+ */
+function showErrorModal(title, message, serverResponse = null, isDebug = true) {
+    // Construire le message d'erreur détaillé
+    let fullMessage = message;
+    
+    if (isDebug && serverResponse) {
+        fullMessage += '\n\n' + '='.repeat(50);
+        fullMessage += '\n🔍 DEBUG - RÉPONSE SERVEUR DÉTAILLÉE :';
+        fullMessage += '\n' + '='.repeat(50);
+        
+        // Afficher les détails de la réponse
+        if (typeof serverResponse === 'object') {
+            try {
+                // Si c'est un objet, l'afficher en JSON formaté
+                fullMessage += '\n📄 Contenu de la réponse :\n';
+                fullMessage += JSON.stringify(serverResponse, null, 2);
+                
+                // Afficher les erreurs spécifiques si disponibles
+                if (serverResponse.errors) {
+                    fullMessage += '\n\n🚨 Erreurs de validation :\n';
+                    Object.keys(serverResponse.errors).forEach(field => {
+                        fullMessage += `• ${field}: ${serverResponse.errors[field].join(', ')}\n`;
+                    });
+                }
+                
+                // Afficher les infos de debug si disponibles
+                if (serverResponse.debug) {
+                    fullMessage += '\n\n🐛 Informations de debug :\n';
+                    fullMessage += `Fichier: ${serverResponse.debug.file}\n`;
+                    fullMessage += `Ligne: ${serverResponse.debug.line}\n`;
+                    if (serverResponse.debug.json_error) {
+                        fullMessage += `Erreur JSON: ${serverResponse.debug.json_error}\n`;
+                    }
+                }
+            } catch (e) {
+                fullMessage += '\n📄 Réponse brute :\n' + String(serverResponse);
+            }
+        } else {
+            fullMessage += '\n📄 Réponse brute :\n' + String(serverResponse);
+        }
+        
+        fullMessage += '\n' + '='.repeat(50);
+    }
+    
+    // Créer et afficher le modal d'erreur amélioré
+    const modal = `
+        <div class="modal fade" id="errorDebugModal" tabindex="-1" role="dialog" style="z-index: 9999;">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content border-danger">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            ${title}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-danger">
+                            <h6 class="alert-heading">
+                                <i class="fas fa-bug me-2"></i>
+                                Erreur de Soumission - Mode Debug
+                            </h6>
+                            <pre style="white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 15px; border-radius: 5px;">${fullMessage}</pre>
+                        </div>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="copyDebugInfo()">
+                                <i class="fas fa-copy me-1"></i>
+                                Copier les détails
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="console.log('Debug Info:', ${JSON.stringify(serverResponse || {})})">
+                                <i class="fas fa-terminal me-1"></i>
+                                Afficher dans la console
+                            </button>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        <button type="button" class="btn btn-primary" onclick="location.reload()">
+                            <i class="fas fa-refresh me-1"></i>
+                            Recharger la page
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Supprimer le modal existant s'il y en a un
+    const existingModal = document.getElementById('errorDebugModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Ajouter le nouveau modal
+    document.body.insertAdjacentHTML('beforeend', modal);
+    
+    // Afficher le modal
+    const modalElement = new bootstrap.Modal(document.getElementById('errorDebugModal'));
+    modalElement.show();
+    
+    // Stocker les infos de debug globalement pour la fonction de copie
+    window.debugInfo = fullMessage;
+}
+
+/**
+ * ✅ FONCTION : Copier les informations de debug
+ */
+function copyDebugInfo() {
+    if (window.debugInfo) {
+        navigator.clipboard.writeText(window.debugInfo).then(() => {
+            showNotification('Informations de debug copiées dans le presse-papier !', 'success');
+        }).catch(() => {
+            // Fallback pour les navigateurs plus anciens
+            const textarea = document.createElement('textarea');
+            textarea.value = window.debugInfo;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showNotification('Informations de debug copiées !', 'success');
+        });
+    }
+}
+
+/**
+ * ✅ FONCTION : Analyser les données du formulaire pour diagnostic
+ */
+function analyzeFormDataForDebug() {
+    const form = document.getElementById('organisationForm');
+    const formData = new FormData(form);
+    
+    let totalSize = 0;
+    let fieldCount = 0;
+    let largestFields = [];
+    
+    for (let [key, value] of formData.entries()) {
+        fieldCount++;
+        const size = new Blob([value]).size;
+        totalSize += size;
+        
+        if (size > 1000) { // Champs > 1KB
+            largestFields.push({key, size, value: value.toString().substring(0, 50) + '...'});
+        }
+    }
+    
+    console.log('=== ANALYSE FORMULAIRE DEBUG ===');
+    console.log('Nombre de champs:', fieldCount);
+    console.log('Taille totale:', (totalSize / 1024).toFixed(2) + ' KB');
+    console.log('Champs volumineux:', largestFields);
+    
+    return {fieldCount, totalSize, largestFields};
+}
+
+// Exposer les nouvelles fonctions
+window.showErrorModal = showErrorModal;
+window.copyDebugInfo = copyDebugInfo;
+
+
+// ========================================
 // 11. SOUMISSION FINALE
 // ========================================
 
@@ -4184,7 +4348,27 @@ if (analysis.fieldCount > 1000) {
                 
             } else {
                 // Erreur métier
-                showNotification(result.message || 'Erreur lors de la soumission', 'danger');
+                // ✅ ERREUR MÉTIER AVEC DEBUG DÉTAILLÉ
+    const errorMessage = result.message || 'Erreur lors de la soumission';
+    
+    // Afficher d'abord la notification basique
+    showNotification(errorMessage, 'danger');
+    
+    // Puis afficher le modal de debug avec tous les détails
+    showErrorModal(
+        'Erreur de Validation',
+        errorMessage,
+        {
+            success: result.success,
+            message: result.message,
+            errors: result.errors,
+            data: result.data,
+            debug: result.debug,
+            timestamp: new Date().toISOString(),
+            formAnalysis: analyzeFormDataForDebug()
+        },
+        true
+    );
                 
                 if (result.errors) {
                     Object.keys(result.errors).forEach(field => {
@@ -4197,12 +4381,81 @@ if (analysis.fieldCount > 1000) {
                 }
             }
         } else {
-            throw new Error(`Erreur HTTP ${response.status}: ${response.statusText}`);
+             // ✅ GESTION AMÉLIORÉE DES ERREURS HTTP
+    let errorResponse = null;
+    try {
+        errorResponse = await response.json();
+    } catch (e) {
+        try {
+            errorResponse = await response.text();
+        } catch (e2) {
+            errorResponse = 'Impossible de lire la réponse du serveur';
+        }
+    }
+    
+    const errorDetails = {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        headers: Object.fromEntries(response.headers.entries()),
+        response: errorResponse,
+        timestamp: new Date().toISOString()
+    };
+    
+    // Afficher le modal de debug au lieu de juste lancer une erreur
+    showErrorModal(
+        `Erreur HTTP ${response.status}`,
+        `Le serveur a retourné une erreur : ${response.status} ${response.statusText}`,
+        errorDetails,
+        true
+    );
+    
+    return; // Sortir de la fonction au lieu de throw
         }
         
     } catch (error) {
         console.error('❌ Erreur soumission:', error);
-        showNotification('Erreur de communication avec le serveur. Veuillez réessayer.', 'danger');
+    
+    // ✅ GESTION AVANCÉE DES ERREURS AVEC DEBUG
+    let errorTitle = 'Erreur de Soumission';
+    let errorMessage = 'Une erreur est survenue lors de la soumission du formulaire.';
+    let serverResponse = null;
+    
+    try {
+        // Analyser la réponse si c'est une erreur fetch
+        if (error.response) {
+            serverResponse = error.response;
+            errorMessage = error.message || 'Erreur de communication avec le serveur.';
+        } else if (error.message) {
+            errorMessage = error.message;
+            serverResponse = {
+                error: error.name,
+                message: error.message,
+                stack: error.stack,
+                timestamp: new Date().toISOString()
+            };
+        }
+        
+        // Ajouter l'analyse du formulaire au debug
+        const analysisResult = analyzeFormDataForDebug();
+        if (serverResponse) {
+            serverResponse.formAnalysis = analysisResult;
+        } else {
+            serverResponse = { formAnalysis: analysisResult };
+        }
+        
+    } catch (debugError) {
+        console.warn('Erreur lors de l\'analyse debug:', debugError);
+        serverResponse = {
+            originalError: error.toString(),
+            debugError: debugError.toString(),
+            timestamp: new Date().toISOString()
+        };
+    }
+    
+    // Afficher le modal d'erreur avec tous les détails
+    showErrorModal(errorTitle, errorMessage, serverResponse, true);
+
     } finally {
         showGlobalLoader(false);
         updateSaveIndicator('success');
@@ -4372,29 +4625,74 @@ function stopAutoSave() {
 
 // AJOUTER CETTE FONCTION de diagnostic
 function analyzeFormData() {
-    const form = document.getElementById('organisationForm');
+ const form = document.getElementById('organisationForm');
     const formData = new FormData(form);
     
     let totalSize = 0;
     let fieldCount = 0;
     let largestFields = [];
+    const fieldsByType = {};
     
     for (let [key, value] of formData.entries()) {
         fieldCount++;
         const size = new Blob([value]).size;
         totalSize += size;
         
+        // Catégoriser par type
+        if (value instanceof File) {
+            if (!fieldsByType.files) fieldsByType.files = [];
+            fieldsByType.files.push({key, size, name: value.name});
+        } else if (typeof value === 'string' && value.length > 100) {
+            if (!fieldsByType.longText) fieldsByType.longText = [];
+            fieldsByType.longText.push({key, size, preview: value.substring(0, 50) + '...'});
+        }
+        
         if (size > 1000) { // Champs > 1KB
-            largestFields.push({key, size, value: value.toString().substring(0, 50)});
+            largestFields.push({
+                key, 
+                size, 
+                type: value instanceof File ? 'file' : 'text',
+                preview: value instanceof File ? value.name : value.toString().substring(0, 50) + '...'
+            });
         }
     }
     
-    console.log('=== ANALYSE FORMULAIRE ===');
+    // Analyser les données spécifiques
+    const organisationData = {
+        fondateurs: OrganisationApp.fondateurs.length,
+        adherents: OrganisationApp.adherents.length,
+        documents: Object.keys(OrganisationApp.documents).length,
+        anomalies: OrganisationApp.rapportAnomalies.enabled ? OrganisationApp.rapportAnomalies.adherentsAvecAnomalies : 0
+    };
+    
+    const analysis = {
+        fieldCount, 
+        totalSize, 
+        largestFields,
+        fieldsByType,
+        organisationData,
+        warnings: []
+    };
+    
+    // Générer des avertissements
+    if (fieldCount > 1000) {
+        analysis.warnings.push(`Nombre de champs élevé: ${fieldCount} (limite recommandée: 1000)`);
+    }
+    if (totalSize > 50 * 1024 * 1024) { // 50MB
+        analysis.warnings.push(`Taille importante: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
+    }
+    if (largestFields.length > 10) {
+        analysis.warnings.push(`Nombreux champs volumineux: ${largestFields.length}`);
+    }
+    
+    console.log('=== ANALYSE FORMULAIRE COMPLÈTE ===');
     console.log('Nombre de champs:', fieldCount);
     console.log('Taille totale:', (totalSize / 1024).toFixed(2) + ' KB');
+    console.log('Organisation:', organisationData);
     console.log('Champs volumineux:', largestFields);
+    console.log('Avertissements:', analysis.warnings);
     
-    return {fieldCount, totalSize, largestFields};
+    return analysis;
 }
 
 // ========================================
