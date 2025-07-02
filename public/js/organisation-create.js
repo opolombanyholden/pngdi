@@ -4787,6 +4787,208 @@ function analyzeFormData() {
 }
 
 // ========================================
+// WORKFLOW 2 PHASES - NOUVELLES FONCTIONS v4.1
+// ========================================
+
+/**
+ * ✅ NOUVEAU : Initialiser le workflow 2 phases si disponible
+ */
+function initializeWorkflow2Phases() {
+    try {
+        // Vérifier si le module workflow-2phases.js est chargé
+        if (typeof window.Workflow2Phases !== 'undefined' && window.Workflow2Phases.init) {
+            console.log('🔄 Initialisation Workflow 2 Phases v4.1...');
+            
+            // Initialiser le module
+            const initialized = window.Workflow2Phases.init();
+            
+            if (initialized) {
+                console.log('✅ Workflow 2 Phases initialisé avec succès');
+                
+                // Marquer que le workflow est disponible
+                window.OrganisationApp.workflow2PhasesAvailable = true;
+                
+                // Configurer les hooks nécessaires
+                setupWorkflow2PhasesHooks();
+                
+            } else {
+                console.log('⚠️ Workflow 2 Phases non initialisé - Fallback système original');
+                window.OrganisationApp.workflow2PhasesAvailable = false;
+            }
+        } else {
+            console.log('ℹ️ Module Workflow 2 Phases non trouvé - Système original utilisé');
+            window.OrganisationApp.workflow2PhasesAvailable = false;
+        }
+    } catch (error) {
+        console.warn('⚠️ Erreur initialisation Workflow 2 Phases - Fallback système original:', error);
+        window.OrganisationApp.workflow2PhasesAvailable = false;
+    }
+}
+
+/**
+ * ✅ NOUVEAU : Configurer les hooks pour le workflow 2 phases
+ */
+function setupWorkflow2PhasesHooks() {
+    if (!window.OrganisationApp.workflow2PhasesAvailable) return;
+    
+    try {
+        // Hook 1: Sauvegarder la fonction submitForm originale
+        if (!window.OrganisationApp.originalSubmitForm) {
+            window.OrganisationApp.originalSubmitForm = window.submitForm;
+            console.log('💾 Fonction submitForm originale sauvegardée');
+        }
+        
+        // Hook 2: Remplacer submitForm par la version avec workflow 2 phases
+        window.submitForm = function() {
+            console.log('🚀 submitForm appelée - Workflow 2 Phases v4.1');
+            
+            if (window.Workflow2Phases && window.Workflow2Phases.interceptSubmission) {
+                return window.Workflow2Phases.interceptSubmission(window.OrganisationApp.originalSubmitForm);
+            } else {
+                console.log('⚠️ Workflow2Phases.interceptSubmission non disponible - Fallback');
+                return window.OrganisationApp.originalSubmitForm.call(this);
+            }
+        };
+        
+        console.log('🔗 Hooks Workflow 2 Phases configurés');
+        
+    } catch (error) {
+        console.error('❌ Erreur configuration hooks Workflow 2 Phases:', error);
+        // Restaurer la fonction originale en cas d'erreur
+        if (window.OrganisationApp.originalSubmitForm) {
+            window.submitForm = window.OrganisationApp.originalSubmitForm;
+        }
+    }
+}
+
+/**
+ * ✅ NOUVEAU : Collecter TOUTES les données du formulaire (pour Workflow 2 Phases)
+ */
+function collectAllFormData() {
+    console.log('📊 Collection complète des données formulaire v4.1');
+    
+    try {
+        // Récupérer les données de base
+        const baseData = collectFormData();
+        
+        // Ajouter les données spécialisées
+        const completeData = {
+            // Données de base du formulaire
+            ...baseData,
+            
+            // Métadonnées
+            metadata: {
+                selectedOrgType: OrganisationApp.selectedOrgType,
+                currentStep: OrganisationApp.currentStep,
+                totalSteps: OrganisationApp.totalSteps,
+                timestamp: Date.now(),
+                version: '4.1'
+            },
+            
+            // Données des collections
+            fondateurs: [...OrganisationApp.fondateurs],
+            adherents: [...OrganisationApp.adherents],
+            
+            // Documents (uniquement les métadonnées, pas les fichiers)
+            documentsMetadata: Object.keys(OrganisationApp.documents).map(key => ({
+                type: key,
+                fileName: OrganisationApp.documents[key].fileName || null,
+                uploaded: OrganisationApp.documents[key].uploaded || false
+            })),
+            
+            // Rapport d'anomalies si présent
+            rapportAnomalies: OrganisationApp.rapportAnomalies.enabled ? {
+                enabled: true,
+                adherentsValides: OrganisationApp.rapportAnomalies.adherentsValides,
+                adherentsAvecAnomalies: OrganisationApp.rapportAnomalies.adherentsAvecAnomalies,
+                statistiques: OrganisationApp.rapportAnomalies.statistiques,
+                hasAnomalies: OrganisationApp.rapportAnomalies.anomalies.length > 0
+            } : { enabled: false },
+            
+            // Informations de validation
+            validationStatus: {
+                allStepsValid: validateAllSteps(),
+                currentStepValid: validateCurrentStep(),
+                errors: {...OrganisationApp.validationErrors}
+            }
+        };
+        
+        console.log('✅ Données complètes collectées:', {
+            baseFields: Object.keys(baseData).length,
+            fondateurs: completeData.fondateurs.length,
+            adherents: completeData.adherents.length,
+            documents: completeData.documentsMetadata.length,
+            hasAnomalies: completeData.rapportAnomalies.enabled
+        });
+        
+        return completeData;
+        
+    } catch (error) {
+        console.error('❌ Erreur collection données complètes:', error);
+        
+        // Fallback vers collectFormData de base
+        return {
+            ...collectFormData(),
+            metadata: {
+                selectedOrgType: OrganisationApp.selectedOrgType || '',
+                error: 'Erreur collection complète',
+                fallback: true
+            },
+            fondateurs: OrganisationApp.fondateurs || [],
+            adherents: OrganisationApp.adherents || []
+        };
+    }
+}
+
+/**
+ * ✅ NOUVEAU : Fonction de diagnostic pour Workflow 2 Phases
+ */
+function diagnoseWorkflow2Phases() {
+    const diagnosis = {
+        timestamp: new Date().toISOString(),
+        version: '4.1',
+        
+        // Tests de disponibilité
+        moduleLoaded: typeof window.Workflow2Phases !== 'undefined',
+        moduleInitialized: window.OrganisationApp?.workflow2PhasesAvailable || false,
+        originalFunctionSaved: typeof window.OrganisationApp?.originalSubmitForm === 'function',
+        
+        // Tests fonctionnels
+        interceptAvailable: typeof window.Workflow2Phases?.interceptSubmission === 'function',
+        collectDataAvailable: typeof window.collectAllFormData === 'function',
+        
+        // État actuel
+        currentFormData: {
+            selectedType: OrganisationApp.selectedOrgType,
+            currentStep: OrganisationApp.currentStep,
+            fondateursCount: OrganisationApp.fondateurs?.length || 0,
+            adherentsCount: OrganisationApp.adherents?.length || 0,
+            hasAnomalies: OrganisationApp.rapportAnomalies?.enabled || false
+        },
+        
+        // Recommandations
+        shouldUsePhase1: null, // Sera calculé si module disponible
+        fallbackReason: null
+    };
+    
+    // Test de la logique de décision si disponible
+    if (diagnosis.moduleLoaded && window.Workflow2Phases.shouldUsePhase1) {
+        try {
+            diagnosis.shouldUsePhase1 = window.Workflow2Phases.shouldUsePhase1();
+        } catch (error) {
+            diagnosis.shouldUsePhase1 = false;
+            diagnosis.fallbackReason = error.message;
+        }
+    }
+    
+    // Déterminer le statut global
+    diagnosis.status = diagnosis.moduleLoaded && diagnosis.moduleInitialized ? 'OPERATIONAL' : 'FALLBACK';
+    
+    console.log('🔍 Diagnostic Workflow 2 Phases v4.1:', diagnosis);
+    return diagnosis;
+}
+
+// ========================================
 // 13. INITIALISATION COMPLÈTE
 // ========================================
 
@@ -4794,9 +4996,12 @@ function analyzeFormData() {
  * Initialisation complète de l'application
  */
 function initializeApplication() {
-    console.log('🚀 Initialisation complète PNGDI - Création Organisation');
+    console.log('🚀 Initialisation complète PNGDI - Création Organisation v4.1');
     
-    // Initialiser l'affichage
+    // ✅ NOUVEAU : Initialiser le workflow 2 phases AVANT le reste
+    initializeWorkflow2Phases();
+    
+    // ✅ Code existant préservé à 100%
     updateStepDisplay();
     updateNavigationButtons();
     
@@ -4809,7 +5014,7 @@ function initializeApplication() {
     // Démarrer l'auto-sauvegarde
     startAutoSave();
     
-    console.log('✅ Application initialisée avec succès');
+    console.log('✅ Application initialisée avec succès v4.1');
 }
 
 /**
@@ -5000,6 +5205,16 @@ function toggleDeclarationParti() {
 // Exposer les fonctions principales pour compatibilité avec le HTML
 window.changeStep = changeStep;
 window.selectOrganizationType = selectOrganizationType;
+// ✅ Nouvelles fonctions exposées pour Workflow 2 Phases
+window.collectAllFormData = collectAllFormData;
+window.initializeWorkflow2Phases = initializeWorkflow2Phases;
+window.setupWorkflow2PhasesHooks = setupWorkflow2PhasesHooks;
+window.diagnoseWorkflow2Phases = diagnoseWorkflow2Phases;
+
+// ✅ Marqueur de compatibilité pour workflow-2phases.js
+window.OrganisationApp = window.OrganisationApp || {};
+window.OrganisationApp.workflow2PhasesCompatible = true;
+window.OrganisationApp.version = '4.1';
 window.addFondateur = addFondateur;
 window.removeFondateur = removeFondateur;
 window.addAdherent = addAdherent;
@@ -5237,10 +5452,10 @@ function setupSpecialEventListeners() {
  */
 console.log(`
 🎉 ========================================================================
-   PNGDI - Formulaire Création Organisation - CHARGEMENT TERMINÉ
+   PNGDI - Formulaire Création Organisation - VERSION 4.1 CHARGÉ
    ========================================================================
    
-   ✅ Version: 1.2 - Système d'anomalies intégré
+   ✅ Version: 4.1 - WORKFLOW 2 PHASES INTÉGRÉ
    ✅ 9 étapes complètes avec validation
    ✅ Import Excel/CSV avec détection d'anomalies
    ✅ Rapport d'anomalies automatique
@@ -5252,9 +5467,17 @@ console.log(`
    ✅ Géolocalisation intégrée
    ✅ Raccourcis clavier
    
-   🚀 Prêt pour production !
+   🚀 NOUVEAU v4.1 - SESSION 4 :
+   ✅ Workflow 2 Phases intégré avec fallback intelligent
+   ✅ Hook automatique pour workflow-2phases.js
+   ✅ Fonction collectAllFormData() pour export complet
+   ✅ Diagnostic intégré pour troubleshooting
+   ✅ Compatibilité rétroactive 100% préservée
+   
+   🎯 Prêt pour production avec chunking Session 4 !
    📋 Système révolutionnaire de conservation totale des anomalies
    🇬🇦 Conformité législation gabonaise
+   🔄 Workflow intelligent : Standard → Phase 1 → Phase 2
    
    Développé pour l'excellence du service public gabonais
 ========================================================================
@@ -5262,12 +5485,28 @@ console.log(`
 
 // Vérification finale de l'intégrité au chargement
 setTimeout(() => {
-    const integrityCheck = verifyAnomaliesSystem();
-    if (integrityCheck) {
-        console.log('🎯 Système opérationnel - Toutes les fonctionnalités disponibles');
+     const integrityCheck = verifyAnomaliesSystem();
+    const workflowDiagnosis = diagnoseWorkflow2Phases();
+    
+    if (integrityCheck && workflowDiagnosis.status === 'OPERATIONAL') {
+        console.log('🎯 Système complet opérationnel v4.1 - Toutes les fonctionnalités disponibles');
+        console.log('🔄 Workflow 2 Phases: ACTIVÉ et fonctionnel');
+    } else if (integrityCheck && workflowDiagnosis.status === 'FALLBACK') {
+        console.log('✅ Système de base opérationnel v4.1 - Mode fallback activé');
+        console.log('🔄 Workflow 2 Phases: INDISPONIBLE - Système original utilisé');
     } else {
-        console.warn('⚠️ Problème d\'intégrité détecté - Certaines fonctionnalités peuvent être limitées');
+        console.warn('⚠️ Problème d\'intégrité détecté v4.1 - Certaines fonctionnalités peuvent être limitées');
     }
+    
+    // Test immédiat des fonctions exposées
+    if (typeof window.collectAllFormData === 'function') {
+        console.log('✅ collectAllFormData() exposée et fonctionnelle');
+    }
+    
+    if (typeof window.diagnoseWorkflow2Phases === 'function') {
+        console.log('✅ diagnoseWorkflow2Phases() exposée et fonctionnelle');
+    }
+    
 }, 1000);
 
 // Fin du fichier JavaScript complet

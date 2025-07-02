@@ -1467,6 +1467,9 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Workflow 2 phases -->
+<script src="{{ asset('js/workflow-2phases.js') }}"></script>
+
     <script src="{{ asset('js/organisation-create.js') }}"></script>
     <!-- NOUVEAU : Système de chunking -->
     <script src="{{ asset('js/chunking-import.js') }}"></script>

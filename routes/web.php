@@ -295,6 +295,13 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
         Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
         
+
+        // ✅ NOUVELLES ROUTES POUR SOLUTION 2 PHASES
+        Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
+        Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])->name('adherents-import');
+        Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])->name('store-adherents');
+
+
         // ✅ TÉLÉCHARGEMENT ACCUSÉ DE RÉCEPTION
         Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
         
@@ -302,6 +309,12 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
         Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
         Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
+    
+        // NOUVELLES ROUTES POUR SOLUTION 2 PHASES
+        Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
+        Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])->name('adherents-import');
+        Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])->name('store-adherents');
+    
     });
     
     // ========================================
