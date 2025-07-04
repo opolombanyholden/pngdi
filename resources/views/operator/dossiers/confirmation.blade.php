@@ -102,20 +102,33 @@
                     </div>
 
                     <!-- QR Code de vérification -->
-                    @if(isset($confirmationData['qr_code']) && $confirmationData['qr_code'])
-                    <div class="row mt-4">
-                        <div class="col-12">
-                            <div class="alert alert-info">
-                                <h6 class="alert-heading">
-                                    <i class="fas fa-qrcode me-2"></i>
-                                    Code de vérification
-                                </h6>
-                                <p class="mb-0">Code QR : <strong>{{ $confirmationData['qr_code'] }}</strong></p>
-                                <small class="text-muted">Ce code permet de vérifier l'authenticité de votre dossier</small>
-                            </div>
-                        </div>
-                    </div>
-                    @endif
+@if(isset($confirmationData['qr_code']) && $confirmationData['qr_code'])
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-info text-center">
+            <h6 class="alert-heading">
+                <i class="fas fa-qrcode me-2"></i>
+                Code de vérification
+            </h6>
+            
+            <!-- Image QR Code -->
+            <div class="mb-3">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={{ urlencode($confirmationData['qr_code']) }}" 
+                     alt="QR Code" 
+                     class="border rounded"
+                     style="background: white; padding: 10px;">
+            </div>
+            
+            
+            <small class="text-muted">
+                Ce code permet de vérifier l'authenticité de votre dossier
+            </small>
+        </div>
+    </div>
+</div>
+@endif
+
+
                 </div>
             </div>
 

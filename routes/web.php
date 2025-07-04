@@ -285,37 +285,27 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::delete('/photo', [ProfileController::class, 'deleteProfilePhoto'])->name('photo.delete');
     });
     
-    // ✅ ORGANISATIONS AVEC CORRECTIONS FINALES
-    Route::prefix('organisations')->name('organisations.')->middleware(['check.organisation.limit'])->group(function () {
-        Route::get('/', [OrganisationController::class, 'index'])->name('index');
-        Route::get('/create', [OrganisationController::class, 'create'])->name('create');
-        Route::post('/', [OrganisationController::class, 'store'])->name('store');
-        Route::get('/{organisation}', [OrganisationController::class, 'show'])->name('show');
-        Route::get('/{organisation}/edit', [OrganisationController::class, 'edit'])->name('edit');
-        Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
-        Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
-        
-
-        // ✅ NOUVELLES ROUTES POUR SOLUTION 2 PHASES
-        Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
-        Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])->name('adherents-import');
-        Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])->name('store-adherents');
-
-
-        // ✅ TÉLÉCHARGEMENT ACCUSÉ DE RÉCEPTION
-        Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
-        
-        // ✅ VÉRIFICATIONS AJAX EN TEMPS RÉEL
-        Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
-        Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
-        Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
+// ✅ ORGANISATIONS AVEC CORRECTIONS FINALES
+Route::prefix('organisations')->name('organisations.')->middleware(['check.organisation.limit'])->group(function () {
+    Route::get('/', [OrganisationController::class, 'index'])->name('index');
+    Route::get('/create', [OrganisationController::class, 'create'])->name('create');
+    Route::post('/', [OrganisationController::class, 'store'])->name('store');
+    Route::get('/{organisation}', [OrganisationController::class, 'show'])->name('show');
+    Route::get('/{organisation}/edit', [OrganisationController::class, 'edit'])->name('edit');
+    Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
+    Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
     
-        // NOUVELLES ROUTES POUR SOLUTION 2 PHASES
-        Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
-        Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])->name('adherents-import');
-        Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])->name('store-adherents');
+    // ✅ WORKFLOW 2 PHASES - PHASE 1 SEULEMENT
+    Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
     
-    });
+    // ✅ TÉLÉCHARGEMENT ACCUSÉ DE RÉCEPTION
+    Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
+    
+    // ✅ VÉRIFICATIONS AJAX EN TEMPS RÉEL
+    Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
+    Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
+    Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
+});
     
     // ========================================
     // 🔧 CORRECTION MAJEURE : GESTION DES DOSSIERS
@@ -328,6 +318,34 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
             ->name('confirmation')
             ->middleware(['throttle:60,1']); // Protection contre les abus seulement
         
+        // ✅ NOUVELLES ROUTES WORKFLOW 2 PHASES - PHASE 2
+    Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])
+        ->name('adherents-import');
+        
+    Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])
+        ->name('store-adherents');
+        
+    Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
+        ->name('process-session-adherents');
+        
+    Route::get('/{dossier}/phase2-status', function($dossierId) {
+        $sessionKey = 'phase2_adherents_' . $dossierId;
+        $expirationKey = 'phase2_expires_' . $dossierId;
+        
+        $adherentsData = session($sessionKey, []);
+        $expirationTime = session($expirationKey);
+        
+        return response()->json([
+            'success' => true,
+            'has_session_data' => !empty($adherentsData),
+            'adherents_count' => count($adherentsData),
+            'expires_at' => $expirationTime,
+            'is_expired' => $expirationTime ? now()->isAfter($expirationTime) : false,
+            'dossier_id' => $dossierId
+        ]);
+    })->name('phase2-status');
+
+
         // ========================================
         // ROUTES AVEC MIDDLEWARE dossier.lock (Routes nécessitant modification)
         // ========================================
@@ -840,6 +858,79 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
                 : 'Erreurs de validation détectées'
         ]);
     })->name('validate-complete-form');
+
+Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->group(function () {
+    
+    // ... routes existantes ...
+    
+    /**
+     * 🔧 NOUVELLES ROUTES VALIDATION NIP
+     * Format: XX-QQQQ-YYYYMMDD
+     */
+    
+    // Validation NIP en temps réel
+    Route::post('/validate-nip', [
+        \App\Http\Controllers\Operator\OrganisationController::class, 
+        'validateNipApi'
+    ])->name('validate-nip');
+    
+    // Générer exemples de NIP valides
+    Route::get('/generate-nip-example', function () {
+        try {
+            // Générer des exemples de NIP valides
+            $examples = [];
+            $prefixes = ['A1', 'B2', 'C3', '1A', '2B', '3C'];
+            $sequences = ['0001', '1234', '5678', '9999'];
+
+            foreach (range(1, 5) as $i) {
+                $prefix = $prefixes[array_rand($prefixes)];
+                $sequence = $sequences[array_rand($sequences)];
+
+                // Date aléatoire entre 1960 et 2005
+                $year = rand(1960, 2005);
+                $month = rand(1, 12);
+                $day = rand(1, 28); // Éviter les problèmes de jours invalides
+
+                $dateStr = sprintf('%04d%02d%02d', $year, $month, $day);
+                $example = $prefix . '-' . $sequence . '-' . $dateStr;
+
+                $examples[] = [
+                    'nip' => $example,
+                    'prefix' => $prefix,
+                    'sequence' => $sequence,
+                    'birth_date' => sprintf('%04d-%02d-%02d', $year, $month, $day),
+                    'age' => now()->diffInYears(\Carbon\Carbon::createFromFormat('Y-m-d', sprintf('%04d-%02d-%02d', $year, $month, $day)))
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'examples' => $examples,
+                'format' => 'XX-QQQQ-YYYYMMDD',
+                'description' => [
+                    'XX' => '2 caractères alphanumériques',
+                    'QQQQ' => '4 chiffres',
+                    'YYYYMMDD' => 'Date de naissance (ANNÉE MOIS JOUR)'
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur génération exemples',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    })->name('generate-nip-example');
+    
+    // Validation de lot de NIP
+    Route::post('/validate-nip-batch', [
+        \App\Http\Controllers\Operator\OrganisationController::class, 
+        'validateNipBatch'
+    ])->name('validate-nip-batch');
+    
+    });
+
 });
 
 /*

@@ -17,7 +17,7 @@ window.Workflow2Phases = {
     config: {
         routes: {
             phase1: '/operator/organisations/store-phase1',
-            phase2_template: '/operator/organisations/{dossier}/adherents-import',
+            phase2_template: '/operator/dossiers/{dossier}/adherents-import',
             confirmation_template: '/operator/dossiers/confirmation/{dossier}'
         },
         options: {

@@ -4343,38 +4343,26 @@ function validateAllSteps() {
  * ✅ SOUMISSION FINALE CORRIGÉE - Avec chunking adaptatif pour gros volumes
  */
 async function submitForm() {
-    console.log('📤 Début soumission avec chunking adaptatif...');
+    console.log('📤 Début de la soumission du formulaire avec détection volume...');
     
-    // ✅ Protection double soumission
-    const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
-    if (submitBtn) {
-        if (submitBtn.disabled) {
-            console.log('⚠️ Soumission déjà en cours...');
-            return false;
-        }
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '⏳ Traitement en cours...';
-    }
-    
+    // Validation finale complète
     if (!validateAllSteps()) {
         showNotification('Veuillez corriger toutes les erreurs avant de soumettre', 'danger');
-        // Réactiver bouton en cas d'erreur
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = 'Soumettre le dossier';
-        }
         return false;
     }
 
-    // ✅ CHUNKING ADAPTATIF
+    // ✅ NOUVEAU : Détection automatique du volume pour chunking
     const totalAdherents = OrganisationApp.adherents.length;
-    const CHUNKING_THRESHOLD = 50;
+    const CHUNKING_THRESHOLD = 200; // Seuil pour activation chunking
     
+    console.log(`📊 Volume détecté: ${totalAdherents} adhérents (seuil: ${CHUNKING_THRESHOLD})`);
+    
+    // Décision automatique : chunking ou soumission normale
     if (totalAdherents >= CHUNKING_THRESHOLD) {
-        console.log(`📦 Gros volume détecté (${totalAdherents} adhérents) - Chunking activé`);
+        console.log('📦 Gros volume détecté - Soumission par chunks activée');
         return await submitFormWithChunking();
     } else {
-        console.log(`📋 Volume normal (${totalAdherents} adhérents) - Soumission standard`);
+        console.log('📋 Volume standard - Soumission normale');
         return await submitFormNormal();
     }
 }
@@ -4545,27 +4533,20 @@ async function submitFormWithChunking() {
         }
         
     } catch (error) {
-    console.error('❌ Erreur soumission par chunks:', error);
-    
-    // ✅ Réactiver bouton en cas d'erreur
-    const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = 'Soumettre le dossier';
-    }
-    
-    // Afficher le debug modal avec détails complets
-    if (typeof showErrorModal === 'function') {
-        showErrorModal('Erreur Soumission Chunking', error.message, {
-            totalAdherents: OrganisationApp.adherents.length,
-            chunksDetected: Math.ceil(OrganisationApp.adherents.length / 500),
-            errorDetails: error.toString(),
-            timestamp: new Date().toISOString()
-        });
-    } else {
-        showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
-    }
-    
+        console.error('❌ Erreur soumission par chunks:', error);
+        
+        // Afficher le debug modal avec détails complets
+        if (typeof showErrorModal === 'function') {
+            showErrorModal('Erreur Soumission Chunking', error.message, {
+                totalAdherents: OrganisationApp.adherents.length,
+                chunksDetected: Math.ceil(OrganisationApp.adherents.length / 500),
+                errorDetails: error.toString(),
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
+        }
+        
     } finally {
         showGlobalLoader(false);
     }
@@ -4675,16 +4656,9 @@ async function submitFormNormal() {
         }
         
     } catch (error) {
-    console.error('❌ Erreur soumission normale:', error);
-    showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
-    
-    // ✅ Réactiver bouton en cas d'erreur
-    const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = 'Soumettre le dossier';
-    }
-    
+        console.error('❌ Erreur soumission normale:', error);
+        showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
+        
     } finally {
         showGlobalLoader(false);
     }
@@ -4981,10 +4955,14 @@ function setupWorkflow2PhasesHooks() {
         
         // Hook 2: Remplacer submitForm par la version avec workflow 2 phases
         window.submitForm = function() {
-            console.log('🚀 submitForm appelée - Option C Chunking Transparent');
-    
-            // ✅ OPTION C : Utiliser directement la soumission adaptative
-            return window.OrganisationApp.originalSubmitForm.call(this);
+            console.log('🚀 submitForm appelée - Workflow 2 Phases v4.1');
+            
+            if (window.Workflow2Phases && window.Workflow2Phases.interceptSubmission) {
+                return window.Workflow2Phases.interceptSubmission(window.OrganisationApp.originalSubmitForm);
+            } else {
+                console.log('⚠️ Workflow2Phases.interceptSubmission non disponible - Fallback');
+                return window.OrganisationApp.originalSubmitForm.call(this);
+            }
         };
         
         console.log('🔗 Hooks Workflow 2 Phases configurés');
@@ -5776,9 +5754,8 @@ console.log(`
    ✅ Géolocalisation intégrée
    ✅ Raccourcis clavier
    
-   🚀 NOUVEAU v4.1 - SESSION 4 (OPTION C) :
-   ✅ Chunking Transparent adaptatif activé
-   ✅ Protection double soumission intégrée
+   🚀 NOUVEAU v4.1 - SESSION 4 :
+   ✅ Workflow 2 Phases intégré avec fallback intelligent
    ✅ Hook automatique pour workflow-2phases.js
    ✅ Fonction collectAllFormData() pour export complet
    ✅ Diagnostic intégré pour troubleshooting

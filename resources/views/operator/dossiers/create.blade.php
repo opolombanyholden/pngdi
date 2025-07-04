@@ -405,31 +405,32 @@
                                             <div class="row">
                                                 <!-- NIP - VALIDATION CORRIGÉE -->
                                                 <div class="col-md-6 mb-4">
-                                                    <label for="demandeur_nip" class="form-label fw-bold required">
-                                                        <i class="fas fa-hashtag me-2 text-primary"></i>
-                                                        Numéro d'Identification Personnelle (NIP)
-                                                    </label>
-                                                    <div class="input-group">
-                                                        <input type="text" 
-                                                               class="form-control form-control-lg" 
-                                                               id="demandeur_nip" 
-                                                               name="demandeur_nip" 
-                                                               placeholder="13 chiffres (ex: 1234567890123)"
-                                                               maxlength="13"
-                                                               pattern="[0-9]{13}"
-                                                               required>
-                                                        <span class="input-group-text">
-                                                            <i class="fas fa-spinner fa-spin d-none" id="nip-loading"></i>
-                                                            <i class="fas fa-check text-success d-none" id="nip-valid"></i>
-                                                            <i class="fas fa-times text-danger d-none" id="nip-invalid"></i>
-                                                        </span>
-                                                    </div>
-                                                    <div class="form-text">
-                                                        <i class="fas fa-info me-1"></i>
-                                                        Le NIP gabonais comporte exactement 13 chiffres
-                                                    </div>
-                                                    <div class="invalid-feedback" id="demandeur_nip_error"></div>
-                                                </div>
+    <label for="demandeur_nip" class="form-label fw-bold required">
+        <i class="fas fa-hashtag me-2 text-primary"></i>
+        Numéro d'Identification Personnelle (NIP)
+    </label>
+    <div class="input-group">
+        <input type="text" 
+               class="form-control form-control-lg" 
+               id="demandeur_nip" 
+               name="demandeur_nip" 
+               data-validate="nip"
+               placeholder="A1-2345-19901225"
+               maxlength="16"
+               pattern="[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}"
+               required>
+        <span class="input-group-text">
+            <i class="fas fa-spinner fa-spin d-none" id="nip-loading"></i>
+            <i class="fas fa-check text-success d-none" id="nip-valid"></i>
+            <i class="fas fa-times text-danger d-none" id="nip-invalid"></i>
+        </span>
+    </div>
+    <div class="form-text d-none">
+        <i class="fas fa-info me-1"></i>
+        Format nouveau: XX-QQQQ-YYYYMMDD (ex: A1-2345-19901225)
+    </div>
+    <div class="invalid-feedback" id="demandeur_nip_error"></div>
+</div>
 
                                                 <!-- Civilité -->
                                                 <div class="col-md-6 mb-4">
@@ -1062,9 +1063,16 @@
                                                 </div>
 
                                                 <div class="col-md-3 mb-3">
-                                                    <label for="fondateur_nip" class="form-label fw-bold">NIP</label>
-                                                    <input type="text" class="form-control" id="fondateur_nip" placeholder="13 chiffres" maxlength="13">
-                                                </div>
+    <label for="fondateur_nip" class="form-label fw-bold">NIP</label>
+    <input type="text" 
+           class="form-control" 
+           id="fondateur_nip" 
+           data-validate="nip"
+           placeholder="A1-2345-19901225" 
+           maxlength="16"
+           pattern="[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}">
+    <small class="form-text text-muted">Format: XX-QQQQ-YYYYMMDD</small>
+</div>
 
                                                 <div class="col-md-4 mb-3">
                                                     <label for="fondateur_fonction" class="form-label fw-bold">Fonction</label>
@@ -1212,7 +1220,14 @@
 
                                                     <div class="col-md-4 mb-3">
                                                         <label for="adherent_nip" class="form-label fw-bold">NIP</label>
-                                                        <input type="text" class="form-control" id="adherent_nip" placeholder="13 chiffres" maxlength="13">
+                                                        <input type="text" 
+                                                                class="form-control" 
+                                                                id="adherent_nip" 
+                                                                data-validate="nip"
+                                                                placeholder="A1-2345-19901225" 
+                                                                maxlength="16"
+                                                                pattern="[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}">
+                                                        <small class="form-text text-muted">Format: XX-QQQQ-YYYYMMDD</small>
                                                     </div>
 
                                                     <div class="col-md-6 mb-3">
@@ -1436,6 +1451,7 @@
 <div class="modal fade" id="helpModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
+
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
                     <i class="fas fa-question-circle me-2"></i>
@@ -1450,6 +1466,52 @@
                     <li><strong>Étape 3 :</strong> Saisissez vos informations personnelles</li>
                     <li><strong>Étapes 4-9 :</strong> À développer selon vos besoins</li>
                 </ul>
+            </div>
+
+
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+
+            
+        </div>
+    </div>
+</div>
+
+<!-- Modal d'aide NIP -->
+<div class="modal fade" id="nipHelpModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-hashtag me-2"></i>
+                    Aide - Format NIP Gabonais
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <h6>Nouveau format NIP : XX-QQQQ-YYYYMMDD</h6>
+                <div class="alert alert-info">
+                    <h6 class="alert-heading">Structure du NIP :</h6>
+                    <ul class="mb-0">
+                        <li><strong>XX</strong> : 2 caractères alphanumériques (A-Z, 0-9)</li>
+                        <li><strong>QQQQ</strong> : 4 chiffres de séquence</li>
+                        <li><strong>YYYYMMDD</strong> : Date de naissance (Année-Mois-Jour)</li>
+                    </ul>
+                </div>
+                <h6>Exemples valides :</h6>
+                <div class="bg-light p-3 rounded">
+                    <code>A1-2345-19901225</code> → Né le 25/12/1990<br>
+                    <code>B2-0001-20000115</code> → Né le 15/01/2000<br>
+                    <code>C3-9999-19850630</code> → Né le 30/06/1985
+                </div>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-outline-info" onclick="showNipExample()">
+                        <i class="fas fa-magic me-2"></i>Générer un exemple
+                    </button>
+                </div>
+                <div id="nipExampleResult" class="mt-2"></div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
@@ -1467,10 +1529,67 @@
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Workflow 2 phases -->
+
+<!-- ✅ NOUVEAU : Validation NIP format XX-QQQQ-YYYYMMDD -->
+    <script src="{{ asset('js/nip-validation.js') }}"></script>
+
+    <!-- Workflow 2 phases -->
 <script src="{{ asset('js/workflow-2phases.js') }}"></script>
 
     <script src="{{ asset('js/organisation-create.js') }}"></script>
     <!-- NOUVEAU : Système de chunking -->
     <script src="{{ asset('js/chunking-import.js') }}"></script>
+
+    <!-- ✅ Scripts NIP Validation -->
+    <script>
+        function showNipExample() {
+            if (window.NipValidation) {
+                const example = window.NipValidation.generateExample();
+                const validation = window.NipValidation.validateFormat(example);
+                const resultDiv = document.getElementById('nipExampleResult');
+                
+                if (validation.valid && validation.extracted_info) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <strong>Exemple généré :</strong> <code>${example}</code><br>
+                            <small>Âge calculé : ${validation.extracted_info.age} ans</small>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-info">
+                            <strong>Exemple généré :</strong> <code>${example}</code>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Ajouter bouton d'aide NIP dans les champs
+        document.addEventListener('DOMContentLoaded', function() {
+            const nipInputs = document.querySelectorAll('input[data-validate="nip"]');
+            nipInputs.forEach(function(input) {
+                const container = input.closest('.input-group');
+                if (container && !container.querySelector('.btn-help-nip')) {
+                    const helpBtn = document.createElement('button');
+                    helpBtn.type = 'button';
+                    helpBtn.className = 'btn btn-outline-info btn-help-nip';
+                    helpBtn.innerHTML = '<i class="fas fa-question-circle"></i>';
+                    helpBtn.title = 'Aide format NIP';
+                    helpBtn.onclick = function() {
+                        const modal = new bootstrap.Modal(document.getElementById('nipHelpModal'));
+                        modal.show();
+                    };
+                    
+                    // Ajouter après l'input-group-text existant
+                    const inputGroupText = container.querySelector('.input-group-text');
+                    if (inputGroupText) {
+                        container.insertBefore(helpBtn, inputGroupText.nextSibling);
+                    } else {
+                        container.appendChild(helpBtn);
+                    }
+                }
+            });
+        });
+    </script>
 @endpush

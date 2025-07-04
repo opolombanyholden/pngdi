@@ -7,6 +7,7 @@ use App\Models\Dossier;
 use App\Models\Organisation;
 use App\Models\Document;
 use App\Models\DocumentType;
+use App\Models\QrCode;
 use App\Services\DossierService;
 use App\Services\FileUploadService;
 use App\Services\NotificationService;
@@ -15,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Exception;
 
 class DossierController extends Controller
@@ -466,7 +468,7 @@ class DossierController extends Controller
     {
         try {
             // ✅ LOGS DE DEBUG RENFORCÉS - ENTRÉE MÉTHODE
-            \Log::info("=== DÉBUT CONFIRMATION METHOD DEBUG ===", [
+            Log::info("=== DÉBUT CONFIRMATION METHOD DEBUG ===", [
                 'dossier_param' => $dossier,
                 'dossier_type' => gettype($dossier),
                 'dossier_value' => is_object($dossier) ? get_class($dossier) : $dossier,
@@ -482,7 +484,7 @@ class DossierController extends Controller
             if (is_object($dossier) && is_a($dossier, 'App\Models\Dossier')) {
                 // $dossier est déjà un objet Dossier (binding automatique Laravel)
                 $dossierObj = $dossier;
-                \Log::info("=== DOSSIER REÇU COMME OBJET ===", [
+                Log::info("=== DOSSIER REÇU COMME OBJET ===", [
                     'dossier_id' => $dossierObj->id,
                     'class' => get_class($dossierObj)
                 ]);
@@ -490,7 +492,7 @@ class DossierController extends Controller
                 // $dossier est un ID, on doit le charger
                 $dossierId = is_numeric($dossier) ? (int)$dossier : $dossier;
                 
-                \Log::info("=== CHARGEMENT DOSSIER PAR ID ===", [
+                Log::info("=== CHARGEMENT DOSSIER PAR ID ===", [
                     'dossier_id_param' => $dossierId,
                     'is_numeric' => is_numeric($dossier)
                 ]);
@@ -502,12 +504,12 @@ class DossierController extends Controller
                         'documents'
                     ])->findOrFail($dossierId);
                     
-                    \Log::info("=== DOSSIER CHARGÉ AVEC SUCCÈS ===", [
+                    Log::info("=== DOSSIER CHARGÉ AVEC SUCCÈS ===", [
                         'dossier_loaded_id' => $dossierObj->id
                     ]);
                     
                 } catch (\Exception $e) {
-                    \Log::error("=== ERREUR CHARGEMENT DOSSIER ===", [
+                    Log::error("=== ERREUR CHARGEMENT DOSSIER ===", [
                         'dossier_id_param' => $dossierId,
                         'error' => $e->getMessage()
                     ]);
@@ -516,7 +518,7 @@ class DossierController extends Controller
             }
 
             // ✅ LOGS DÉTAILLÉS DU DOSSIER CHARGÉ
-            \Log::info("=== DÉTAILS DOSSIER CHARGÉ ===", [
+            Log::info("=== DÉTAILS DOSSIER CHARGÉ ===", [
                 'dossier_id' => $dossierObj->id,
                 'dossier_numero' => $dossierObj->numero_dossier,
                 'organisation_id' => $dossierObj->organisation_id,
@@ -530,7 +532,7 @@ class DossierController extends Controller
             $authUserId = (int)auth()->id();
             $orgUserId = (int)($dossierObj->organisation->user_id ?? 0);
             
-            \Log::info("=== VÉRIFICATION ACCÈS DÉTAILLÉE ===", [
+            Log::info("=== VÉRIFICATION ACCÈS DÉTAILLÉE ===", [
                 'auth_user_id' => $authUserId,
                 'auth_user_id_type' => gettype($authUserId),
                 'auth_user_raw' => auth()->id(),
@@ -544,7 +546,7 @@ class DossierController extends Controller
 
             // ✅ VÉRIFICATION AVEC LOGS EXPLICITES
             if ($orgUserId !== $authUserId) {
-                \Log::warning("=== ACCÈS REFUSÉ - ANALYSE COMPLÈTE ===", [
+                Log::warning("=== ACCÈS REFUSÉ - ANALYSE COMPLÈTE ===", [
                     'reason' => 'User ID mismatch après conversion',
                     'expected_user_id' => $orgUserId,
                     'actual_user_id' => $authUserId,
@@ -560,7 +562,7 @@ class DossierController extends Controller
                     ->with('error', 'Vous n\'êtes pas autorisé à consulter ce dossier (User ID: ' . $authUserId . ' ≠ Org User ID: ' . $orgUserId . ')');
             }
 
-            \Log::info("=== ACCÈS AUTORISÉ - CONSTRUCTION DONNÉES ===", [
+            Log::info("=== ACCÈS AUTORISÉ - CONSTRUCTION DONNÉES ===", [
                 'user_match_confirmed' => true,
                 'proceeding_to_data_construction' => true
             ]);
@@ -568,7 +570,7 @@ class DossierController extends Controller
             // ✅ CORRECTION 3: Vérification délai avec logs (temporairement désactivée)
             if (false) { // Désactivé temporairement pour debug complet
                 if ($dossierObj->submitted_at && $dossierObj->submitted_at->diffInHours(now()) > 24) {
-                    \Log::info("=== DÉLAI DÉPASSÉ ===", [
+                    Log::info("=== DÉLAI DÉPASSÉ ===", [
                         'submitted_at' => $dossierObj->submitted_at->toDateTimeString(),
                         'hours_diff' => $dossierObj->submitted_at->diffInHours(now()),
                         'limit_hours' => 24
@@ -583,20 +585,20 @@ class DossierController extends Controller
             $sessionData = session('success_data');
             
             if (!$sessionData) {
-                \Log::info("=== RECONSTRUCTION DONNÉES SESSION ===");
+                Log::info("=== RECONSTRUCTION DONNÉES SESSION ===");
                 $sessionData = $this->reconstructConfirmationData($dossierObj);
-                \Log::info("=== DONNÉES SESSION RECONSTRUITES ===", [
+                Log::info("=== DONNÉES SESSION RECONSTRUITES ===", [
                     'has_adherents_stats' => isset($sessionData['adherents_stats']),
                     'has_anomalies' => isset($sessionData['anomalies'])
                 ]);
             } else {
-                \Log::info("=== DONNÉES SESSION TROUVÉES ===", [
+                Log::info("=== DONNÉES SESSION TROUVÉES ===", [
                     'session_data_keys' => array_keys($sessionData)
                 ]);
             }
 
             // ✅ CONSTRUCTION DES DONNÉES DE CONFIRMATION AVEC LOGS
-            \Log::info("=== DÉBUT CONSTRUCTION CONFIRMATION DATA ===");
+            Log::info("=== DÉBUT CONSTRUCTION CONFIRMATION DATA ===");
             
             $confirmationData = [
                 'organisation' => $dossierObj->organisation,
@@ -616,18 +618,20 @@ class DossierController extends Controller
                 'estimated_completion' => $this->calculateEstimatedCompletion($dossierObj)
             ];
 
-            \Log::info("=== CONFIRMATION DATA CONSTRUITE ===", [
+            Log::info("=== CONFIRMATION DATA CONSTRUITE ===", [
                 'data_keys' => array_keys($confirmationData),
                 'organisation_name' => $confirmationData['organisation']->nom ?? 'Unknown',
-                'dossier_numero' => $confirmationData['numero_dossier']
+                'dossier_numero' => $confirmationData['numero_dossier'],
+                'qr_code_found' => $confirmationData['qr_code'] !== null,
+                'qr_code_id' => $confirmationData['qr_code'] ? $confirmationData['qr_code']->id : null
             ]);
 
             // Nettoyer la session
             session()->forget('success_data');
-            \Log::info("=== SESSION NETTOYÉE ===");
+            Log::info("=== SESSION NETTOYÉE ===");
 
             // ✅ LOG FINAL DE SUCCÈS
-            \Log::info('=== PAGE CONFIRMATION CONSULTÉE AVEC SUCCÈS ===', [
+            Log::info('=== PAGE CONFIRMATION CONSULTÉE AVEC SUCCÈS ===', [
                 'user_id' => auth()->id(),
                 'dossier_id' => $dossierObj->id,
                 'organisation_nom' => $dossierObj->organisation->nom ?? 'Unknown',
@@ -636,7 +640,7 @@ class DossierController extends Controller
                 'success' => true
             ]);
 
-            \Log::info("=== RETOUR VUE CONFIRMATION ===", [
+            Log::info("=== RETOUR VUE CONFIRMATION ===", [
                 'view_name' => 'operator.dossiers.confirmation',
                 'compact_variable' => 'confirmationData'
             ]);
@@ -646,7 +650,7 @@ class DossierController extends Controller
 
         } catch (\Exception $e) {
             // ✅ GESTION D'ERREUR COMPLÈTE AVEC LOGS DÉTAILLÉS
-            \Log::error('=== ERREUR CRITIQUE MÉTHODE CONFIRMATION ===', [
+            Log::error('=== ERREUR CRITIQUE MÉTHODE CONFIRMATION ===', [
                 'user_id' => auth()->id(),
                 'dossier_param' => $dossier,
                 'dossier_type' => gettype($dossier),
@@ -674,7 +678,8 @@ class DossierController extends Controller
         // Décoder les données JSON de manière sécurisée
         if (!empty($dossier->donnees_supplementaires)) {
             if (is_string($dossier->donnees_supplementaires)) {
-                $donneesSupplementaires = json_decode($dossier->donnees_supplementaires, true) ?? [];
+                $decoded = json_decode($dossier->donnees_supplementaires, true);
+                $donneesSupplementaires = $decoded && is_array($decoded) ? $decoded : [];
             } elseif (is_array($dossier->donnees_supplementaires)) {
                 $donneesSupplementaires = $dossier->donnees_supplementaires;
             }
@@ -689,52 +694,79 @@ class DossierController extends Controller
     }
 
     /**
-     * ✅ MÉTHODE AUXILIAIRE - Calculer les statistiques des adhérents
+     * ✅ MÉTHODE AUXILIAIRE CORRIGÉE - Calculer les statistiques des adhérents  
+     * CORRECTION: Gestion plus robuste des données JSON
      */
     private function calculateAdherentsStats(Dossier $dossier)
     {
-        $organisation = $dossier->organisation;
-        
-        $totalAdherents = $organisation->adherents()->count();
-        $adherentsValides = $organisation->adherents()->where('is_active', true)->count();
-        
-        // Décoder les données supplementaires pour les anomalies
-        $donneesSupplementaires = [];
-        if (!empty($dossier->donnees_supplementaires)) {
-            if (is_string($dossier->donnees_supplementaires)) {
-                $donneesSupplementaires = json_decode($dossier->donnees_supplementaires, true) ?? [];
-            } elseif (is_array($dossier->donnees_supplementaires)) {
-                $donneesSupplementaires = $dossier->donnees_supplementaires;
-            }
-        }
-        
-        $anomalies = $donneesSupplementaires['adherents_anomalies'] ?? [];
-        
-        $anomaliesCritiques = 0;
-        $anomaliesMajeures = 0;
-        $anomaliesMineures = 0;
-        
-        foreach ($anomalies as $anomalie) {
-            $anomaliesAdherent = $anomalie['anomalies'] ?? [];
+        try {
+            $organisation = $dossier->organisation;
             
-            if (!empty($anomaliesAdherent['critiques'])) {
-                $anomaliesCritiques++;
+            $totalAdherents = $organisation->adherents()->count();
+            $adherentsValides = $organisation->adherents()
+                ->where('is_active', true)
+                ->count();
+            
+            // ✅ CORRECTION: Décoder les données JSON de manière plus sécurisée
+            $donneesSupplementaires = [];
+            
+            if (!empty($dossier->donnees_supplementaires)) {
+                if (is_string($dossier->donnees_supplementaires)) {
+                    $decoded = json_decode($dossier->donnees_supplementaires, true);
+                    $donneesSupplementaires = $decoded && is_array($decoded) ? $decoded : [];
+                } elseif (is_array($dossier->donnees_supplementaires)) {
+                    $donneesSupplementaires = $dossier->donnees_supplementaires;
+                }
             }
-            if (!empty($anomaliesAdherent['majeures'])) {
-                $anomaliesMajeures++;
+            
+            $anomalies = $donneesSupplementaires['adherents_anomalies'] ?? [];
+            
+            // Compter les anomalies par niveau
+            $anomaliesCritiques = 0;
+            $anomaliesMajeures = 0;
+            $anomaliesMineures = 0;
+            
+            if (is_array($anomalies)) {
+                foreach ($anomalies as $anomalie) {
+                    if (isset($anomalie['anomalies']) && is_array($anomalie['anomalies'])) {
+                        $anomaliesAdherent = $anomalie['anomalies'];
+                        
+                        if (!empty($anomaliesAdherent['critiques'])) {
+                            $anomaliesCritiques++;
+                        }
+                        if (!empty($anomaliesAdherent['majeures'])) {
+                            $anomaliesMajeures++;
+                        }
+                        if (!empty($anomaliesAdherent['mineures'])) {
+                            $anomaliesMineures++;
+                        }
+                    }
+                }
             }
-            if (!empty($anomaliesAdherent['mineures'])) {
-                $anomaliesMineures++;
-            }
+            
+            return [
+                'total' => $totalAdherents,
+                'valides' => $adherentsValides,
+                'anomalies_critiques' => $anomaliesCritiques,
+                'anomalies_majeures' => $anomaliesMajeures,
+                'anomalies_mineures' => $anomaliesMineures
+            ];
+            
+        } catch (\Exception $e) {
+            Log::error('=== ERREUR CALCUL STATS ADHÉRENTS ===', [
+                'dossier_id' => $dossier->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Retourner des stats par défaut en cas d'erreur
+            return [
+                'total' => 0,
+                'valides' => 0,
+                'anomalies_critiques' => 0,
+                'anomalies_majeures' => 0,
+                'anomalies_mineures' => 0
+            ];
         }
-        
-        return [
-            'total' => $totalAdherents,
-            'valides' => $adherentsValides,
-            'anomalies_critiques' => $anomaliesCritiques,
-            'anomalies_majeures' => $anomaliesMajeures,
-            'anomalies_mineures' => $anomaliesMineures
-        ];
     }
 
     /**
@@ -746,7 +778,8 @@ class DossierController extends Controller
         
         if (!empty($dossier->donnees_supplementaires)) {
             if (is_string($dossier->donnees_supplementaires)) {
-                $donneesSupplementaires = json_decode($dossier->donnees_supplementaires, true) ?? [];
+                $decoded = json_decode($dossier->donnees_supplementaires, true);
+                $donneesSupplementaires = $decoded && is_array($decoded) ? $decoded : [];
             } elseif (is_array($dossier->donnees_supplementaires)) {
                 $donneesSupplementaires = $dossier->donnees_supplementaires;
             }
@@ -757,34 +790,37 @@ class DossierController extends Controller
 
     /**
      * ✅ MÉTHODE CORRIGÉE - Obtenir le QR Code pour le dossier
-     * CORRECTION: Utiliser la relation polymorphique au lieu de dossier_id
+     * CORRECTION: Utiliser les bons types et champs du modèle QrCode corrigé
      */
     private function getQrCodeForDossier(Dossier $dossier)
     {
         try {
-            \Log::info('=== RECHERCHE QR CODE POUR DOSSIER ===', [
+            Log::info('=== RECHERCHE QR CODE POUR DOSSIER (CORRIGÉ) ===', [
                 'dossier_id' => $dossier->id,
-                'using_polymorphic_relation' => true
+                'using_corrected_model' => true,
+                'expected_type' => QrCode::TYPE_DOSSIER
             ]);
 
-            // ✅ CORRECTION: Utiliser la relation polymorphique correcte
-            $qrCode = \App\Models\QrCode::where('verifiable_type', 'App\\Models\\Dossier')
+            // ✅ CORRECTION: Utiliser les constantes et champs du modèle corrigé
+            $qrCode = QrCode::where('verifiable_type', 'App\\Models\\Dossier')
                 ->where('verifiable_id', $dossier->id)
-                ->where('type', 'dossier')
+                ->where('type', QrCode::TYPE_DOSSIER) // Utiliser la constante
                 ->where('is_active', 1)
+                ->orderBy('created_at', 'desc')
                 ->first();
 
-            \Log::info('=== QR CODE RÉSULTAT ===', [
+            Log::info('=== QR CODE RÉSULTAT (CORRIGÉ) ===', [
                 'dossier_id' => $dossier->id,
                 'qr_code_found' => $qrCode !== null,
                 'qr_code_id' => $qrCode ? $qrCode->id : null,
-                'qr_code_code' => $qrCode ? $qrCode->code : null
+                'qr_code_code' => $qrCode ? $qrCode->code : null,
+                'qr_code_type' => $qrCode ? $qrCode->type : null
             ]);
 
             return $qrCode;
 
         } catch (\Exception $e) {
-            \Log::error('=== ERREUR RECHERCHE QR CODE ===', [
+            Log::error('=== ERREUR RECHERCHE QR CODE (CORRIGÉ) ===', [
                 'dossier_id' => $dossier->id,
                 'error' => $e->getMessage(),
                 'line' => $e->getLine()
@@ -800,35 +836,78 @@ class DossierController extends Controller
      */
     private function getAccuseReceptionPath(Dossier $dossier)
     {
-        $accuseDocument = $dossier->documents()
-            ->where('nom_fichier', 'LIKE', 'accuse_reception_%')
-            ->orWhere('is_system_generated', true)
-            ->latest()
-            ->first();
-        
-        if ($accuseDocument && Storage::disk('public')->exists($accuseDocument->chemin_fichier)) {
-            return storage_path('app/public/' . $accuseDocument->chemin_fichier);
+        try {
+            $accuseDocument = $dossier->documents()
+                ->where(function($query) {
+                    $query->where('nom_fichier', 'LIKE', 'accuse_reception_%')
+                          ->orWhere('nom_fichier', 'LIKE', 'accuse_phase1_%')
+                          ->orWhere('type_document', 'accuse_reception')
+                          ->orWhere('is_system_generated', true);
+                })
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if ($accuseDocument && $accuseDocument->chemin_fichier) {
+                $fullPath = storage_path('app/public/' . $accuseDocument->chemin_fichier);
+                if (file_exists($fullPath)) {
+                    return $fullPath;
+                }
+            }
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            Log::error('=== ERREUR RECHERCHE CHEMIN ACCUSÉ ===', [
+                'dossier_id' => $dossier->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return null;
         }
-        
-        return null;
     }
 
     /**
-     * ✅ MÉTHODE AUXILIAIRE - Obtenir l'URL de téléchargement de l'accusé
+     * ✅ MÉTHODE AUXILIAIRE CORRIGÉE - Obtenir l'URL de téléchargement de l'accusé
+     * CORRECTION: Meilleure recherche des documents d'accusé
      */
     private function getAccuseReceptionDownloadUrl(Dossier $dossier)
     {
-        $accuseDocument = $dossier->documents()
-            ->where('nom_fichier', 'LIKE', 'accuse_reception_%')
-            ->orWhere('is_system_generated', true)
-            ->latest()
-            ->first();
-        
-        if ($accuseDocument) {
-            return route('operator.organisations.download-accuse', ['path' => basename($accuseDocument->chemin_fichier)]);
+        try {
+            // Rechercher l'accusé de réception via les patterns de noms
+            $accuseDocument = $dossier->documents()
+                ->where(function($query) {
+                    $query->where('nom_fichier', 'LIKE', 'accuse_reception_%')
+                          ->orWhere('nom_fichier', 'LIKE', 'accuse_phase1_%')
+                          ->orWhere('type_document', 'accuse_reception')
+                          ->orWhere('is_system_generated', true);
+                })
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if ($accuseDocument && $accuseDocument->chemin_fichier) {
+                // Vérifier si le fichier existe physiquement
+                if (Storage::disk('public')->exists($accuseDocument->chemin_fichier)) {
+                    return route('operator.organisations.download-accuse', [
+                        'path' => basename($accuseDocument->chemin_fichier)
+                    ]);
+                }
+            }
+            
+            Log::info('=== ACCUSÉ RÉCEPTION NON TROUVÉ ===', [
+                'dossier_id' => $dossier->id,
+                'total_documents' => $dossier->documents()->count()
+            ]);
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            Log::error('=== ERREUR RECHERCHE ACCUSÉ ===', [
+                'dossier_id' => $dossier->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return null;
         }
-        
-        return null;
     }
 
     /**
@@ -1225,9 +1304,8 @@ class DossierController extends Controller
             }
 
         } catch (\Exception $e) {
-            \Log::error('Erreur résolution anomalie: ' . $e->getMessage());
+            Log::error('Erreur résolution anomalie: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Erreur lors de la résolution de l\'anomalie');
         }
     }
-
 }

@@ -936,39 +936,67 @@ public function storePhase1(Request $request)
             'phase' => 1,
             'phase_message' => 'Phase 1 complétée avec succès : Organisation créée sans adhérents',
             'adherents_pending' => !empty($validatedData['adherents']),
-            'next_phase_url' => route('operator.organisations.adherents-import', $dossier->id),
+            'next_phase_url' => route('operator.dossiers.adherents-import', $dossier->id),
             'accuse_reception_path' => $accuseReceptionPath,
             'message_confirmation' => 'Phase 1 terminée avec succès. Votre organisation a été créée. Pour ajouter les adhérents, procédez à la Phase 2.',
             'delai_traitement' => '72 heures ouvrées (après ajout des adhérents)'
         ];
 
-        // RÉPONSE PHASE 1 : REDIRECTION VERS PHASE 2 OU CONFIRMATION
-        if ($request->ajax() || $request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Phase 1 complétée avec succès : Organisation créée',
-                'phase' => 1,
-                'data' => [
-                    'organisation_id' => $organisation->id,
-                    'dossier_id' => $dossier->id,
-                    'numero_recepisse' => $numeroRecepisse,
-                    'phase2_url' => route('operator.organisations.adherents-import', $dossier->id),
-                    'confirmation_url' => route('operator.dossiers.confirmation', $dossier->id)
-                ],
-                'confirmation_data' => $confirmationData,
-                'next_action' => 'PROCEED_TO_PHASE_2'
-            ]);
-        } else {
-            // REDIRECTION : PHASE 2 si adhérents en attente, sinon confirmation
-            if (!empty($validatedData['adherents'])) {
-                return redirect()->route('operator.organisations.adherents-import', $dossier->id)
-                    ->with('phase1_data', $confirmationData)
-                    ->with('success', 'Phase 1 complétée. Ajoutez maintenant vos adhérents en Phase 2.');
-            } else {
-                return redirect()->route('operator.dossiers.confirmation', $dossier->id)
-                    ->with('success_data', $confirmationData);
-            }
-        }
+// ✅ CORRECTION : Logique de redirection corrigée
+$hasAdherents = !empty($validatedData['adherents']) && is_array($validatedData['adherents']) && count($validatedData['adherents']) > 0;
+
+// Sauvegarder adhérents en session AVANT la vérification
+if ($hasAdherents) {
+    $this->saveAdherentsForPhase2($dossier->id, $validatedData['adherents']);
+    \Log::info('✅ Adhérents sauvegardés pour Phase 2', [
+        'dossier_id' => $dossier->id,
+        'adherents_count' => count($validatedData['adherents'])
+    ]);
+}
+
+// REDIRECTION CONDITIONNELLE CORRIGÉE
+if ($hasAdherents) {
+    // PHASE 2 : Rediriger vers l'import des adhérents
+    if ($request->ajax() || $request->expectsJson()) {
+        return response()->json([
+            'success' => true,
+            'message' => 'Phase 1 complétée avec succès : Organisation créée',
+            'phase' => 1,
+            'data' => [
+                'organisation_id' => $organisation->id,
+                'dossier_id' => $dossier->id,
+                'numero_recepisse' => $numeroRecepisse,
+                'adherents_count' => count($validatedData['adherents'])
+            ],
+            'next_action' => 'PROCEED_TO_PHASE_2',
+            'redirect_to' => 'phase2'
+        ]);
+    } else {
+        return redirect()->route('operator.dossiers.adherents-import', $dossier->id)
+            ->with('phase1_success', true)
+            ->with('adherents_count', count($validatedData['adherents']))
+            ->with('success', 'Phase 1 complétée. Procédez maintenant à l\'import des adhérents.');
+    }
+} else {
+    // FINALISATION DIRECTE : Pas d'adhérents à ajouter
+    if ($request->ajax() || $request->expectsJson()) {
+        return response()->json([
+            'success' => true,
+            'message' => 'Organisation créée avec succès (sans adhérents)',
+            'phase' => 'complete',
+            'data' => [
+                'organisation_id' => $organisation->id,
+                'dossier_id' => $dossier->id,
+                'numero_recepisse' => $numeroRecepisse
+            ],
+            'next_action' => 'WORKFLOW_COMPLETE',
+            'redirect_to' => 'confirmation'
+        ]);
+    } else {
+        return redirect()->route('operator.dossiers.confirmation', $dossier->id)
+            ->with('success_data', $confirmationData);
+    }
+}
 
     } catch (\Exception $e) {
         \DB::rollback();
@@ -1002,6 +1030,57 @@ public function storePhase1(Request $request)
     }
 }
 
+
+/**
+ * 🔧 NOUVELLE MÉTHODE : Sauvegarder les adhérents pour Phase 2
+ * Stockage temporaire en session avec expiration
+ */
+private function saveAdherentsForPhase2($dossierId, array $adherents)
+{
+    try {
+        $sessionKey = 'phase2_adherents_' . $dossierId;
+        $expirationKey = 'phase2_expires_' . $dossierId;
+        
+        // Nettoyer et préparer les données
+        $cleanedAdherents = array_map(function($adherent) {
+            return [
+                'nip' => $this->cleanNipForStorage($adherent['nip'] ?? ''),
+                'nom' => $adherent['nom'] ?? '',
+                'prenom' => $adherent['prenom'] ?? '',
+                'profession' => $adherent['profession'] ?? '',
+                'fonction' => $adherent['fonction'] ?? 'Membre',
+                'telephone' => $adherent['telephone'] ?? '',
+                'email' => $adherent['email'] ?? '',
+                'saved_at' => now()->toISOString()
+            ];
+        }, $adherents);
+        
+        // Sauvegarder en session avec expiration de 2 heures
+        session([
+            $sessionKey => $cleanedAdherents,
+            $expirationKey => now()->addHours(2)->toISOString()
+        ]);
+        
+        \Log::info('✅ Adhérents sauvegardés en session pour Phase 2', [
+            'dossier_id' => $dossierId,
+            'adherents_count' => count($cleanedAdherents),
+            'session_key' => $sessionKey,
+            'expires_at' => now()->addHours(2)->toISOString()
+        ]);
+        
+        return true;
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ Erreur sauvegarde adhérents Phase 2', [
+            'dossier_id' => $dossierId,
+            'error' => $e->getMessage(),
+            'adherents_count' => count($adherents)
+        ]);
+        
+        return false;
+    }
+}
+
 /**
  * 🔧 NOUVELLE MÉTHODE : Validation Phase 1 CORRIGÉE - Gestion flexible des données
  */
@@ -1027,8 +1106,17 @@ private function validatePhase1DataCorrected(Request $request, $type)
         'org_prefecture' => 'required|string|max:255',
         'org_zone_type' => 'required|in:urbaine,rurale',
         
-        // Demandeur - champs essentiels
-        'demandeur_nip' => 'required|string|min:10',
+        // Demandeur - NOUVEAU FORMAT NIP
+        'demandeur_nip' => [
+            'required',
+            'string',
+            'regex:/^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/',
+            function ($attribute, $value, $fail) {
+                if (!$this->validateNipFormat($value)) {
+                    $fail('Le format du NIP est invalide. Format attendu: XX-QQQQ-YYYYMMDD');
+                }
+            }
+        ],
         'demandeur_nom' => 'required|string|max:255',
         'demandeur_prenom' => 'required|string|max:255',
         'demandeur_email' => 'required|email|max:255',
@@ -1037,6 +1125,8 @@ private function validatePhase1DataCorrected(Request $request, $type)
         // Fondateurs - validation souple
         'fondateurs' => 'nullable|array|min:1'
     ];
+
+    
 
     $messages = [
         'org_nom.required' => 'Le nom de l\'organisation est obligatoire',
@@ -1171,7 +1261,17 @@ private function extractRecursive($data, &$extracted, $prefix = '')
             'guide_read_confirm' => 'sometimes|accepted',
             
             // ÉTAPE 3 : Demandeur - COLONNES CONFORMES À USERS TABLE
-            'demandeur_nip' => 'required|digits:13',
+            // ÉTAPE 3 : Demandeur - NOUVEAU FORMAT NIP
+            'demandeur_nip' => [
+            'required',
+            'string',
+            'regex:/^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/',
+                function ($attribute, $value, $fail) {
+                if (!$this->validateNipFormat($value)) {
+                    $fail('Le format du NIP est invalide. Format attendu: XX-QQQQ-YYYYMMDD');
+                    }
+                }
+            ],
             'demandeur_nom' => 'required|string|max:255',
             'demandeur_prenom' => 'required|string|max:255',
             'demandeur_email' => 'required|email|max:255',
@@ -1306,7 +1406,7 @@ private function extractRecursive($data, &$extracted, $prefix = '')
         }
 
         $messages = [
-            'demandeur_nip.digits' => 'Le NIP du demandeur doit contenir exactement 13 chiffres.',
+            'demandeur_nip.digits' => 'Le NIP du demandeur doit contenir exactement 14 caractere.',
             'demandeur_nip.required' => 'Le NIP du demandeur est obligatoire.',
             'org_nom.unique' => 'Ce nom d\'organisation est déjà utilisé.',
             'org_sigle.unique' => 'Ce sigle est déjà utilisé.',
@@ -2158,29 +2258,59 @@ private function generateAccuseReceptionFinalHTML($data)
             $minAdherents = $this->getMinAdherents($organisation->type);
             $adherentsManquants = max(0, $minAdherents - $adherentsExistants);
 
-            // PRÉPARER LES DONNÉES POUR LA VUE
-            $viewData = [
+            // ✅ NOUVEAU : RÉCUPÉRER LES ADHÉRENTS DE SESSION
+            $sessionKey = 'phase2_adherents_' . $dossierId;
+            $expirationKey = 'phase2_expires_' . $dossierId;
+
+            $adherentsFromSession = session($sessionKey, []);
+            $sessionExpiration = session($expirationKey);
+
+            // Vérifier expiration
+            $sessionValid = $sessionExpiration && now()->isBefore($sessionExpiration);
+
+            if (!$sessionValid && !empty($adherentsFromSession)) {
+                // Session expirée, nettoyer
+                session()->forget([$sessionKey, $expirationKey]);
+                $adherentsFromSession = [];
+    
+                \Log::warning('⚠️ Session adhérents expirée, données nettoyées', [
+                'dossier_id' => $dossierId
+                ]);
+            }
+
+                // ✅ NOUVEAU : CONFIGURATION INTERFACE ADAPTATIVE
+                $viewData = [
                 'dossier' => $dossier,
                 'organisation' => $organisation,
-                'phase1_data' => $donneesSupplementaires,
+                'adherents_from_phase1' => $adherentsFromSession,
+                'has_pending_adherents' => !empty($adherentsFromSession),
                 'adherents_stats' => [
-                    'existants' => $adherentsExistants,
-                    'minimum_requis' => $minAdherents,
-                    'manquants' => $adherentsManquants,
-                    'peut_soumettre' => $adherentsExistants >= $minAdherents
+                'existants' => $adherentsExistants,
+                'minimum_requis' => $minAdherents,
+                'manquants' => $adherentsManquants,
+                'pending_from_phase1' => count($adherentsFromSession),
+                'peut_soumettre' => ($adherentsExistants + count($adherentsFromSession)) >= $minAdherents
                 ],
                 'upload_config' => [
-                    'max_file_size' => '10MB',
-                    'accepted_formats' => ['xlsx', 'csv'],
-                    'chunk_size' => 100,
-                    'max_adherents' => 10000
+                'max_file_size' => '10MB',
+                'accepted_formats' => ['xlsx', 'csv'],
+                'chunk_size' => 100,
+                'max_adherents' => 10000
+                ],
+                'interface_config' => [
+                'show_file_upload' => empty($adherentsFromSession),
+                'show_session_data' => !empty($adherentsFromSession),
+                'auto_process' => !empty($adherentsFromSession),
+                'session_expires_at' => $sessionExpiration
                 ],
                 'urls' => [
-                    'store_adherents' => route('operator.organisations.store-adherents', $dossier->id),
-                    'template_download' => route('operator.members.import.template'),
-                    'confirmation' => route('operator.dossiers.confirmation', $dossier->id)
+                'store_adherents' => route('operator.dossiers.store-adherents', $dossier->id),
+                'process_session_adherents' => route('operator.dossiers.process-session-adherents', $dossier->id),
+                'template_download' => route('operator.members.import.template'),
+                'confirmation' => route('operator.dossiers.confirmation', $dossier->id)
                 ]
-            ];
+                ];
+            
 
             \Log::info('Page import adhérents affichée', [
                 'dossier_id' => $dossier->id,
@@ -2202,7 +2332,116 @@ private function generateAccuseReceptionFinalHTML($data)
             return redirect()->route('operator.organisations.index')
                 ->with('error', 'Erreur lors de l\'affichage de la page d\'import des adhérents.');
         }
+
+        \Log::info('Page import adhérents affichée', [
+            'dossier_id' => $dossier->id,
+            'organisation_id' => $organisation->id,
+            'user_id' => auth()->id(),
+            'adherents_stats' => $viewData['adherents_stats']
+        ]);
     }
+
+
+    /**
+ * 🔧 NOUVELLE MÉTHODE : Traiter automatiquement les adhérents de session
+ * 
+ * POST /operator/dossiers/{dossier}/process-session-adherents
+ */
+public function processSessionAdherents(Request $request, $dossierId)
+{
+    try {
+        \Log::info('🚀 Traitement automatique adhérents de session', [
+            'dossier_id' => $dossierId,
+            'user_id' => auth()->id()
+        ]);
+
+        // Récupérer les adhérents de session
+        $sessionKey = 'phase2_adherents_' . $dossierId;
+        $adherentsFromSession = session($sessionKey, []);
+
+        if (empty($adherentsFromSession)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Aucun adhérent en session à traiter',
+                'error_code' => 'NO_SESSION_DATA'
+            ], 404);
+        }
+
+        // Créer une requête fictive avec les données de session
+        $request->merge([
+            'adherents' => json_encode($adherentsFromSession),
+            'processing_method' => 'session_auto',
+            'use_chunking' => count($adherentsFromSession) >= 200
+        ]);
+
+        \Log::info('🔄 Redirection vers storeAdherentsPhase2 avec données session', [
+            'adherents_count' => count($adherentsFromSession),
+            'processing_method' => 'session_auto'
+        ]);
+
+        // Appeler la méthode existante storeAdherentsPhase2
+        return $this->storeAdherentsPhase2($request, $dossierId);
+
+    } catch (\Exception $e) {
+        \Log::error('❌ Erreur traitement adhérents session', [
+            'dossier_id' => $dossierId,
+            'error' => $e->getMessage()
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur lors du traitement automatique',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+    /**
+ * 🔧 NOUVELLE MÉTHODE : Nettoyer les données de session expirées
+ */
+private function cleanupExpiredSessionData()
+{
+    try {
+        $allSessionData = session()->all();
+        $cleanedCount = 0;
+        
+        foreach ($allSessionData as $key => $value) {
+            // Chercher les clés d'expiration Phase 2
+            if (strpos($key, 'phase2_expires_') === 0) {
+                $expirationTime = $value;
+                
+                if (now()->isAfter($expirationTime)) {
+                    // Session expirée, nettoyer
+                    $dossierId = str_replace('phase2_expires_', '', $key);
+                    $adherentsKey = 'phase2_adherents_' . $dossierId;
+                    
+                    session()->forget([$key, $adherentsKey]);
+                    $cleanedCount++;
+                    
+                    \Log::info('🧹 Session Phase 2 expirée nettoyée', [
+                        'dossier_id' => $dossierId,
+                        'expired_at' => $expirationTime
+                    ]);
+                }
+            }
+        }
+        
+        if ($cleanedCount > 0) {
+            \Log::info('✅ Nettoyage sessions Phase 2 terminé', [
+                'cleaned_count' => $cleanedCount
+            ]);
+        }
+        
+        return $cleanedCount;
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ Erreur nettoyage sessions Phase 2', [
+            'error' => $e->getMessage()
+        ]);
+        
+        return 0;
+    }
+}
 
 
     /**
@@ -2562,7 +2801,16 @@ private function validateCompleteOrganisationData(Request $request, $type)
         'guide_read_confirm' => 'sometimes|accepted',
         
         // ÉTAPE 3 : Demandeur - COLONNES CONFORMES À USERS TABLE
-        'demandeur_nip' => 'required|digits:13',
+        'demandeur_nip' => [
+                            'required',
+                            'string',
+                            'regex:/^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/',
+                                function ($attribute, $value, $fail) {
+                                if (!$this->validateNipFormat($value)) {
+                                    $fail('Le format du NIP est invalide. Format attendu: XX-QQQQ-YYYYMMDD');
+                                    }
+                                }
+                            ],
         'demandeur_nom' => 'required|string|max:255',
         'demandeur_prenom' => 'required|string|max:255',
         'demandeur_email' => 'required|email|max:255',
@@ -2627,8 +2875,11 @@ private function validateCompleteOrganisationData(Request $request, $type)
                     
                     // ✅ NIP : VALIDATION NON-BLOQUANTE
                     // Les anomalies NIP seront détectées lors de la création, pas ici
+                    // ✅ VALIDATION NOUVEAU FORMAT NIP
                     if (empty($fondateur['nip'])) {
                         $fail("Le NIP du fondateur ligne " . ($index + 1) . " ne peut pas être vide.");
+                    } elseif (!$this->validateNipFormat($fondateur['nip'])) {
+                        $fail("Le NIP du fondateur ligne " . ($index + 1) . " est invalide. Format: XX-QQQQ-YYYYMMDD");
                     }
                     
                     // Autres validations obligatoires
@@ -2678,9 +2929,11 @@ private function validateCompleteOrganisationData(Request $request, $type)
                     }
                     
                     // ✅ NIP : VALIDATION NON-BLOQUANTE SELON RÈGLE MÉTIER
-                    // Seule vérification : ne peut pas être complètement vide
+                    // ✅ VALIDATION NOUVEAU FORMAT NIP NON-BLOQUANTE
                     if (empty($adherent['nip']) || trim($adherent['nip']) === '') {
                         $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " ne peut pas être vide.");
+                    } elseif (!$this->validateNipFormat($adherent['nip'])) {
+                        $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " est invalide. Format: XX-QQQQ-YYYYMMDD");
                     }
                     // ✅ Les anomalies de format (13 chiffres, doublons, etc.) seront détectées 
                     // lors de la création et marquées comme anomalies sans bloquer
@@ -2719,8 +2972,8 @@ private function validateCompleteOrganisationData(Request $request, $type)
     }
 
     $messages = [
-        'demandeur_nip.digits' => 'Le NIP du demandeur doit contenir exactement 13 chiffres.',
         'demandeur_nip.required' => 'Le NIP du demandeur est obligatoire.',
+        'demandeur_nip.regex' => 'Le NIP doit respecter le format XX-QQQQ-YYYYMMDD (ex: A1-2345-19901225).',
         'org_nom.unique' => 'Ce nom d\'organisation est déjà utilisé.',
         'org_sigle.unique' => 'Ce sigle est déjà utilisé.',
         'org_objet.min' => 'L\'objet de l\'organisation doit contenir au moins 50 caractères.',
@@ -2812,10 +3065,10 @@ private function cleanNipForStorage($nip)
     if (empty($nip)) {
         return '';
     }
-    
-    // Supprimer espaces, tirets et caractères non-numériques
-    $cleaned = preg_replace('/[^0-9]/', '', $nip);
-    
+
+    // Supprimer espaces et caractères indésirables, conserver les tirets
+    $cleaned = preg_replace('/[^A-Z0-9\-]/', '', strtoupper($nip));
+
     // Log du nettoyage pour traçabilité
     if ($cleaned !== $nip) {
         \Log::info('NIP nettoyé pour stockage', [
@@ -2823,7 +3076,7 @@ private function cleanNipForStorage($nip)
             'cleaned' => $cleaned
         ]);
     }
-    
+
     return $cleaned;
 }
 
@@ -2942,14 +3195,37 @@ private function detectAndManageNipAnomalies(array $adherentData, string $typeOr
     $nip = $adherentData['nip'] ?? '';
     $profession = $adherentData['profession'] ?? '';
 
-    // ✅ ANOMALIE : FORMAT NIP INCORRECT
-    if (!preg_match('/^[0-9]{13}$/', $nip)) {
+    // ✅ ANOMALIE : FORMAT NIP INCORRECT - NOUVEAU FORMAT
+    if (!$this->validateNipFormat($nip)) {
         $anomalies['majeures'][] = [
-            'code' => 'NIP_INVALID',
-            'message' => 'Le NIP doit contenir exactement 13 chiffres.',
+            'code' => 'NIP_INVALID_FORMAT',
+            'message' => 'Le NIP doit respecter le format XX-QQQQ-YYYYMMDD (ex: A1-2345-19901225).',
             'nip_fourni' => $nip,
-            'longueur_actuelle' => strlen($nip)
+            'format_attendu' => 'XX-QQQQ-YYYYMMDD'
         ];
+    } else {
+        // Si format correct, extraire la date de naissance pour validation additionnelle
+        $birthDate = $this->extractBirthDateFromNip($nip);
+        if ($birthDate) {
+            $age = $birthDate->diffInYears(now());
+
+            // Validation âge raisonnable (18-100 ans)
+            if ($age < 18) {
+                $anomalies['critiques'][] = [
+                    'code' => 'AGE_TOO_YOUNG',
+                    'message' => 'Personne mineure détectée (âge: ' . $age . ' ans).',
+                    'nip' => $nip,
+                    'age_calcule' => $age
+                ];
+            } elseif ($age > 100) {
+                $anomalies['majeures'][] = [
+                    'code' => 'AGE_SUSPICIOUS',
+                    'message' => 'Âge suspect détecté (âge: ' . $age . ' ans).',
+                    'nip' => $nip,
+                    'age_calcule' => $age
+                ];
+            }
+        }
     }
 
     // ✅ ANOMALIE : NIP DÉJÀ DANS UN AUTRE PARTI POLITIQUE
@@ -3778,4 +4054,329 @@ private function resolveSeverity(array $anomalies)
             'Woleu-Ntem' => 'Woleu-Ntem'
         ];
     }
+
+
+    /**
+ * ✅ NOUVELLE MÉTHODE : Valider le format du NIP selon le nouveau standard gabonais
+ * Format: XX-QQQQ-YYYYMMDD
+ * 
+ * @param string $nip
+ * @return bool
+ */
+private function validateNipFormat($nip)
+{
+    if (empty($nip)) {
+        return false;
+    }
+
+    // Vérification regex de base
+    if (!preg_match('/^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/', $nip)) {
+        return false;
+    }
+
+    // Extraction des parties
+    $parts = explode('-', $nip);
+    if (count($parts) !== 3) {
+        return false;
+    }
+
+    $prefix = $parts[0]; // XX (alphanumérique)
+    $sequence = $parts[1]; // QQQQ (4 chiffres)
+    $dateStr = $parts[2]; // YYYYMMDD (8 chiffres)
+
+    // Validation prefix XX (2 caractères alphanumériques)
+    if (!preg_match('/^[A-Z0-9]{2}$/', $prefix)) {
+        return false;
+    }
+
+    // Validation sequence QQQQ (4 chiffres)
+    if (!preg_match('/^[0-9]{4}$/', $sequence)) {
+        return false;
+    }
+
+    // Validation date YYYYMMDD
+    if (!preg_match('/^[0-9]{8}$/', $dateStr)) {
+        return false;
+    }
+
+    // Extraction année, mois, jour
+    $year = (int) substr($dateStr, 0, 4);
+    $month = (int) substr($dateStr, 4, 2);
+    $day = (int) substr($dateStr, 6, 2);
+
+    // Validation date réelle
+    if (!checkdate($month, $day, $year)) {
+        return false;
+    }
+
+    // Validation plage d'années raisonnable (1900-2100)
+    if ($year < 1900 || $year > 2100) {
+        return false;
+    }
+
+    \Log::debug('NIP validé avec succès', [
+        'nip' => $nip,
+        'prefix' => $prefix,
+        'sequence' => $sequence,
+        'date' => sprintf('%04d-%02d-%02d', $year, $month, $day)
+    ]);
+
+    return true;
+}
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Extraire la date de naissance depuis le NIP
+ * 
+ * @param string $nip
+ * @return \Carbon\Carbon|null
+ */
+private function extractBirthDateFromNip($nip)
+{
+    if (!$this->validateNipFormat($nip)) {
+        return null;
+    }
+
+    $parts = explode('-', $nip);
+    $dateStr = $parts[2]; // YYYYMMDD
+
+    $year = substr($dateStr, 0, 4);
+    $month = substr($dateStr, 4, 2);
+    $day = substr($dateStr, 6, 2);
+
+    try {
+        return \Carbon\Carbon::createFromFormat('Y-m-d', "$year-$month-$day");
+    } catch (\Exception $e) {
+        return null;
+    }
+}
+
+
+// =============================================
+// 🔧 NOUVELLES ROUTES API POUR VALIDATION TEMPS RÉEL
+// =============================================
+
+/**
+ * ✅ NOUVELLE ROUTE API : Validation NIP en temps réel
+ * POST /api/v1/validate-nip
+ */
+public function validateNipApi(Request $request)
+{
+    try {
+        $request->validate([
+            'nip' => 'required|string|max:20'
+        ]);
+
+        $nip = $request->input('nip');
+        $isValid = $this->validateNipFormat($nip);
+
+        $response = [
+            'success' => true,
+            'valid' => $isValid,
+            'nip' => $nip,
+            'format_expected' => 'XX-QQQQ-YYYYMMDD'
+        ];
+
+        if ($isValid) {
+            // Extraire informations du NIP
+            $birthDate = $this->extractBirthDateFromNip($nip);
+            if ($birthDate) {
+                $response['birth_date'] = $birthDate->format('Y-m-d');
+                $response['age'] = $birthDate->diffInYears(now());
+
+                // Validation âge
+                if ($response['age'] < 18) {
+                    $response['valid'] = false;
+                    $response['message'] = 'Personne mineure détectée (âge: ' . $response['age'] . ' ans)';
+                    $response['error_code'] = 'UNDERAGE';
+                } elseif ($response['age'] > 100) {
+                    $response['warning'] = true;
+                    $response['message'] = 'Âge suspect détecté (' . $response['age'] . ' ans)';
+                } else {
+                    $response['message'] = 'NIP valide (âge: ' . $response['age'] . ' ans)';
+                }
+            }
+
+            // Vérifier si le NIP existe déjà
+            if ($response['valid']) {
+                $exists = \App\Models\User::where('nip', $nip)->exists() ||
+                         \App\Models\Adherent::where('nip', $nip)->exists() ||
+                         \App\Models\Fondateur::where('nip', $nip)->exists();
+
+                $response['available'] = !$exists;
+
+                if ($exists) {
+                    // Trouver où le NIP est utilisé
+                    $usage = [];
+                    if (\App\Models\User::where('nip', $nip)->exists()) {
+                        $usage[] = 'utilisateur';
+                    }
+                    if (\App\Models\Adherent::where('nip', $nip)->exists()) {
+                        $usage[] = 'adhérent';
+                    }
+                    if (\App\Models\Fondateur::where('nip', $nip)->exists()) {
+                        $usage[] = 'fondateur';
+                    }
+
+                    $response['message'] = 'NIP déjà utilisé comme: ' . implode(', ', $usage);
+                    $response['usage'] = $usage;
+                } else {
+                    $response['message'] = 'NIP valide et disponible';
+                }
+            }
+
+        } else {
+            $response['message'] = 'Format NIP invalide. Format attendu: XX-QQQQ-YYYYMMDD';
+            $response['example'] = 'A1-2345-19901225';
+            $response['help'] = [
+                'XX = 2 caractères alphanumériques (A-Z, 0-9)',
+                'QQQQ = 4 chiffres (0000-9999)',
+                'YYYYMMDD = Date de naissance (ex: 19901225 pour 25/12/1990)'
+            ];
+        }
+
+        return response()->json($response);
+
+    } catch (\Exception $e) {
+        \Log::error('Erreur validation NIP API: ' . $e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'valid' => false,
+            'message' => 'Erreur serveur lors de la validation',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * ✅ NOUVELLE ROUTE API : Générer exemple de NIP valide
+ * GET /api/v1/generate-nip-example
+ */
+public function generateNipExample()
+{
+    try {
+        // Générer des exemples de NIP valides
+        $examples = [];
+        $prefixes = ['A1', 'B2', 'C3', '1A', '2B', '3C'];
+        $sequences = ['0001', '1234', '5678', '9999'];
+
+        foreach (range(1, 5) as $i) {
+            $prefix = $prefixes[array_rand($prefixes)];
+            $sequence = $sequences[array_rand($sequences)];
+
+            // Date aléatoire entre 1960 et 2005
+            $year = rand(1960, 2005);
+            $month = rand(1, 12);
+            $day = rand(1, 28); // Éviter les problèmes de jours invalides
+
+            $dateStr = sprintf('%04d%02d%02d', $year, $month, $day);
+            $example = $prefix . '-' . $sequence . '-' . $dateStr;
+
+            $examples[] = [
+                'nip' => $example,
+                'prefix' => $prefix,
+                'sequence' => $sequence,
+                'birth_date' => sprintf('%04d-%02d-%02d', $year, $month, $day),
+                'age' => now()->diffInYears(\Carbon\Carbon::createFromFormat('Y-m-d', sprintf('%04d-%02d-%02d', $year, $month, $day)))
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'examples' => $examples,
+            'format' => 'XX-QQQQ-YYYYMMDD',
+            'description' => [
+                'XX' => '2 caractères alphanumériques',
+                'QQQQ' => '4 chiffres',
+                'YYYYMMDD' => 'Date de naissance (ANNÉE MOIS JOUR)'
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur génération exemples',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * ✅ NOUVELLE ROUTE API : Validation de lot de NIP
+ * POST /api/v1/validate-nip-batch
+ */
+public function validateNipBatch(Request $request)
+{
+    try {
+        $request->validate([
+            'nips' => 'required|array|max:100',
+            'nips.*' => 'required|string|max:20'
+        ]);
+
+        $nips = $request->input('nips');
+        $results = [];
+
+        foreach ($nips as $index => $nip) {
+            $isValid = $this->validateNipFormat($nip);
+
+            $result = [
+                'index' => $index,
+                'nip' => $nip,
+                'valid' => $isValid
+            ];
+
+            if ($isValid) {
+                $birthDate = $this->extractBirthDateFromNip($nip);
+                if ($birthDate) {
+                    $result['age'] = $birthDate->diffInYears(now());
+                    $result['birth_date'] = $birthDate->format('Y-m-d');
+                }
+
+                // Vérifier existence
+                $exists = \App\Models\User::where('nip', $nip)->exists() ||
+                         \App\Models\Adherent::where('nip', $nip)->exists() ||
+                         \App\Models\Fondateur::where('nip', $nip)->exists();
+
+                $result['available'] = !$exists;
+            } else {
+                $result['message'] = 'Format invalide';
+            }
+
+            $results[] = $result;
+        }
+
+        // Statistiques - SYNTAXE CORRIGÉE
+        $validResults = array_filter($results, function($r) { return $r['valid']; });
+        $invalidResults = array_filter($results, function($r) { return !$r['valid']; });
+        $availableResults = array_filter($results, function($r) { 
+            return isset($r['valid']) && $r['valid'] && isset($r['available']) && $r['available']; 
+        });
+        $duplicateResults = array_filter($results, function($r) { 
+            return isset($r['valid']) && $r['valid'] && isset($r['available']) && !$r['available']; 
+        });
+
+        $stats = [
+            'total' => count($results),
+            'valid' => count($validResults),
+            'invalid' => count($invalidResults),
+            'available' => count($availableResults),
+            'duplicates' => count($duplicateResults)
+        ];
+
+        return response()->json([
+            'success' => true,
+            'results' => $results,
+            'statistics' => $stats
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur validation batch',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
 }
