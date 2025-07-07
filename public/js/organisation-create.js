@@ -4343,9 +4343,8 @@ function validateAllSteps() {
  * ✅ SOUMISSION FINALE CORRIGÉE - Avec chunking adaptatif pour gros volumes
  */
 async function submitForm() {
-    console.log('📤 Début soumission avec chunking adaptatif...');
+    console.log('📤 Soumission Phase 1 - Toujours traitement normal');
     
-    // ✅ Protection double soumission
     const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
     if (submitBtn) {
         if (submitBtn.disabled) {
@@ -4358,7 +4357,6 @@ async function submitForm() {
     
     if (!validateAllSteps()) {
         showNotification('Veuillez corriger toutes les erreurs avant de soumettre', 'danger');
-        // Réactiver bouton en cas d'erreur
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = 'Soumettre le dossier';
@@ -4366,17 +4364,11 @@ async function submitForm() {
         return false;
     }
 
-    // ✅ CHUNKING ADAPTATIF
+    // ✅ TOUJOURS soumission normale - Backend décidera de Phase 2
     const totalAdherents = OrganisationApp.adherents.length;
-    const CHUNKING_THRESHOLD = 50;
+    console.log(`📊 Volume: ${totalAdherents} adhérents - Backend décidera du workflow`);
     
-    if (totalAdherents >= CHUNKING_THRESHOLD) {
-        console.log(`📦 Gros volume détecté (${totalAdherents} adhérents) - Chunking activé`);
-        return await submitFormWithChunking();
-    } else {
-        console.log(`📋 Volume normal (${totalAdherents} adhérents) - Soumission standard`);
-        return await submitFormNormal();
-    }
+    return await submitFormNormal();
 }
 
 /**
@@ -4386,7 +4378,7 @@ async function submitForm() {
  * ✅ CORRECTION FONCTION submitFormWithChunking()
  * À remplacer dans organisation-create.js ligne ~2900
  */
-
+/*
 async function submitFormWithChunking() {
     try {
         showGlobalLoader(true);
@@ -4569,7 +4561,7 @@ async function submitFormWithChunking() {
     } finally {
         showGlobalLoader(false);
     }
-}
+}*/
 
 /**
  * ✅ FONCTION : Soumission normale (volumes < 200 adhérents)
@@ -4640,6 +4632,35 @@ async function submitFormNormal() {
         
         if (response.ok) {
             const result = await response.json();
+
+            // ✅ GESTION SPÉCIFIQUE PHASE 2
+            if (result.phase === 'organisation_created_phase2_pending' || 
+                    (result.data && result.data.phase2_required)) {
+    
+                    console.log('✅ Phase 2 détectée - Redirection automatique');
+    
+                    showNotification('✅ Organisation créée ! Préparation Phase 2...', 'success', 3000);
+    
+                    let redirectUrl = null;
+    
+                if (result.data && result.data.redirect_url) {
+                        redirectUrl = result.data.redirect_url;
+                } else if (result.redirect) {
+                        redirectUrl = result.redirect;
+                } else if (result.data && result.data.dossier_id) {
+                        redirectUrl = `/operator/dossiers/confirmation/${result.data.dossier_id}`;
+                }
+    
+                if (redirectUrl) {
+                    console.log('🚀 Redirection Phase 2 vers:', redirectUrl);
+        
+                    setTimeout(() => {
+                    window.location.href = redirectUrl;
+                    }, 2000);
+        
+                return;
+                }
+            }
             
             if (result.success) {
                 // Succès - même logique de redirection

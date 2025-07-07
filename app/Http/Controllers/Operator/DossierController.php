@@ -834,81 +834,96 @@ class DossierController extends Controller
     /**
      * ✅ MÉTHODE AUXILIAIRE - Obtenir le chemin de l'accusé de réception
      */
-    private function getAccuseReceptionPath(Dossier $dossier)
-    {
-        try {
-            $accuseDocument = $dossier->documents()
-                ->where(function($query) {
-                    $query->where('nom_fichier', 'LIKE', 'accuse_reception_%')
-                          ->orWhere('nom_fichier', 'LIKE', 'accuse_phase1_%')
-                          ->orWhere('type_document', 'accuse_reception')
-                          ->orWhere('is_system_generated', true);
-                })
-                ->orderBy('created_at', 'desc')
-                ->first();
+   private function getAccuseReceptionPath(Dossier $dossier)
+{
+    try {
+        Log::info('=== RECHERCHE CHEMIN ACCUSÉ AVEC CORRECTION ===', [
+            'dossier_id' => $dossier->id,
+            'correction_applied' => 'removed_type_document_column'
+        ]);
+
+        // ✅ CORRECTION: Supprimer la condition sur 'type_document' qui n'existe pas
+        $accuseDocument = $dossier->documents()
+            ->where(function($query) {
+                $query->where('nom_fichier', 'LIKE', 'accuse_reception_%')
+                      ->orWhere('nom_fichier', 'LIKE', 'accuse_phase1_%')
+                      ->orWhere('is_system_generated', 1); // Supprimer type_document
+            })
+            ->orderBy('created_at', 'desc')
+            ->first();
+        
+        Log::info('=== RÉSULTAT RECHERCHE ACCUSÉ CORRIGÉ ===', [
+            'dossier_id' => $dossier->id,
+            'document_found' => $accuseDocument !== null,
+            'document_id' => $accuseDocument ? $accuseDocument->id : null,
+            'document_nom' => $accuseDocument ? $accuseDocument->nom_fichier : null
+        ]);
+        
+        if ($accuseDocument && $accuseDocument->chemin_fichier) {
+            $fullPath = storage_path('app/public/' . $accuseDocument->chemin_fichier);
             
-            if ($accuseDocument && $accuseDocument->chemin_fichier) {
-                $fullPath = storage_path('app/public/' . $accuseDocument->chemin_fichier);
-                if (file_exists($fullPath)) {
-                    return $fullPath;
-                }
+            if (file_exists($fullPath)) {
+                Log::info('=== ACCUSÉ TROUVÉ ET ACCESSIBLE ===', [
+                    'path' => $accuseDocument->chemin_fichier,
+                    'file_exists' => true
+                ]);
+                return $accuseDocument->chemin_fichier;
+            } else {
+                Log::warning('=== ACCUSÉ TROUVÉ MAIS FICHIER ABSENT ===', [
+                    'expected_path' => $fullPath,
+                    'file_exists' => false
+                ]);
             }
-            
-            return null;
-            
-        } catch (\Exception $e) {
-            Log::error('=== ERREUR RECHERCHE CHEMIN ACCUSÉ ===', [
-                'dossier_id' => $dossier->id,
-                'error' => $e->getMessage()
-            ]);
-            
-            return null;
         }
+        
+        Log::info('=== AUCUN ACCUSÉ TROUVÉ ===', [
+            'dossier_id' => $dossier->id,
+            'reason' => 'no_matching_documents'
+        ]);
+        
+        return null;
+        
+    } catch (\Exception $e) {
+        Log::error('=== ERREUR RECHERCHE ACCUSÉ CORRIGÉE ===', [
+            'dossier_id' => $dossier->id,
+            'error' => $e->getMessage(),
+            'line' => $e->getLine(),
+            'correction_note' => 'removed_type_document_reference'
+        ]);
+        
+        // Retourner null pour ne pas bloquer la page
+        return null;
     }
+}
 
     /**
      * ✅ MÉTHODE AUXILIAIRE CORRIGÉE - Obtenir l'URL de téléchargement de l'accusé
      * CORRECTION: Meilleure recherche des documents d'accusé
      */
-    private function getAccuseReceptionDownloadUrl(Dossier $dossier)
-    {
-        try {
-            // Rechercher l'accusé de réception via les patterns de noms
-            $accuseDocument = $dossier->documents()
-                ->where(function($query) {
-                    $query->where('nom_fichier', 'LIKE', 'accuse_reception_%')
-                          ->orWhere('nom_fichier', 'LIKE', 'accuse_phase1_%')
-                          ->orWhere('type_document', 'accuse_reception')
-                          ->orWhere('is_system_generated', true);
-                })
-                ->orderBy('created_at', 'desc')
-                ->first();
-            
-            if ($accuseDocument && $accuseDocument->chemin_fichier) {
-                // Vérifier si le fichier existe physiquement
-                if (Storage::disk('public')->exists($accuseDocument->chemin_fichier)) {
-                    return route('operator.organisations.download-accuse', [
-                        'path' => basename($accuseDocument->chemin_fichier)
-                    ]);
-                }
-            }
-            
-            Log::info('=== ACCUSÉ RÉCEPTION NON TROUVÉ ===', [
-                'dossier_id' => $dossier->id,
-                'total_documents' => $dossier->documents()->count()
-            ]);
-            
-            return null;
-            
-        } catch (\Exception $e) {
-            Log::error('=== ERREUR RECHERCHE ACCUSÉ ===', [
-                'dossier_id' => $dossier->id,
-                'error' => $e->getMessage()
-            ]);
-            
-            return null;
+    /**
+ * ✅ MÉTHODE AUXILIAIRE CORRIGÉE - Obtenir l'URL de téléchargement de l'accusé
+ */
+private function getAccuseReceptionDownloadUrl(Dossier $dossier)
+{
+    try {
+        $accusePath = $this->getAccuseReceptionPath($dossier);
+        
+        if ($accusePath) {
+            // Générer l'URL de téléchargement sécurisée
+            return route('operator.dossiers.download-accuse', ['path' => basename($accusePath)]);
         }
+        
+        return null;
+        
+    } catch (\Exception $e) {
+        Log::error('=== ERREUR GÉNÉRATION URL ACCUSÉ ===', [
+            'dossier_id' => $dossier->id,
+            'error' => $e->getMessage()
+        ]);
+        
+        return null;
     }
+}
 
     /**
      * ✅ MÉTHODE AUXILIAIRE - Message légal conforme

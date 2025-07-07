@@ -9,6 +9,7 @@ use App\Http\Controllers\Operator\ProfileController;
 use App\Http\Controllers\Operator\DossierController;
 use App\Http\Controllers\Operator\OrganisationController;
 use App\Http\Controllers\Operator\AdherentController;
+use App\Http\Controllers\Operator\ChunkingController;
 use App\Http\Controllers\Operator\DocumentController as OperatorDocumentController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\AnalyticsController;
@@ -263,6 +264,20 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 */
 Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
     
+// ✅ NOUVELLES ROUTES CHUNKING - À AJOUTER ICI
+    Route::prefix('chunking')->name('chunking.')->group(function() {
+        Route::post('/get-session-data', [\App\Http\Controllers\Operator\ChunkingController::class, 'getSessionData'])
+             ->name('get-session-data');
+        Route::post('/process-chunk', [\App\Http\Controllers\Operator\ChunkingController::class, 'processChunk'])
+             ->name('process-chunk');
+        Route::post('/cleanup-session', [\App\Http\Controllers\Operator\ChunkingController::class, 'cleanupSession'])
+             ->name('cleanup-session');
+        Route::get('/health', [\App\Http\Controllers\Operator\ChunkingController::class, 'healthCheck'])
+             ->name('health');
+        Route::get('/csrf-refresh', [\App\Http\Controllers\Operator\ChunkingController::class, 'refreshCSRF'])
+             ->name('csrf-refresh');
+    });
+
     // Dashboard principal
     Route::get('/', function () {
         return view('operator.dashboard');
@@ -285,8 +300,8 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
         Route::delete('/photo', [ProfileController::class, 'deleteProfilePhoto'])->name('photo.delete');
     });
     
-// ✅ ORGANISATIONS AVEC CORRECTIONS FINALES
-Route::prefix('organisations')->name('organisations.')->middleware(['check.organisation.limit'])->group(function () {
+    // ✅ ORGANISATIONS AVEC CORRECTIONS FINALES
+    Route::prefix('organisations')->name('organisations.')->middleware(['check.organisation.limit'])->group(function () {
     Route::get('/', [OrganisationController::class, 'index'])->name('index');
     Route::get('/create', [OrganisationController::class, 'create'])->name('create');
     Route::post('/', [OrganisationController::class, 'store'])->name('store');
@@ -305,6 +320,8 @@ Route::prefix('organisations')->name('organisations.')->middleware(['check.organ
     Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
     Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
     Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
+
+    
 });
     
     // ========================================
@@ -1535,71 +1552,3 @@ Route::get('/csrf-token', function () {
         'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString()
     ]);
 })->middleware('auth');
-
-/*
-|--------------------------------------------------------------------------
-| ROUTES CHUNKING - Import de gros volumes d'adhérents (WEB ALTERNATIVE)
-| Compatible avec authentification session Laravel standard
-|--------------------------------------------------------------------------
-*/
-
-use App\Http\Controllers\Api\ChunkProcessorController;
-
-Route::middleware(['auth', 'verified'])->group(function () {
-    
-    /**
-     * Traitement des chunks d'adhérents (MODE WEB ALTERNATIVE)
-     * POST /chunking/process-chunk
-     */
-    Route::post('/chunking/process-chunk', [ChunkProcessorController::class, 'processChunk'])
-        ->name('web.chunking.process-chunk');
-    
-    /**
-     * Rafraîchissement du token CSRF (MODE WEB ALTERNATIVE)
-     * GET /chunking/csrf-refresh
-     */
-    Route::get('/chunking/csrf-refresh', [ChunkProcessorController::class, 'refreshCSRF'])
-        ->name('web.chunking.csrf-refresh');
-    
-    /**
-     * Statistiques de performance du chunking (MODE WEB ALTERNATIVE)
-     * GET /chunking/performance
-     */
-    Route::get('/chunking/performance', [ChunkProcessorController::class, 'getPerformanceStats'])
-        ->name('web.chunking.performance');
-    
-    /**
-     * Health check pour le chunking (MODE WEB ALTERNATIVE)
-     * GET /chunking/health
-     */
-    Route::get('/chunking/health', function () {
-        return response()->json([
-            'success' => true,
-            'system' => 'chunking',
-            'status' => 'operational',
-            'mode' => 'web_routes_alternative',
-            'version' => '1.2',
-            'timestamp' => now()->toISOString(),
-            'user_authenticated' => auth()->check(),
-            'user_id' => auth()->id(),
-            'user_role' => auth()->user()->role ?? 'N/A',
-            'limits' => [
-                'max_chunk_size' => 100,
-                'max_execution_time' => 25,
-                'memory_limit' => '256M'
-            ],
-            'middleware' => 'web + auth + verified (session-based)',
-            'debug_info' => [
-                'csrf_token_present' => !empty(csrf_token()),
-                'session_id' => session()->getId(),
-                'session_lifetime' => config('session.lifetime')
-            ]
-        ]);
-    })->name('web.chunking.health');
-    
-});
-
-// Route publique pour refresh CSRF (sans auth) - Alternative Web
-Route::get('/chunking/csrf-refresh-public', [ChunkProcessorController::class, 'refreshCSRF'])
-    ->middleware(['throttle:10,1'])
-    ->name('web.chunking.csrf-refresh-public');
