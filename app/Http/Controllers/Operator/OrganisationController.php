@@ -16,6 +16,7 @@ use App\Services\OrganisationStepService;
 use App\Services\WorkflowService;
 use App\Services\QrCodeService;
 use Exception;
+use Illuminate\Support\Facades\Validator;
 
 class OrganisationController extends Controller
 {
@@ -421,6 +422,29 @@ class OrganisationController extends Controller
      */
 public function store(Request $request)
 {
+    
+      // ✅ DEBUG SIMPLE
+    \Log::info('🚀 OrganisationController@store APPELÉ', [
+        'user_id' => auth()->id(),
+        'csrf_input' => substr($request->input('_token'), 0, 10) . '...',
+        'csrf_session' => substr(session()->token(), 0, 10) . '...',
+        'csrf_match' => session()->token() === $request->input('_token'),
+        'debug_mode' => $request->input('debug_mode')
+    ]);
+    
+    // ✅ Si debug mode, retourner succès immédiatement
+    if ($request->input('debug_mode') === 'true') {
+        return response()->json([
+            'success' => true,
+            'message' => 'OrganisationController@store atteint avec succès !',
+            'debug' => [
+                'csrf_valid' => session()->token() === $request->input('_token'),
+                'user_id' => auth()->id(),
+                'route_name' => $request->route()->getName()
+            ]
+        ]);
+    }
+    
     // FORCE EXTENSION TIMEOUT pour gros volumes
     @set_time_limit(0);
     @ini_set('memory_limit', '1G');
@@ -476,6 +500,21 @@ private function handleLargeVolumeSubmission(Request $request, array $adherentsA
         $organisationData = $request->except(['adherents']);
         $organisationData['phase_creation'] = 'organisation_sans_adherents';
         $organisationData['adherents_count_pending'] = count($adherentsArray);
+
+        // ✅ AJOUT CRUCIAL : S'assurer que les fondateurs sont transmis
+        $allRequestData = $request->all();
+        \Log::info('🔍 DONNÉES REQUEST HANDLELARGEVOLUMESUBMISSION', [
+        'keys' => array_keys($allRequestData),
+        'has_fondateurs' => isset($allRequestData['fondateurs']),
+        'fondateurs_type' => isset($allRequestData['fondateurs']) ? gettype($allRequestData['fondateurs']) : 'absent'
+        ]);
+
+        if (isset($allRequestData['fondateurs'])) {
+        $organisationData['fondateurs'] = $allRequestData['fondateurs'];
+        \Log::info('✅ FONDATEURS AJOUTÉS À organisationData');
+        } else {
+            \Log::error('❌ AUCUN FONDATEUR TROUVÉ DANS REQUEST');
+        }
         
         // CRÉER L'ORGANISATION + DOSSIER (réutiliser logique existante)
         $result = $this->createOrganisationOnly($organisationData, $request);
@@ -508,26 +547,50 @@ private function handleLargeVolumeSubmission(Request $request, array $adherentsA
                 'dossier_id' => $dossierId
             ]);
 
-            // RÉPONSE AVEC PHASE 2 ACTIVÉE
-            return response()->json([
-                'success' => true,
-                'phase' => 'organisation_created_phase2_pending',
-                'message' => 'Organisation créée avec succès. Import des adhérents préparé...',
-                'data' => [
-                'dossier_id' => $dossierId,
-                'organisation_id' => $organisationId,
-                'numero_dossier' => $numeroDossier,
-                'phase2_required' => true,
-                'adherents_count' => count($adherentsArray),
-                'redirect_url' => route('operator.dossiers.confirmation', $dossierId),
-                'session_key' => $sessionKey
-                ],
-                // ✅ AJOUTER CES LIGNES POUR FORCER LA REDIRECTION
-                'redirect' => route('operator.dossiers.confirmation', $dossierId),
-                'auto_redirect' => true,
-                'redirect_delay' => 2000,
-                'redirect_message' => 'Redirection vers la Phase 2...'
-            ]);
+            // ✅ NOUVEAU: Vérifier s'il y a des adhérents en session (Étape 7)
+$sessionKey = 'phase2_adherents_' . $dossierId;
+$adherentsInSession = session($sessionKey);
+
+if ($adherentsInSession && is_array($adherentsInSession) && count($adherentsInSession) > 0) {
+    \Log::info('✅ ADHÉRENTS DÉTECTÉS EN SESSION APRÈS CRÉATION', [
+        'dossier_id' => $dossierId,
+        'adherents_count' => count($adherentsInSession)
+    ]);
+    
+    // RÉPONSE AVEC PHASE 2 ACTIVÉE
+    return response()->json([
+        'success' => true,
+        'phase' => 'organisation_created_phase2_pending',
+        'message' => 'Organisation créée avec succès. Import des adhérents en cours...',
+        'data' => [
+            'dossier_id' => $dossierId,
+            'organisation_id' => $result['organisation_id'],
+            'numero_dossier' => $result['numero_dossier'],
+            'phase2_required' => true,
+            'adherents_count' => count($adherentsInSession),
+            'redirect_url' => route('operator.dossiers.confirmation', $dossierId)
+        ],
+        'redirect' => route('operator.dossiers.confirmation', $dossierId),
+        'auto_redirect' => true,
+        'redirect_delay' => 2000
+    ]);
+} else {
+    // RÉPONSE NORMALE SANS PHASE 2
+    return response()->json([
+        'success' => true,
+        'phase' => 'organisation_created_standard',
+        'message' => 'Organisation créée avec succès.',
+        'data' => [
+            'dossier_id' => $dossierId,
+            'organisation_id' => $result['organisation_id'],
+            'numero_dossier' => $result['numero_dossier'],
+            'phase2_required' => false,
+            'redirect_url' => route('operator.dossiers.confirmation', $dossierId)
+        ]
+    ]);
+}
+
+
         } else {
             throw new \Exception('Échec création organisation: ' . ($result['message'] ?? 'Erreur inconnue'));
         }
@@ -1389,48 +1452,109 @@ private function extractRecursive($data, &$extracted, $prefix = '')
             'fondateurs' => [
                 'required',
                 function ($attribute, $value, $fail) use ($type) {
-                    // Décoder JSON si c'est une string
-                    if (is_string($value)) {
-                        $decoded = json_decode($value, true);
-                        if (json_last_error() !== JSON_ERROR_NONE) {
-                            $fail('Les données des fondateurs sont invalides (JSON malformé): ' . json_last_error_msg());
-                            return;
-                        }
-                        $value = $decoded;
-                        request()->merge(['fondateurs' => $value]);
-                    }
-                    
-                    if (!is_array($value)) {
-                        $fail('Les fondateurs doivent être un tableau.');
-                        return;
-                    }
-                    
-                    $minRequired = $this->getMinFondateurs($type);
-                    if (count($value) < $minRequired) {
-                        $fail("Minimum {$minRequired} fondateurs requis pour ce type d'organisation.");
-                    }
-                    
-                    // Validation des fondateurs (identique à validateCompleteOrganisationData)
-                    foreach ($value as $index => $fondateur) {
-                        if (!is_array($fondateur)) {
-                            $fail("Le fondateur ligne " . ($index + 1) . " doit être un objet valide.");
-                            continue;
-                        }
+                    /**
+ * ✅ ÉTAPE 3 : REMPLACER LE CONTENU DE LA FONCTION fondateurs
+ * 
+ * CHERCHER : 'fondateurs' => [ function ($attribute, $value, $fail) use ($type) {
+ * REMPLACER tout le contenu entre { et } par :
+ */
+
+// ✅ DÉTECTER PHASE 1
+$isPhase1 = request()->has('__phase_1_validation');
+
+\Log::info('🔍 VALIDATION FONDATEURS', [
+    'is_phase_1' => $isPhase1,
+    'value_type' => gettype($value),
+    'value_count' => is_array($value) ? count($value) : 'not_array'
+]);
+
+if (empty($value)) {
+    $fail('Au moins un fondateur est requis.');
+    return;
+}
+
+// Décoder JSON si nécessaire
+if (is_string($value)) {
+    $decoded = json_decode($value, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        $fail('Les données des fondateurs sont invalides (JSON malformé): ' . json_last_error_msg());
+        return;
+    }
+    $value = $decoded;
+    request()->merge(['fondateurs' => $value]);
+}
+
+if (!is_array($value)) {
+    $fail('Les fondateurs doivent être un tableau.');
+    return;
+}
+
+$minRequired = $this->getMinFondateurs($type);
+if (count($value) < $minRequired) {
+    $fail("Minimum {$minRequired} fondateurs requis pour ce type d'organisation.");
+}
+
+// ✅ VALIDATION ALLÉGÉE POUR PHASE 1
+if ($isPhase1) {
+    \Log::info('✅ PHASE 1 : Validation allégée fondateurs');
+    
+    foreach ($value as $index => $fondateur) {
+        if (!is_array($fondateur)) {
+            $fail("Le fondateur ligne " . ($index + 1) . " doit être un objet valide.");
+            continue;
+        }
+        
+        // Validation minimale pour Phase 1
+        if (empty($fondateur['nip'])) {
+            $fail("Le NIP du fondateur ligne " . ($index + 1) . " ne peut pas être vide.");
+        }
+        if (empty($fondateur['nom']) || empty($fondateur['prenom'])) {
+            $fail("Le nom et prénom du fondateur ligne " . ($index + 1) . " sont obligatoires.");
+        }
+        
+        // ✅ VALEURS PAR DÉFAUT pour éviter erreurs
+        if (empty($fondateur['fonction'])) {
+            $value[$index]['fonction'] = 'Fondateur';
+            \Log::info('✅ Fonction par défaut assignée', ['ligne' => $index + 1]);
+        }
+        if (empty($fondateur['telephone'])) {
+            $value[$index]['telephone'] = 'A renseigner';
+            \Log::info('✅ Téléphone par défaut assigné', ['ligne' => $index + 1]);
+        }
+        if (empty($fondateur['profession'])) {
+            $value[$index]['profession'] = 'Dirigeant';
+            \Log::info('✅ Profession par défaut assignée', ['ligne' => $index + 1]);
+        }
+    }
+    
+    request()->merge(['fondateurs' => $value]);
+    \Log::info('✅ FONDATEURS VALIDÉS POUR PHASE 1', ['count' => count($value)]);
+    return;
+}
+
+// Validation complète pour Phase 2
+foreach ($value as $index => $fondateur) {
+    if (!is_array($fondateur)) {
+        $fail("Le fondateur ligne " . ($index + 1) . " doit être un objet valide.");
+        continue;
+    }
+    
+    if (empty($fondateur['nip'])) {
+        $fail("Le NIP du fondateur ligne " . ($index + 1) . " ne peut pas être vide.");
+    }
+    
+    if (empty($fondateur['nom']) || empty($fondateur['prenom'])) {
+        $fail("Le nom et prénom du fondateur ligne " . ($index + 1) . " sont obligatoires.");
+    }
+    if (empty($fondateur['fonction'])) {
+        $fail("La fonction du fondateur ligne " . ($index + 1) . " est obligatoire.");
+    }
+    if (empty($fondateur['telephone'])) {
+        $fail("Le téléphone du fondateur ligne " . ($index + 1) . " est obligatoire.");
+    }
+}
                         
-                        if (empty($fondateur['nip'])) {
-                            $fail("Le NIP du fondateur ligne " . ($index + 1) . " ne peut pas être vide.");
-                        }
                         
-                        if (empty($fondateur['nom']) || empty($fondateur['prenom'])) {
-                            $fail("Le nom et prénom du fondateur ligne " . ($index + 1) . " sont obligatoires.");
-                        }
-                        if (empty($fondateur['fonction'])) {
-                            $fail("La fonction du fondateur ligne " . ($index + 1) . " est obligatoire.");
-                        }
-                        if (empty($fondateur['telephone'])) {
-                            $fail("Le téléphone du fondateur ligne " . ($index + 1) . " est obligatoire.");
-                        }
-                    }
                 }
             ],
             
@@ -2686,6 +2810,530 @@ private function cleanupExpiredSessionData()
         ]);
     }
 
+
+    /**
+     * ✅ NOUVELLE MÉTHODE 1 : Upload de lots supplémentaires d'adhérents
+     * POST /operator/organisations/{dossier}/upload-additional-batch
+     */
+    public function uploadAdditionalBatch(Request $request, $dossierId)
+    {
+        // Force extension timeout pour gros volumes
+        @set_time_limit(0);
+        @ini_set('memory_limit', '1G');
+        
+        \Log::info('🚀 DÉBUT upload lot supplémentaire', [
+            'user_id' => auth()->id(),
+            'dossier_id' => $dossierId,
+            'request_size' => $request->header('Content-Length')
+        ]);
+
+        try {
+            // Vérifier le dossier et l'accès
+            $dossier = \App\Models\Dossier::with(['organisation'])
+                ->where('id', $dossierId)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dossier non trouvé ou accès non autorisé'
+                ], 404);
+            }
+
+            // Validation du fichier
+            $request->validate([
+                'fichier_adherents' => 'required|file|mimes:xlsx,csv|max:10240', // 10MB max
+                'lot_numero' => 'required|integer|min:2', // À partir du lot 2
+            ]);
+
+            $file = $request->file('fichier_adherents');
+            $lotNumero = $request->input('lot_numero');
+
+            // Traitement du fichier adhérents
+            $adherentsResult = $this->processAdherentsFile($file, $dossier->organisation);
+
+            if (!$adherentsResult['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $adherentsResult['message'],
+                    'errors' => $adherentsResult['errors'] ?? []
+                ], 422);
+            }
+
+            // Récupérer les adhérents existants de cette session
+            $sessionKey = 'phase2_adherents_' . $dossierId;
+            $existingAdherents = session($sessionKey, []);
+
+            // Gérer le format de session (structuré ou simple)
+            if (isset($existingAdherents['data']) && is_array($existingAdherents['data'])) {
+                $currentAdherents = $existingAdherents['data'];
+            } else {
+                $currentAdherents = is_array($existingAdherents) ? $existingAdherents : [];
+            }
+
+            // Fusionner avec les nouveaux adhérents
+            $newAdherents = $adherentsResult['adherents'];
+            $mergedAdherents = array_merge($currentAdherents, $newAdherents);
+
+            // Déduplication par NIP
+            $uniqueAdherents = [];
+            $duplicateNips = [];
+            foreach ($mergedAdherents as $adherent) {
+                $nip = $adherent['nip'] ?? '';
+                if (!isset($uniqueAdherents[$nip])) {
+                    $uniqueAdherents[$nip] = $adherent;
+                } else {
+                    $duplicateNips[] = $nip;
+                }
+            }
+
+            // Sauvegarder en session avec métadonnées de lot
+            $sessionData = [
+                'data' => array_values($uniqueAdherents),
+                'total' => count($uniqueAdherents),
+                'created_at' => now()->toISOString(),
+                'expires_at' => now()->addHours(4)->toISOString(), // Prolonger l'expiration
+                'user_id' => auth()->id(),
+                'dossier_id' => $dossierId,
+                'lots_info' => [
+                    'current_lot' => $lotNumero,
+                    'total_lots' => $lotNumero,
+                    'last_upload' => now()->toISOString(),
+                    'duplicates_found' => count($duplicateNips)
+                ]
+            ];
+
+            session([$sessionKey => $sessionData]);
+
+            // Sauvegarder les métadonnées du lot
+            $metadataKey = 'phase2_metadata_' . $dossierId;
+            session([
+                $metadataKey => [
+                    'lots_history' => session($metadataKey . '.lots_history', []) + [
+                        $lotNumero => [
+                            'uploaded_at' => now()->toISOString(),
+                            'file_name' => $file->getClientOriginalName(),
+                            'adherents_count' => count($newAdherents),
+                            'duplicates_removed' => count($duplicateNips),
+                            'stats' => $adherentsResult['stats'] ?? []
+                        ]
+                    ]
+                ]
+            ]);
+
+            \Log::info('✅ Lot supplémentaire traité avec succès', [
+                'dossier_id' => $dossierId,
+                'lot_numero' => $lotNumero,
+                'nouveaux_adherents' => count($newAdherents),
+                'total_unique' => count($uniqueAdherents),
+                'doublons_supprimés' => count($duplicateNips)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Lot $lotNumero traité avec succès",
+                'data' => [
+                    'lot_numero' => $lotNumero,
+                    'nouveaux_adherents' => count($newAdherents),
+                    'total_adherents' => count($uniqueAdherents),
+                    'doublons_supprimes' => count($duplicateNips),
+                    'expires_at' => $sessionData['expires_at']
+                ],
+                'stats' => $adherentsResult['stats'],
+                'duplicates' => $duplicateNips
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Erreur upload lot supplémentaire', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors du traitement : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE 2 : Statistiques temps réel des adhérents
+     * GET /operator/organisations/{dossier}/adherents-statistics
+     */
+    public function getAdherentsStatisticsRealTime($dossierId)
+    {
+        try {
+            // Vérifier l'accès au dossier
+            $dossier = \App\Models\Dossier::with(['organisation.adherents'])
+                ->where('id', $dossierId)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dossier non trouvé'
+                ], 404);
+            }
+
+            $organisation = $dossier->organisation;
+
+            // Adhérents déjà en base de données
+            $adherentsEnBase = $organisation->adherents()->count();
+            $adherentsActifs = $organisation->adherents()->where('is_active', true)->count();
+
+            // Adhérents en session (lots en attente)
+            $sessionKey = 'phase2_adherents_' . $dossierId;
+            $sessionData = session($sessionKey, []);
+            
+            $adherentsEnSession = 0;
+            $lotsInfo = [];
+            $sessionExpiration = null;
+
+            if (is_array($sessionData) && !empty($sessionData)) {
+                if (isset($sessionData['data'])) {
+                    // Format structuré
+                    $adherentsEnSession = count($sessionData['data'] ?? []);
+                    $sessionExpiration = $sessionData['expires_at'] ?? null;
+                    $lotsInfo = $sessionData['lots_info'] ?? [];
+                } else {
+                    // Format simple
+                    $adherentsEnSession = count($sessionData);
+                    $sessionExpiration = session('phase2_expires_' . $dossierId);
+                }
+            }
+
+            // Métadonnées des lots
+            $metadataKey = 'phase2_metadata_' . $dossierId;
+            $lotsHistory = session($metadataKey . '.lots_history', []);
+
+            // Exigences selon le type d'organisation
+            $minAdherents = $this->getMinAdherents($organisation->type);
+            $totalAdherents = $adherentsEnBase + $adherentsEnSession;
+            $adherentsManquants = max(0, $minAdherents - $totalAdherents);
+
+            // Vérifier si prêt pour soumission
+            $pretPourSoumission = $totalAdherents >= $minAdherents;
+
+            $statistics = [
+                'adherents_en_base' => $adherentsEnBase,
+                'adherents_actifs' => $adherentsActifs,
+                'adherents_en_session' => $adherentsEnSession,
+                'total_adherents' => $totalAdherents,
+                'adherents_requis' => $minAdherents,
+                'adherents_manquants' => $adherentsManquants,
+                'lots_info' => $lotsInfo,
+                'lots_history' => $lotsHistory,
+                'session_expires_at' => $sessionExpiration,
+                'session_expires_in_minutes' => $sessionExpiration ? 
+                    max(0, \Carbon\Carbon::parse($sessionExpiration)->diffInMinutes(now())) : 0,
+                'pret_pour_soumission' => $pretPourSoumission,
+                'organisation_type' => $organisation->type,
+                'last_update' => now()->toISOString()
+            ];
+
+            return response()->json([
+                'success' => true,
+                'statistics' => $statistics
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Erreur récupération statistiques', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la récupération des statistiques'
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE 3 : Soumission finale à l'administration
+     * POST /operator/organisations/{dossier}/submit-to-administration
+     */
+    public function submitToAdministration(Request $request, $dossierId)
+    {
+        // Validation de la déclaration finale
+        $request->validate([
+            'declaration_finale' => 'required|accepted',
+            'confirmation_soumission' => 'required|accepted'
+        ]);
+
+        \Log::info('🚀 DÉBUT soumission finale à l\'administration', [
+            'user_id' => auth()->id(),
+            'dossier_id' => $dossierId
+        ]);
+
+        try {
+            \DB::beginTransaction();
+
+            // Récupérer le dossier
+            $dossier = \App\Models\Dossier::with(['organisation'])
+                ->where('id', $dossierId)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dossier non trouvé ou accès non autorisé'
+                ], 404);
+            }
+
+            // Vérifier que le dossier peut être soumis
+            if ($dossier->statut !== 'brouillon' && $dossier->statut !== 'en_preparation') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ce dossier a déjà été soumis ou ne peut pas être soumis'
+                ], 422);
+            }
+
+            $organisation = $dossier->organisation;
+
+            // Traiter les adhérents en session s'il y en a
+            $sessionKey = 'phase2_adherents_' . $dossierId;
+            $sessionData = session($sessionKey, []);
+            
+            if (!empty($sessionData)) {
+                \Log::info('🔄 Traitement des adhérents en session avant soumission', [
+                    'dossier_id' => $dossierId
+                ]);
+
+                // Traiter les adhérents de la session
+                $adherentsResult = $this->processSessionAdherents($request, $dossierId);
+                
+                if (!$adherentsResult) {
+                    \DB::rollback();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Erreur lors du traitement des adhérents en session'
+                    ], 500);
+                }
+            }
+
+            // Vérifier les prérequis pour la soumission
+            $statistics = $this->getAdherentsStatisticsRealTime($dossierId);
+            $stats = $statistics->getData()->statistics ?? null;
+
+            if (!$stats || !$stats->pret_pour_soumission) {
+                \DB::rollback();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Le dossier ne remplit pas les conditions pour être soumis',
+                    'details' => $stats ? [
+                        'adherents_requis' => $stats->adherents_requis,
+                        'adherents_actuels' => $stats->total_adherents,
+                        'adherents_manquants' => $stats->adherents_manquants
+                    ] : []
+                ], 422);
+            }
+
+            // Mettre à jour le statut du dossier
+            $numeroSoumission = $this->generateNumeroSoumissionAdministration();
+            
+            $dossier->update([
+                'statut' => 'soumis_administration',
+                'submitted_at' => now(),
+                'numero_soumission' => $numeroSoumission,
+                'donnees_supplementaires' => array_merge(
+                    json_decode($dossier->donnees_supplementaires ?? '{}', true),
+                    [
+                        'soumission_finale' => [
+                            'soumis_le' => now()->toISOString(),
+                            'numero_soumission' => $numeroSoumission,
+                            'total_adherents_final' => $stats->total_adherents,
+                            'declaration_finale' => true,
+                            'user_agent' => $request->header('User-Agent'),
+                            'ip_address' => $request->ip()
+                        ]
+                    ]
+                )
+            ]);
+
+            // Mettre à jour l'organisation
+            $organisation->update([
+                'statut' => 'en_cours_traitement',
+                'submitted_at' => now()
+            ]);
+
+            // Nettoyer les sessions temporaires
+            session()->forget([$sessionKey, 'phase2_expires_' . $dossierId, 'phase2_metadata_' . $dossierId]);
+
+            // Générer l'accusé de réception en utilisant la méthode existante
+            $accuseReceptionPath = $this->generateAccuseReceptionFinal($dossier, $organisation, auth()->user(), [
+                'stats' => [
+                    'total' => $stats->total_adherents,
+                    'valides' => $stats->total_adherents,
+                    'anomalies' => 0
+                ],
+                'anomalies' => []
+            ]);
+
+            // Déclencher les notifications admin (si nécessaire)
+            // $this->notifyAdministration($dossier);
+
+            \DB::commit();
+
+            \Log::info('✅ Soumission finale à l\'administration réussie', [
+                'dossier_id' => $dossierId,
+                'organisation_id' => $organisation->id,
+                'numero_soumission' => $numeroSoumission,
+                'total_adherents' => $stats->total_adherents
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Dossier soumis avec succès à l\'administration',
+                'data' => [
+                    'numero_soumission' => $numeroSoumission,
+                    'dossier_id' => $dossierId,
+                    'organisation_id' => $organisation->id,
+                    'submitted_at' => now()->toISOString(),
+                    'accuse_reception_path' => $accuseReceptionPath,
+                    'redirect_url' => route('operator.dossiers.final-confirmation', $dossierId)
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \DB::rollback();
+            
+            \Log::error('❌ Erreur soumission finale administration', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de la soumission : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE 4 : Page de confirmation définitive avec accusé de réception
+     * GET /operator/dossiers/{dossier}/final-confirmation
+     */
+    public function finalConfirmation($dossierId)
+    {
+        try {
+            $dossier = \App\Models\Dossier::with([
+                'organisation',
+                'documents'
+            ])->where('id', $dossierId)
+              ->whereHas('organisation', function($query) {
+                  $query->where('user_id', auth()->id());
+              })
+              ->first();
+
+            if (!$dossier) {
+                return redirect()->route('operator.dashboard')
+                    ->with('error', 'Dossier non trouvé.');
+            }
+
+            // Vérifier que le dossier a bien été soumis
+            if ($dossier->statut !== 'soumis_administration') {
+                return redirect()->route('operator.dossiers.confirmation', $dossierId)
+                    ->with('warning', 'Ce dossier n\'a pas encore été soumis à l\'administration.');
+            }
+
+            $organisation = $dossier->organisation;
+            $donneesSupplementaires = json_decode($dossier->donnees_supplementaires ?? '{}', true);
+            $soumissionData = $donneesSupplementaires['soumission_finale'] ?? [];
+
+            // Données pour la confirmation définitive
+            $confirmationData = [
+                'organisation' => $organisation,
+                'dossier' => $dossier,
+                'numero_soumission' => $dossier->numero_soumission,
+                'submitted_at' => $dossier->submitted_at,
+                'total_adherents' => $soumissionData['total_adherents_final'] ?? 0,
+                'accuse_reception_path' => $this->getAccuseReceptionPath($dossier),
+                'delai_traitement_administratif' => '15 jours ouvrés',
+                'message_final' => 'Votre dossier a été transmis à l\'administration pour traitement final. Vous recevrez une notification dès qu\'une décision sera prise.',
+                'prochaines_etapes' => [
+                    [
+                        'titre' => 'Vérification administrative',
+                        'description' => 'Examen des documents et conformité réglementaire',
+                        'delai' => '5-7 jours'
+                    ],
+                    [
+                        'titre' => 'Validation finale',
+                        'description' => 'Approbation ou demande de compléments',
+                        'delai' => '3-5 jours'
+                    ],
+                    [
+                        'titre' => 'Notification de décision',
+                        'description' => 'Envoi de la décision finale par email',
+                        'delai' => '1-2 jours'
+                    ]
+                ],
+                'contact_support' => [
+                    'email' => 'support@pngdi.ga',
+                    'telephone' => '+241 XX XX XX XX',
+                    'horaires' => 'Lundi-Vendredi 8h-17h'
+                ]
+            ];
+
+            return view('operator.dossiers.final-confirmation', compact('confirmationData'));
+
+        } catch (\Exception $e) {
+            \Log::error('❌ Erreur affichage confirmation définitive', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage()
+            ]);
+
+            return redirect()->route('operator.dashboard')
+                ->with('error', 'Erreur lors de l\'affichage de la confirmation.');
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE UTILITAIRE : Générer numéro de soumission unique
+     */
+    private function generateNumeroSoumission()
+    {
+        $year = date('Y');
+        $month = date('m');
+        
+        // Compter les soumissions du mois
+        $count = \App\Models\Dossier::where('statut', 'soumis_administration')
+            ->whereYear('submitted_at', $year)
+            ->whereMonth('submitted_at', $month)
+            ->count() + 1;
+
+        return sprintf('ADMIN-%s%s-%05d', $year, $month, $count);
+    }
+
+    /**
+     * ✅ MÉTHODE UTILITAIRE : Générer numéro de soumission pour administration
+     */
+    private function generateNumeroSoumissionAdministration()
+    {
+        $year = date('Y');
+        $month = date('m');
+        
+        // Compter les soumissions du mois pour l'administration
+        $count = \App\Models\Dossier::where('statut', 'soumis_administration')
+            ->whereYear('submitted_at', $year)
+            ->whereMonth('submitted_at', $month)
+            ->count() + 1;
+
+        return sprintf('ADMIN-%s%s-%05d', $year, $month, $count);
+    }
+
+
     /**
      * Afficher la page de confirmation après soumission d'organisation
      */
@@ -2988,114 +3636,103 @@ private function validateCompleteOrganisationData(Request $request, $type)
         'adherents' => [
     'nullable',
     function ($attribute, $value, $fail) use ($type) {
-        // Si aucun adhérent fourni, c'est OK (Phase 1)
-        if (empty($value) || !is_array($value)) {
-            return; // ✅ Validation passée pour Phase 1
-        }
-        
-        // Décoder JSON si c'est une string
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                $fail('Les données des adhérents sont invalides (JSON malformé): ' . json_last_error_msg());
-                return;
-            }
-            $value = $decoded;
-            request()->merge(['adherents' => $value]);
-        }
-        
-        if (!is_array($value)) {
-            $fail('Les adhérents doivent être un tableau.');
-            return;
-        }
-        
-        // ✅ VALIDATION FLEXIBLE : Vérifier si on a soit le minimum requis, soit au moins le nombre de fondateurs
-        $minRequired = $this->getMinAdherents($type);
-        $adherentsCount = count($value);
-        
-        // Récupérer le nombre de fondateurs depuis la request
-        $fondateurs = request()->input('fondateurs', []);
-        if (is_string($fondateurs)) {
-            $fondateurs = json_decode($fondateurs, true) ?? [];
-        }
-        $fondateursCount = is_array($fondateurs) ? count($fondateurs) : 0;
-        
-        // ✅ VÉRIFICATION PHASE 1 : Si on n'a que les fondateurs, c'est OK pour Phase 1
-if ($adherentsCount <= $fondateursCount) {
-    // Phase 1 : Validation allégée, juste vérifier les champs de base
+        /**
+ * ✅ ÉTAPE 2 : REMPLACER LE CONTENU DE LA FONCTION adherents
+ * 
+ * CHERCHER : 'adherents' => [ 'nullable', function ($attribute, $value, $fail) use ($type) {
+ * REMPLACER tout le contenu entre { et } par :
+ */
+
+// ✅ DÉTECTER SI ON EST EN PHASE 1
+$isPhase1 = request()->has('__phase_1_validation');
+
+\Log::info('🔍 VALIDATION ADHÉRENTS', [
+    'is_phase_1' => $isPhase1,
+    'value_type' => gettype($value),
+    'value_count' => is_array($value) ? count($value) : 'not_array'
+]);
+
+// Si aucun adhérent fourni, c'est OK (Phase 1)
+if (empty($value) || !is_array($value)) {
+    if ($isPhase1) {
+        \Log::info('✅ PHASE 1 : Aucun adhérent requis');
+        return; // ✅ Validation passée pour Phase 1
+    } else {
+        $fail('Les adhérents sont obligatoires en Phase 2.');
+        return;
+    }
+}
+
+$minRequired = $this->getMinAdherents($type);
+$adherentsCount = count($value);
+
+// Récupérer le nombre de fondateurs pour comparaison
+$fondateurs = request()->input('fondateurs', []);
+if (is_string($fondateurs)) {
+    $fondateurs = json_decode($fondateurs, true) ?? [];
+}
+$fondateursCount = is_array($fondateurs) ? count($fondateurs) : 0;
+
+\Log::info('🔍 VÉRIFICATION ADHÉRENTS', [
+    'is_phase_1' => $isPhase1,
+    'adherents_count' => $adherentsCount,
+    'fondateurs_count' => $fondateursCount,
+    'min_required' => $minRequired
+]);
+
+// ✅ VÉRIFICATION PHASE 1 : Si on n'a que les fondateurs convertis, c'est OK
+if ($isPhase1 && $adherentsCount <= $fondateursCount + 5) { // Marge de tolérance
+    \Log::info('✅ PHASE 1 : Validation allégée activée');
+    
+    // Validation de base seulement pour Phase 1
     foreach ($value as $index => $adherent) {
-        if (!is_array($adherent)) {
-            $fail("L'adhérent ligne " . ($index + 1) . " doit être un objet valide.");
-            continue;
-        }
-        
-        // Nom et prénom obligatoires seulement
         if (empty($adherent['nom']) || empty($adherent['prenom'])) {
             $fail("Le nom et prénom de l'adhérent ligne " . ($index + 1) . " sont obligatoires.");
         }
-        
-        // NIP validation non-bloquante
-        if (empty($adherent['nip']) || trim($adherent['nip']) === '') {
+        if (empty($adherent['nip'])) {
             $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " ne peut pas être vide.");
         }
+        
+        // ✅ PROFESSION : Valeur par défaut si manquante
+        if (empty($adherent['profession']) || trim($adherent['profession']) === '') {
+            $value[$index]['profession'] = 'A définir';
+            \Log::info('✅ Profession par défaut assignée', [
+                'ligne' => $index + 1,
+                'adherent' => ($adherent['nom'] ?? '') . ' ' . ($adherent['prenom'] ?? '')
+            ]);
+        }
     }
-    return; // ✅ SORTIR EARLY POUR PHASE 1
+    
+    // ✅ SORTIR EARLY POUR PHASE 1 - PAS DE VALIDATION 50 MIN
+    request()->merge(['adherents' => $value]);
+    return;
 }
 
 // Phase 2 : Validation complète normale
 if ($adherentsCount < $minRequired) {
     $fail("Minimum {$minRequired} adhérents requis pour ce type d'organisation.");
-    return;
 }
-        
-        // ✅ VALIDATION CONFORME RÈGLE MÉTIER : PAS DE BLOCAGE POUR NIP
-        foreach ($value as $index => $adherent) {
-            if (!is_array($adherent)) {
-                $fail("L'adhérent ligne " . ($index + 1) . " doit être un objet valide.");
-                continue;
-            }
-            
-            // ✅ NIP : VALIDATION NON-BLOQUANTE SELON RÈGLE MÉTIER PNGDI
-            if (empty($adherent['nip']) || trim($adherent['nip']) === '') {
-                $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " ne peut pas être vide.");
-            } elseif (!$this->validateNipFormat($adherent['nip'])) {
-                // ✅ LOG NON-BLOQUANT : Sera traité comme anomalie lors de la création
-                \Log::info('NIP invalide détecté (sera enregistré comme anomalie)', [
-                    'ligne' => $index + 1,
-                    'nip' => $adherent['nip'],
-                    'adherent' => ($adherent['nom'] ?? '') . ' ' . ($adherent['prenom'] ?? ''),
-                    'sera_traite_comme' => 'anomalie_majeure'
-                ]);
-                // ✅ PAS DE FAIL() - Conforme à la règle métier PNGDI
-            }
-            
-            // Nom et prénom obligatoires
-            if (empty($adherent['nom']) || empty($adherent['prenom'])) {
-                $fail("Le nom et prénom de l'adhérent ligne " . ($index + 1) . " sont obligatoires.");
-            }
-            
-            // ✅ PROFESSION : Valeur par défaut si manquante (anomalie mineure)
-            if (empty($adherent['profession']) || trim($adherent['profession']) === '') {
-                // Assigner valeur par défaut
-                $adherent['profession'] = 'A définir';
-    
-                // Log comme anomalie mineure
-                \Log::info('Profession manquante - Valeur par défaut assignée (anomalie mineure)', [
-                'ligne' => $index + 1,
-                'adherent' => ($adherent['nom'] ?? '') . ' ' . ($adherent['prenom'] ?? ''),
-                'profession_assignee' => 'A définir',
-                'type_anomalie' => 'mineure',
-                'action' => 'valeur_par_defaut_assignee'
-                ]);
-    
-                // Mettre à jour dans la request pour que la valeur soit propagée
-                $value[$index]['profession'] = 'A définir';
-                request()->merge(['adherents' => $value]);
-            }
 
-
-        }
+// Validation détaillée pour Phase 2
+foreach ($value as $index => $adherent) {
+    if (!is_array($adherent)) {
+        $fail("L'adhérent ligne " . ($index + 1) . " doit être un objet valide.");
+        continue;
     }
+    
+    if (empty($adherent['nom']) || empty($adherent['prenom'])) {
+        $fail("Le nom et prénom de l'adhérent ligne " . ($index + 1) . " sont obligatoires.");
+    }
+    
+    if (empty($adherent['nip'])) {
+        $fail("Le NIP de l'adhérent ligne " . ($index + 1) . " ne peut pas être vide.");
+    }
+    
+    // Autres validations Phase 2...
+}
+    }
+
+
 ],
         
         // ÉTAPE 9 : Déclarations finales
@@ -3542,6 +4179,209 @@ private function resolveSeverity(array $anomalies)
                 return 7;
         }
     }
+
+    /**
+ * ========================================================================
+ * MÉTHODES À AJOUTER DANS OrganisationController.php
+ * ========================================================================
+ */
+
+/**
+ * Sauvegarder les adhérents en session (Étape 7)
+ */
+public function saveSessionAdherents(Request $request)
+{
+    try {
+        $sessionKey = $request->input('session_key');
+        $expirationKey = $request->input('expiration_key');
+        $data = $request->input('data');
+        $dossierId = $request->input('dossier_id');
+        
+        \Log::info('💾 SAUVEGARDE SESSION ADHÉRENTS ÉTAPE 7', [
+            'session_key' => $sessionKey,
+            'dossier_id' => $dossierId,
+            'adherents_count' => isset($data['data']) ? count($data['data']) : 0,
+            'user_id' => auth()->id()
+        ]);
+        
+        // Validation
+        if (!$sessionKey || !$data || !$dossierId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Paramètres manquants'
+            ], 400);
+        }
+        
+        // Vérifier que l'utilisateur a le droit sur ce dossier
+        $dossier = Dossier::where('id', $dossierId)
+            ->whereHas('organisation', function($q) {
+                $q->where('user_id', auth()->id());
+            })
+            ->first();
+            
+        if (!$dossier) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dossier non trouvé ou accès non autorisé'
+            ], 403);
+        }
+        
+        // Sauvegarder en session avec structure exacte pour confirmation.blade.php
+        session([
+            $sessionKey => $data['data'], // Array direct des adhérents
+            $expirationKey => $data['expires_at']
+        ]);
+        
+        // Sauvegarder aussi les métadonnées séparément
+        $metadataKey = str_replace('phase2_adherents_', 'phase2_metadata_', $sessionKey);
+        session([
+            $metadataKey => $data['metadata'] ?? []
+        ]);
+        
+        \Log::info('✅ SESSION ADHÉRENTS SAUVEGARDÉE', [
+            'session_key' => $sessionKey,
+            'adherents_count' => count($data['data']),
+            'expires_at' => $data['expires_at']
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Session sauvegardée avec succès',
+            'data' => [
+                'adherents_count' => count($data['data']),
+                'expires_at' => $data['expires_at'],
+                'session_key' => $sessionKey
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ ERREUR SAUVEGARDE SESSION ADHÉRENTS', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur serveur: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+/**
+ * Vérifier session adhérents existante
+ */
+public function checkSessionAdherents(Request $request)
+{
+    try {
+        $sessionKey = $request->input('session_key');
+        $dossierId = $request->input('dossier_id');
+        
+        if (!$sessionKey || !$dossierId) {
+            return response()->json([
+                'success' => false,
+                'exists' => false,
+                'message' => 'Paramètres manquants'
+            ], 400);
+        }
+        
+        // Vérifier session
+        $sessionData = session($sessionKey);
+        $expirationKey = str_replace('phase2_adherents_', 'phase2_expires_', $sessionKey);
+        $expirationTime = session($expirationKey);
+        
+        if (!$sessionData) {
+            return response()->json([
+                'success' => true,
+                'exists' => false,
+                'message' => 'Aucune session trouvée'
+            ]);
+        }
+        
+        // Vérifier expiration
+        if ($expirationTime && now()->isAfter($expirationTime)) {
+            // Session expirée, nettoyer
+            session()->forget([$sessionKey, $expirationKey]);
+            
+            return response()->json([
+                'success' => true,
+                'exists' => false,
+                'message' => 'Session expirée'
+            ]);
+        }
+        
+        // Récupérer métadonnées
+        $metadataKey = str_replace('phase2_adherents_', 'phase2_metadata_', $sessionKey);
+        $metadata = session($metadataKey, []);
+        
+        return response()->json([
+            'success' => true,
+            'exists' => true,
+            'data' => [
+                'data' => $sessionData,
+                'total' => is_array($sessionData) ? count($sessionData) : 0,
+                'expires_at' => $expirationTime,
+                'metadata' => $metadata
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ ERREUR VÉRIFICATION SESSION', [
+            'error' => $e->getMessage()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'exists' => false,
+            'message' => 'Erreur serveur'
+        ], 500);
+    }
+}
+
+/**
+ * Nettoyer session adhérents
+ */
+public function clearSessionAdherents(Request $request)
+{
+    try {
+        $sessionKey = $request->input('session_key');
+        $dossierId = $request->input('dossier_id');
+        
+        if (!$sessionKey) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Session key manquante'
+            ], 400);
+        }
+        
+        // Nettoyer toutes les clés liées
+        $expirationKey = str_replace('phase2_adherents_', 'phase2_expires_', $sessionKey);
+        $metadataKey = str_replace('phase2_adherents_', 'phase2_metadata_', $sessionKey);
+        
+        session()->forget([$sessionKey, $expirationKey, $metadataKey]);
+        
+        \Log::info('🧹 SESSION ADHÉRENTS NETTOYÉE', [
+            'session_key' => $sessionKey,
+            'dossier_id' => $dossierId,
+            'user_id' => auth()->id()
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Session nettoyée avec succès'
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ ERREUR NETTOYAGE SESSION', [
+            'error' => $e->getMessage()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Erreur serveur'
+        ], 500);
+    }
+}
+
 
     /**
      * Créer les fondateurs de l'organisation
@@ -4504,10 +5344,21 @@ public function validateNipBatch(Request $request)
 /**
  * ✅ SOLUTION ÉLÉGANTE : Validation avec fondateurs comme adhérents Phase 1
  */
+/**
+ * ✅ ÉTAPE 1 : REMPLACEMENT COMPLET
+ * Remplacer TOUTE la méthode validateCompleteOrganisationDataWithoutAdherents()
+ */
 private function validateCompleteOrganisationDataWithoutAdherents(Request $request)
 {
     // Créer une copie des données de la request
     $allData = $request->all();
+    
+    \Log::info('🔍 DÉBUT VALIDATION PHASE 1', [
+        'has_fondateurs' => isset($allData['fondateurs']),
+        'fondateurs_count' => is_array($allData['fondateurs'] ?? null) ? count($allData['fondateurs']) : 'not_array',
+        'has_adherents' => isset($allData['adherents']),
+        'adherents_count' => is_array($allData['adherents'] ?? null) ? count($allData['adherents']) : 'not_array'
+    ]);
     
     // ✅ SOLUTION ÉLÉGANTE : Utiliser les fondateurs comme adhérents initiaux
     $fondateurs = $allData['fondateurs'] ?? [];
@@ -4517,9 +5368,23 @@ private function validateCompleteOrganisationDataWithoutAdherents(Request $reque
         $fondateurs = json_decode($fondateurs, true) ?? [];
     }
     
-    // Convertir les fondateurs en format adhérents
+    // ✅ VÉRIFICATION : S'assurer qu'on a des fondateurs
+    if (empty($fondateurs) || !is_array($fondateurs)) {
+        \Log::error('❌ AUCUN FONDATEUR FOURNI POUR PHASE 1', [
+            'fondateurs_raw' => $allData['fondateurs'] ?? 'null',
+            'is_array' => is_array($fondateurs)
+        ]);
+        throw new \Illuminate\Validation\ValidationException(
+            Validator::make([], [])
+                ->after(function($validator) {
+                    $validator->errors()->add('fondateurs', 'Au moins un fondateur est requis pour créer l\'organisation.');
+                })
+        );
+    }
+    
+    // ✅ CONVERSION FONDATEURS → ADHÉRENTS
     $adherentsFromFondateurs = [];
-    foreach ($fondateurs as $fondateur) {
+    foreach ($fondateurs as $index => $fondateur) {
         $adherentsFromFondateurs[] = [
             'nip' => $fondateur['nip'] ?? '',
             'nom' => $fondateur['nom'] ?? '',
@@ -4527,13 +5392,22 @@ private function validateCompleteOrganisationDataWithoutAdherents(Request $reque
             'fonction' => $fondateur['fonction'] ?? 'Fondateur',
             'telephone' => $fondateur['telephone'] ?? '',
             'email' => $fondateur['email'] ?? '',
-            'profession' => $fondateur['profession'] ?? '',
+            'profession' => $fondateur['profession'] ?? 'Dirigeant', // ✅ Valeur par défaut
             'civilite' => $fondateur['civilite'] ?? 'M'
         ];
     }
     
     // ✅ REMPLACER les adhérents par les fondateurs convertis
     $allData['adherents'] = $adherentsFromFondateurs;
+    
+    \Log::info('✅ CONVERSION FONDATEURS→ADHÉRENTS EFFECTUÉE', [
+        'fondateurs_input' => count($fondateurs),
+        'adherents_generated' => count($adherentsFromFondateurs),
+        'sample_adherent' => $adherentsFromFondateurs[0] ?? null
+    ]);
+    
+    // ✅ MARQUER COMME PHASE 1 (pour validation différenciée)
+    $allData['__phase_1_validation'] = true;
     
     // Créer une nouvelle request temporaire avec toutes les données
     $tempRequest = new Request($allData);
@@ -4543,18 +5417,32 @@ private function validateCompleteOrganisationDataWithoutAdherents(Request $reque
     // ✅ RÉCUPÉRER LE TYPE
     $type = $request->input('type_organisation');
     
-    // ✅ UTILISER LA MÉTHODE DE VALIDATION EXISTANTE AVEC LES 2 PARAMÈTRES
-    $validatedData = $this->validateCompleteOrganisationData($tempRequest, $type);
-    
-    \Log::info('✅ VALIDATION PHASE 1 RÉUSSIE (fondateurs comme adhérents)', [
-        'organisation_fields' => count($validatedData['organisation'] ?? []),
-        'fondateurs_count' => count($validatedData['fondateurs'] ?? []),
-        'adherents_from_fondateurs_count' => count($validatedData['adherents'] ?? []),
-        'type_organisation' => $type,
-        'methode' => 'fondateurs_convertis_en_adherents'
+    \Log::info('🎯 APPEL VALIDATION AVEC PARAMÈTRES', [
+        'type' => $type,
+        'phase_1' => true,
+        'fondateurs_as_adherents' => count($adherentsFromFondateurs)
     ]);
     
-    return $validatedData;
+    try {
+        // ✅ UTILISER LA MÉTHODE DE VALIDATION EXISTANTE AVEC LES 2 PARAMÈTRES
+        $validatedData = $this->validateCompleteOrganisationData($tempRequest, $type);
+        
+        \Log::info('✅ VALIDATION PHASE 1 RÉUSSIE', [
+            'validated_fields' => array_keys($validatedData),
+            'fondateurs_validated' => count($validatedData['fondateurs'] ?? []),
+            'adherents_validated' => count($validatedData['adherents'] ?? [])
+        ]);
+        
+        return $validatedData;
+        
+    } catch (\Exception $e) {
+        \Log::error('❌ ERREUR VALIDATION PHASE 1', [
+            'error' => $e->getMessage(),
+            'type' => get_class($e),
+            'line' => $e->getLine()
+        ]);
+        throw $e;
+    }
 }
     
     /**

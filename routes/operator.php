@@ -20,7 +20,7 @@ use App\Http\Controllers\Operator\GuideController;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
+Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verified', 'operator'])->group(function () {
     
     /*
     |--------------------------------------------------------------------------

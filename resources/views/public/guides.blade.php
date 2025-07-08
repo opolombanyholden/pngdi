@@ -125,7 +125,7 @@
                 <div class="step-card">
                     <div class="step-number">1</div>
                     <h5>Inscription</h5>
-                    <p>Créez votre compte sur la plateforme PNGDI</p>
+                    <p>Créez votre compte sur la plateforme SGLP</p>
                 </div>
             </div>
             <div class="col-md-3">

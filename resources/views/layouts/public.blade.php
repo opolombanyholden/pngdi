@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Accueil') - PNGDI | Portail National de Gestion des Libertés Individuelles</title>
+    <title>@yield('title', 'Accueil') - SGLP | Système de Gestion des Libertés Publiques</title>
     
     <!-- Bootstrap 5 CSS via CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -383,7 +383,7 @@
         <div class="container">
             <a class="navbar-brand" href="{{ route('home') }}">
                 <div class="logo-icon"></div>
-                PNGDI
+                SGLP
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
                 <span class="navbar-toggler-icon"></span>
@@ -505,7 +505,7 @@
             <div class="row">
                 <div class="col-md-4 mb-4">
                     <h5 class="mb-3">
-                        <i class="fas fa-info-circle me-2"></i>À propos du PNGDI
+                        <i class="fas fa-info-circle me-2"></i>À propos du SGLP
                     </h5>
                     <p>Le Portail National de Gestion des Libertés Individuelles facilite la formalisation et la gestion des organisations associatives, religieuses et politiques du Gabon.</p>
                     <div class="mt-3">
@@ -558,7 +558,7 @@
                         <i class="fas fa-phone me-2"></i>+241 01 23 45 67
                     </p>
                     <p class="mb-2">
-                        <i class="fas fa-envelope me-2"></i>contact@pngdi.ga
+                        <i class="fas fa-envelope me-2"></i>contact@SGLP.ga
                     </p>
                     <p class="mb-0">
                         <i class="fas fa-clock me-2"></i>Lun - Ven: 8h00 - 17h00
@@ -567,7 +567,7 @@
             </div>
             <hr style="border-color: rgba(255,255,255,0.2);">
             <div class="text-center py-3">
-                <p class="mb-0">&copy; 2025 PNGDI - Ministère de l'Intérieur et de la Sécurité. Tous droits réservés.</p>
+                <p class="mb-0">&copy; 2025 SGLP - Ministère de l'Intérieur et de la Sécurité. Tous droits réservés.</p>
             </div>
         </div>
     </footer>

@@ -8,7 +8,7 @@
     <div class="container">
         <div class="row align-items-center">
             <div class="col-lg-8">
-                <h1 class="page-title">À propos du PNGDI</h1>
+                <h1 class="page-title">À propos du SGLP</h1>
                 <p class="page-subtitle">
                     Découvrez notre mission, nos valeurs et notre engagement pour la modernisation 
                     de la gestion des organisations au Gabon.
@@ -32,8 +32,8 @@
         <div class="row align-items-center">
             <div class="col-lg-6 mb-5 mb-lg-0">
                 <div class="about-image-wrapper">
-                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 400'%3E%3Crect fill='%23002B7F' width='600' height='400'/%3E%3Ctext fill='%23FFD700' font-size='30' x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle'%3EPNGDI%3C/text%3E%3C/svg%3E" 
-                         alt="PNGDI" class="img-fluid rounded-3 shadow">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 400'%3E%3Crect fill='%23002B7F' width='600' height='400'/%3E%3Ctext fill='%23FFD700' font-size='30' x='50%25' y='50%25' text-anchor='middle' dominant-baseline='middle'%3ESGLP%3C/text%3E%3C/svg%3E" 
+                         alt="SGLP" class="img-fluid rounded-3 shadow">
                     <div class="experience-badge">
                         <span class="number">2025</span>
                         <span class="text">Année de lancement</span>
@@ -46,7 +46,7 @@
                     Moderniser et simplifier la gestion des organisations
                 </h2>
                 <p class="lead text-muted mb-4">
-                    Le Portail National de Gestion des Libertés Individuelles (PNGDI) est une initiative 
+                    Le Portail National de Gestion des Libertés Individuelles (SGLP) est une initiative 
                     du Ministère de l'Intérieur et de la Sécurité visant à digitaliser et optimiser 
                     les processus de formalisation des organisations au Gabon.
                 </p>

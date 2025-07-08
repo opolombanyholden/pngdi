@@ -1,0 +1,1192 @@
+{{-- ========================================================================
+     MODIFICATIONS À INTÉGRER DANS create.blade.php EXISTANT
+     Workflow 2 Phases - Soumission directe avec redirection vers Phase 2
+     ======================================================================== --}}
+
+{{-- 1. AJOUTER DANS LA SECTION @push('styles') APRÈS LES STYLES EXISTANTS --}}
+
+<!-- Styles workflow 2 phases intégrés -->
+<style>
+/* ===== WORKFLOW 2 PHASES - STYLES INTÉGRÉS ===== */
+
+.phase-banner {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.phase-banner::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="gabon-pattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23gabon-pattern)"/></svg>');
+    opacity: 0.3;
+}
+
+.phase-content {
+    position: relative;
+    z-index: 2;
+}
+
+.workflow-progress-mini {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 25px;
+    padding: 0.5rem 1rem;
+    display: inline-block;
+    margin-bottom: 0.5rem;
+}
+
+.next-phase-info {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+    border-left: 4px solid #ffc107;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.adherents-preview {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin: 1rem 0;
+    border: 2px dashed #dee2e6;
+}
+
+.phase-indicator-mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.phase-step-mini {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.8rem;
+}
+
+.phase-step-mini.completed {
+    background: #28a745;
+    color: white;
+}
+
+.phase-step-mini.current {
+    background: #ffc107;
+    color: #333;
+}
+
+.phase-step-mini.pending {
+    background: #6c757d;
+    color: white;
+}
+
+.submission-choice {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.submission-choice:hover {
+    border-color: #007bff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.submission-choice.selected {
+    border-color: #007bff;
+    background: linear-gradient(135deg, rgba(0,123,255,0.05) 0%, rgba(0,123,255,0.1) 100%);
+}
+
+.submission-choice input[type="radio"] {
+    display: none;
+}
+
+.choice-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    font-size: 1.5rem;
+}
+
+.btn-phase-primary {
+    background: linear-gradient(135deg, #009e3f 0%, #00b347 100%);
+    border: none;
+    color: white;
+    padding: 0.75rem 2rem;
+    border-radius: 50px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+.btn-phase-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 158, 63, 0.4);
+    color: white;
+}
+
+.btn-phase-secondary {
+    background: white;
+    border: 2px solid #009e3f;
+    color: #009e3f;
+    padding: 0.75rem 2rem;
+    border-radius: 50px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+.btn-phase-secondary:hover {
+    background: #009e3f;
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* Animation pour modal workflow */
+.modal-workflow .modal-content {
+    border: none;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.modal-workflow .modal-header {
+    background: linear-gradient(135deg, #009e3f 0%, #00b347 100%);
+    color: white;
+    border: none;
+    padding: 1.5rem;
+}
+
+.modal-workflow .modal-body {
+    padding: 2rem;
+}
+
+.workflow-steps {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.step-connector {
+    width: 50px;
+    height: 3px;
+    background: #dee2e6;
+    border-radius: 2px;
+}
+
+.step-connector.active {
+    background: #28a745;
+}
+
+@media (max-width: 768px) {
+    .workflow-steps {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .step-connector {
+        width: 3px;
+        height: 30px;
+    }
+    
+    .submission-choice {
+        margin-bottom: 1rem;
+    }
+}
+</style>
+
+{{-- 2. MODIFIER LA SECTION ÉTAPE 8 (SOUMISSION) DANS LE FORMULAIRE --}}
+
+<!-- ========== ÉTAPE 8 : WORKFLOW 2 PHASES - SOUMISSION INTELLIGENTE ========== -->
+<div class="step-content" id="step8" style="display: none;">
+    <div class="text-center mb-4">
+        <div class="step-icon-large mx-auto mb-3" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+            <i class="fas fa-check-circle fa-3x text-white"></i>
+        </div>
+        <h3 class="text-success">Soumission de votre dossier</h3>
+        <p class="text-muted">Choisissez le mode de soumission adapté à votre organisation</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <!-- Bannière workflow 2 phases -->
+            <div class="phase-banner">
+                <div class="phase-content">
+                    <div class="workflow-progress-mini">
+                        <i class="fas fa-rocket me-2"></i>
+                        Système de soumission intelligent SGLP
+                    </div>
+                    <h5 class="mb-2">Workflow 2 Phases Activé</h5>
+                    <p class="mb-0 opacity-90">
+                        Pour optimiser le traitement de votre dossier, nous utilisons un système en 2 phases
+                        qui évite les timeouts et garantit la sécurité de vos données.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Indicateur de progression workflow -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h6 class="text-primary mb-3">
+                                <i class="fas fa-route me-2"></i>
+                                Progression du Workflow
+                            </h6>
+                            <div class="workflow-steps">
+                                <div class="phase-step-mini completed">1</div>
+                                <div class="step-connector active"></div>
+                                <div class="phase-step-mini current">2</div>
+                                <div class="step-connector"></div>
+                                <div class="phase-step-mini pending">✓</div>
+                            </div>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <small class="text-success fw-bold">Phase 1</small>
+                                    <br><small class="text-muted">Organisation créée</small>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-warning fw-bold">Phase 2</small>
+                                    <br><small class="text-muted">Import adhérents</small>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted fw-bold">Terminé</small>
+                                    <br><small class="text-muted">Soumission finale</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="phase-indicator-mini">
+                                <i class="fas fa-clock text-warning fa-2x"></i>
+                                <div>
+                                    <div class="fw-bold">Phase 1</div>
+                                    <small class="text-muted">En cours</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Récapitulatif -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-clipboard-check me-2"></i>
+                        Récapitulatif de votre dossier
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="recap_content">
+                        <!-- Contenu généré dynamiquement par JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Information sur les adhérents -->
+            <div class="next-phase-info">
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-users fa-2x text-warning me-3"></i>
+                    <div class="flex-grow-1">
+                        <h6 class="text-warning mb-1">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Information importante sur les adhérents
+                        </h6>
+                        <p class="mb-2">
+                            L'ajout des adhérents se fera en <strong>Phase 2</strong> après la création de votre organisation.
+                            Cette approche garantit :
+                        </p>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <small class="d-block">
+                                    <i class="fas fa-check text-success me-1"></i>
+                                    Aucun risque de timeout serveur
+                                </small>
+                                <small class="d-block">
+                                    <i class="fas fa-check text-success me-1"></i>
+                                    Traitement par lots optimisé
+                                </small>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="d-block">
+                                    <i class="fas fa-check text-success me-1"></i>
+                                    Sécurité maximale des données
+                                </small>
+                                <small class="d-block">
+                                    <i class="fas fa-check text-success me-1"></i>
+                                    Possibilité de reprise en cas d'interruption
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aperçu des adhérents (si présents en session) -->
+            <div class="adherents-preview" id="adherents-preview-section" style="display: none;">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h6 class="text-primary mb-1">
+                            <i class="fas fa-eye me-2"></i>
+                            Adhérents détectés en session
+                        </h6>
+                        <p class="mb-0 text-muted">
+                            <span id="session-adherents-count">0</span> adhérents prêts pour l'import en Phase 2
+                        </p>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-info" id="session-status-badge">En attente</span>
+                        <br><small class="text-muted" id="session-expiry">Expire dans 2h</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Choix du mode de soumission -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-route me-2"></i>
+                        Mode de soumission
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="submission-choice" data-choice="phase1-only">
+                                <input type="radio" name="submission_mode" value="phase1_only" id="submissionPhase1Only">
+                                <label for="submissionPhase1Only" class="w-100">
+                                    <div class="choice-icon" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                                        <i class="fas fa-rocket text-white"></i>
+                                    </div>
+                                    <h6 class="text-primary">Soumission Directe (Phase 1)</h6>
+                                    <p class="text-muted small mb-3">
+                                        Créer l'organisation maintenant et ajouter les adhérents en Phase 2
+                                    </p>
+                                    <div class="text-start">
+                                        <small class="text-success d-block">
+                                            <i class="fas fa-check me-1"></i> Organisation créée immédiatement
+                                        </small>
+                                        <small class="text-success d-block">
+                                            <i class="fas fa-check me-1"></i> Numéro de récépissé généré
+                                        </small>
+                                        <small class="text-info d-block">
+                                            <i class="fas fa-arrow-right me-1"></i> Phase 2 : Import adhérents ensuite
+                                        </small>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="submission-choice" data-choice="traditional">
+                                <input type="radio" name="submission_mode" value="traditional" id="submissionTraditional">
+                                <label for="submissionTraditional" class="w-100">
+                                    <div class="choice-icon" style="background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);">
+                                        <i class="fas fa-file-upload text-white"></i>
+                                    </div>
+                                    <h6 class="text-primary">Soumission Traditionnelle</h6>
+                                    <p class="text-muted small mb-3">
+                                        Ajouter manuellement quelques adhérents maintenant (≤ 50)
+                                    </p>
+                                    <div class="text-start">
+                                        <small class="text-warning d-block">
+                                            <i class="fas fa-exclamation-triangle me-1"></i> Limité à 50 adhérents
+                                        </small>
+                                        <small class="text-warning d-block">
+                                            <i class="fas fa-clock me-1"></i> Risque de timeout si nombreux
+                                        </small>
+                                        <small class="text-success d-block">
+                                            <i class="fas fa-check me-1"></i> Tout en une seule fois
+                                        </small>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Message d'aide conditionnel -->
+                    <div class="alert alert-info border-0 mt-3" id="submission-help">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-lightbulb fa-2x me-3 text-info"></i>
+                            <div>
+                                <h6 class="alert-heading mb-1">Recommandation</h6>
+                                <p class="mb-0">
+                                    Pour une expérience optimale, nous recommandons la <strong>Soumission Directe (Phase 1)</strong> 
+                                    qui permet de créer votre organisation immédiatement et d'ajouter les adhérents en toute sécurité ensuite.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section adhérents traditionnels (masquée par défaut) -->
+            <div class="card border-0 shadow-sm mb-4 d-none" id="traditional-adherents-section">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">
+                        <i class="fas fa-users me-2"></i>
+                        Ajout d'adhérents (Mode Traditionnel)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning border-0">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Mode traditionnel sélectionné
+                        </h6>
+                        <p class="mb-0">
+                            Vous pouvez ajouter jusqu'à 50 adhérents maintenant. Pour des volumes plus importants, 
+                            il est recommandé d'utiliser la Phase 2.
+                        </p>
+                    </div>
+
+                    <!-- Interface simplifiée d'ajout d'adhérents -->
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Nom *</label>
+                            <input type="text" class="form-control" id="adherent-nom" placeholder="Nom de famille">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Prénom *</label>
+                            <input type="text" class="form-control" id="adherent-prenom" placeholder="Prénom(s)">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">NIP *</label>
+                            <input type="text" class="form-control" id="adherent-nip" placeholder="A1-2345-19901225">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Téléphone</label>
+                            <div class="input-group">
+                                <span class="input-group-text">+241</span>
+                                <input type="tel" class="form-control" id="adherent-telephone" placeholder="01234567">
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="button" class="btn btn-warning w-100" onclick="addAdherentTraditional()">
+                                <i class="fas fa-plus me-2"></i>Ajouter
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Liste des adhérents ajoutés -->
+                    <div id="traditional-adherents-list">
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-users fa-2x mb-2"></i>
+                            <p>Aucun adhérent ajouté</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Déclaration finale -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">
+                        <i class="fas fa-signature me-2"></i>
+                        Déclaration sur l'honneur
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="declaration_veracite" name="declaration_veracite" required>
+                        <label class="form-check-label fw-bold" for="declaration_veracite">
+                            Je certifie sur l'honneur que toutes les informations fournies sont exactes et complètes
+                        </label>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="declaration_conformite" name="declaration_conformite" required>
+                        <label class="form-check-label fw-bold" for="declaration_conformite">
+                            Je déclare que l'organisation respecte la législation gabonaise en vigueur
+                        </label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="declaration_autorisation" name="declaration_autorisation" required>
+                        <label class="form-check-label fw-bold" for="declaration_autorisation">
+                            J'autorise l'administration à vérifier les informations fournies
+                        </label>
+                    </div>
+
+                    <!-- Déclaration spécifique parti politique -->
+                    <div id="declaration_parti_politique" class="d-none">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="declaration_exclusivite_parti" name="declaration_exclusivite_parti">
+                            <label class="form-check-label fw-bold" for="declaration_exclusivite_parti">
+                                <i class="fas fa-vote-yea me-2 text-warning"></i>
+                                Je déclare que les adhérents de ce parti politique ne sont membres d'aucun autre parti politique au Gabon
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Déclaration workflow 2 phases -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="declaration_workflow" name="declaration_workflow" required>
+                        <label class="form-check-label fw-bold" for="declaration_workflow">
+                            <i class="fas fa-route me-2 text-success"></i>
+                            Je comprends et accepte le processus de création en 2 phases pour garantir la sécurité de mes données
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- 3. MODIFIER LES BOUTONS DE NAVIGATION DANS LA CARD-FOOTER --}}
+
+<!-- Boutons de navigation avec workflow 2 phases -->
+<div class="card-footer bg-light border-0">
+    <div class="d-flex justify-content-between align-items-center">
+        <button type="button" class="btn btn-outline-secondary" id="prevBtn" onclick="changeStep(-1)" style="display: none;">
+            <i class="fas fa-arrow-left me-2"></i>Précédent
+        </button>
+        
+        <div class="ms-auto d-flex gap-2">
+            <!-- Bouton suivant (étapes 1-7) -->
+            <button type="button" class="btn btn-success" id="nextBtn" onclick="changeStep(1)">
+                Suivant <i class="fas fa-arrow-right ms-2"></i>
+            </button>
+            
+            <!-- Boutons de soumission (étape 8) -->
+            <button type="button" class="btn btn-phase-primary d-none" id="submitPhase1Btn" onclick="submitPhase1()">
+                <i class="fas fa-rocket me-2"></i>Créer l'Organisation (Phase 1)
+            </button>
+            
+            <button type="submit" class="btn btn-primary d-none" id="submitTraditionalBtn">
+                <i class="fas fa-paper-plane me-2"></i>Soumettre Tout Maintenant
+            </button>
+        </div>
+    </div>
+    
+    <!-- Informations complémentaires étape 8 -->
+    <div id="submission-info" class="mt-3 d-none">
+        <div class="row text-center">
+            <div class="col-md-4">
+                <small class="text-muted d-block">
+                    <i class="fas fa-clock me-1"></i>
+                    Temps estimé Phase 1: 2-3 minutes
+                </small>
+            </div>
+            <div class="col-md-4">
+                <small class="text-muted d-block">
+                    <i class="fas fa-shield-alt me-1"></i>
+                    Données sécurisées en session
+                </small>
+            </div>
+            <div class="col-md-4">
+                <small class="text-muted d-block">
+                    <i class="fas fa-users me-1"></i>
+                    Phase 2: Adhérents traités intelligemment
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- 4. MODAL DE CONFIRMATION WORKFLOW (À AJOUTER AVANT LA FERMETURE DU BODY) --}}
+
+<!-- Modal de confirmation workflow 2 phases -->
+<div class="modal fade modal-workflow" id="workflowConfirmModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-rocket me-2"></i>
+                    Confirmation - Workflow 2 Phases
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="workflow-steps">
+                        <div class="phase-step-mini current">1</div>
+                        <div class="step-connector active"></div>
+                        <div class="phase-step-mini pending">2</div>
+                    </div>
+                </div>
+
+                <div class="alert alert-success border-0">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-info-circle fa-2x me-3 text-success"></i>
+                        <div>
+                            <h6 class="alert-heading mb-2">Prêt pour la soumission Phase 1</h6>
+                            <p class="mb-2">
+                                Votre organisation va être créée et enregistrée dans la base de données SGLP.
+                                Vous recevrez immédiatement un numéro de récépissé.
+                            </p>
+                            <p class="mb-0">
+                                <strong>Étape suivante :</strong> Vous serez automatiquement redirigé vers l'interface
+                                d'import des adhérents (Phase 2) pour compléter votre dossier.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-success">
+                            <i class="fas fa-check me-2"></i>Phase 1 - Organisation
+                        </h6>
+                        <ul class="list-unstyled">
+                            <li>✓ Informations organisation validées</li>
+                            <li>✓ Fondateurs enregistrés</li>
+                            <li>✓ Documents uploadés</li>
+                            <li>✓ Numéro de récépissé généré</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-warning">
+                            <i class="fas fa-arrow-right me-2"></i>Phase 2 - Adhérents
+                        </h6>
+                        <ul class="list-unstyled">
+                            <li>⏳ Import intelligent par lots</li>
+                            <li>⏳ Traitement sécurisé</li>
+                            <li>⏳ Validation automatique</li>
+                            <li>⏳ Soumission finale à l'administration</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <strong>Organisation :</strong> 
+                            <span id="confirm-org-name">---</span>
+                        </div>
+                        <div>
+                            <strong>Type :</strong> 
+                            <span id="confirm-org-type">---</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Annuler
+                </button>
+                <button type="button" class="btn btn-phase-primary" id="confirmSubmitPhase1">
+                    <i class="fas fa-rocket me-2"></i>Confirmer - Créer l'Organisation
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- 5. JAVASCRIPT POUR WORKFLOW 2 PHASES (À AJOUTER DANS @push('scripts')) --}}
+
+<script>
+// ========================================
+// WORKFLOW 2 PHASES - JAVASCRIPT INTÉGRÉ
+// ========================================
+
+// Variables globales pour le workflow
+window.WorkflowData = {
+    submissionMode: 'phase1_only',
+    traditionalAdherents: [],
+    isPhase1Submitted: false
+};
+
+/**
+ * Mise à jour des boutons de navigation pour l'étape 8
+ */
+function updateNavigationButtonsStep8() {
+    const nextBtn = document.getElementById('nextBtn');
+    const submitPhase1Btn = document.getElementById('submitPhase1Btn');
+    const submitTraditionalBtn = document.getElementById('submitTraditionalBtn');
+    const submissionInfo = document.getElementById('submission-info');
+    
+    if (OrganisationApp.currentStep === 8) {
+        // Masquer le bouton suivant
+        if (nextBtn) nextBtn.classList.add('d-none');
+        
+        // Afficher les informations de soumission
+        if (submissionInfo) submissionInfo.classList.remove('d-none');
+        
+        // Afficher le bon bouton selon le mode
+        if (WorkflowData.submissionMode === 'phase1_only') {
+            if (submitPhase1Btn) submitPhase1Btn.classList.remove('d-none');
+            if (submitTraditionalBtn) submitTraditionalBtn.classList.add('d-none');
+        } else {
+            if (submitPhase1Btn) submitPhase1Btn.classList.add('d-none');
+            if (submitTraditionalBtn) submitTraditionalBtn.classList.remove('d-none');
+        }
+    } else {
+        // Masquer tous les boutons de soumission
+        if (submitPhase1Btn) submitPhase1Btn.classList.add('d-none');
+        if (submitTraditionalBtn) submitTraditionalBtn.classList.add('d-none');
+        if (submissionInfo) submissionInfo.classList.add('d-none');
+        
+        // Afficher le bouton suivant
+        if (nextBtn) nextBtn.classList.remove('d-none');
+    }
+}
+
+/**
+ * Gestion du changement de mode de soumission
+ */
+function setupSubmissionModeHandlers() {
+    const submissionChoices = document.querySelectorAll('.submission-choice');
+    const traditionalSection = document.getElementById('traditional-adherents-section');
+    const submissionHelp = document.getElementById('submission-help');
+    
+    submissionChoices.forEach(choice => {
+        choice.addEventListener('click', function() {
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) {
+                // Mettre à jour la sélection visuelle
+                submissionChoices.forEach(c => c.classList.remove('selected'));
+                this.classList.add('selected');
+                
+                // Mettre à jour le mode global
+                WorkflowData.submissionMode = radio.value;
+                
+                // Afficher/masquer la section traditionnelle
+                if (radio.value === 'traditional') {
+                    if (traditionalSection) traditionalSection.classList.remove('d-none');
+                    if (submissionHelp) {
+                        submissionHelp.className = 'alert alert-warning border-0 mt-3';
+                        submissionHelp.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-exclamation-triangle fa-2x me-3 text-warning"></i>
+                                <div>
+                                    <h6 class="alert-heading mb-1">Mode Traditionnel</h6>
+                                    <p class="mb-0">
+                                        Attention : Ce mode est limité à 50 adhérents maximum et peut causer des timeouts 
+                                        avec de gros volumes. La Phase 2 est recommandée pour plus de sécurité.
+                                    </p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    if (traditionalSection) traditionalSection.classList.add('d-none');
+                    if (submissionHelp) {
+                        submissionHelp.className = 'alert alert-info border-0 mt-3';
+                        submissionHelp.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-lightbulb fa-2x me-3 text-info"></i>
+                                <div>
+                                    <h6 class="alert-heading mb-1">Recommandation</h6>
+                                    <p class="mb-0">
+                                        Excellent choix ! La soumission en 2 phases garantit la sécurité de vos données 
+                                        et permet de traiter un nombre illimité d'adhérents.
+                                    </p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Mettre à jour les boutons
+                updateNavigationButtonsStep8();
+            }
+        });
+    });
+}
+
+/**
+ * Ajouter un adhérent en mode traditionnel
+ */
+function addAdherentTraditional() {
+    const nom = document.getElementById('adherent-nom')?.value?.trim();
+    const prenom = document.getElementById('adherent-prenom')?.value?.trim();
+    const nip = document.getElementById('adherent-nip')?.value?.trim();
+    const telephone = document.getElementById('adherent-telephone')?.value?.trim();
+    
+    // Validation
+    if (!nom || !prenom || !nip) {
+        showNotification('Nom, prénom et NIP sont obligatoires', 'warning');
+        return;
+    }
+    
+    // Vérifier le limite
+    if (WorkflowData.traditionalAdherents.length >= 50) {
+        showNotification('Maximum 50 adhérents en mode traditionnel', 'warning');
+        return;
+    }
+    
+    // Vérifier les doublons
+    if (WorkflowData.traditionalAdherents.some(a => a.nip === nip)) {
+        showNotification('Ce NIP existe déjà', 'warning');
+        return;
+    }
+    
+    // Ajouter l'adhérent
+    const adherent = {
+        id: Date.now(),
+        nom: nom,
+        prenom: prenom,
+        nip: nip,
+        telephone: telephone || '',
+        civilite: 'M'
+    };
+    
+    WorkflowData.traditionalAdherents.push(adherent);
+    updateTraditionalAdherentsList();
+    clearTraditionalForm();
+    
+    showNotification(`Adhérent ${prenom} ${nom} ajouté (${WorkflowData.traditionalAdherents.length}/50)`, 'success');
+}
+
+/**
+ * Mettre à jour la liste des adhérents traditionnels
+ */
+function updateTraditionalAdherentsList() {
+    const listContainer = document.getElementById('traditional-adherents-list');
+    if (!listContainer) return;
+    
+    if (WorkflowData.traditionalAdherents.length === 0) {
+        listContainer.innerHTML = `
+            <div class="text-center text-muted py-3">
+                <i class="fas fa-users fa-2x mb-2"></i>
+                <p>Aucun adhérent ajouté</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0">
+                <i class="fas fa-list me-2"></i>
+                Adhérents ajoutés (${WorkflowData.traditionalAdherents.length}/50)
+            </h6>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearAllTraditionalAdherents()">
+                <i class="fas fa-trash"></i> Vider
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nom</th>
+                        <th>Prénom</th>
+                        <th>NIP</th>
+                        <th>Téléphone</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    WorkflowData.traditionalAdherents.forEach((adherent, index) => {
+        html += `
+            <tr>
+                <td><strong>${adherent.nom}</strong></td>
+                <td>${adherent.prenom}</td>
+                <td><code>${adherent.nip}</code></td>
+                <td>${adherent.telephone || '-'}</td>
+                <td>
+                    <button class="btn btn-outline-danger btn-sm" onclick="removeTraditionalAdherent(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    listContainer.innerHTML = html;
+}
+
+/**
+ * Supprimer un adhérent traditionnel
+ */
+function removeTraditionalAdherent(index) {
+    if (confirm('Supprimer cet adhérent ?')) {
+        const adherent = WorkflowData.traditionalAdherents[index];
+        WorkflowData.traditionalAdherents.splice(index, 1);
+        updateTraditionalAdherentsList();
+        showNotification(`Adhérent ${adherent.prenom} ${adherent.nom} supprimé`, 'info');
+    }
+}
+
+/**
+ * Vider tous les adhérents traditionnels
+ */
+function clearAllTraditionalAdherents() {
+    if (confirm('Supprimer tous les adhérents ajoutés ?')) {
+        WorkflowData.traditionalAdherents = [];
+        updateTraditionalAdherentsList();
+        showNotification('Tous les adhérents supprimés', 'info');
+    }
+}
+
+/**
+ * Vider le formulaire traditionnel
+ */
+function clearTraditionalForm() {
+    const fields = ['adherent-nom', 'adherent-prenom', 'adherent-nip', 'adherent-telephone'];
+    fields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) field.value = '';
+    });
+}
+
+/**
+ * Soumission Phase 1
+ */
+function submitPhase1() {
+    console.log('🚀 Début soumission Phase 1');
+    
+    // Validation finale
+    if (!validateStep8()) {
+        showNotification('Veuillez compléter toutes les déclarations obligatoires', 'warning');
+        return;
+    }
+    
+    // Préparer les données de confirmation
+    const orgNom = document.getElementById('org_nom')?.value || 'Organisation';
+    const orgType = getOrganizationTypeLabel(OrganisationApp.organisationType);
+    
+    document.getElementById('confirm-org-name').textContent = orgNom;
+    document.getElementById('confirm-org-type').textContent = orgType;
+    
+    // Afficher le modal de confirmation
+    const confirmModal = new bootstrap.Modal(document.getElementById('workflowConfirmModal'));
+    confirmModal.show();
+}
+
+/**
+ * Confirmation finale de la soumission Phase 1
+ */
+function confirmSubmitPhase1() {
+    console.log('✅ Confirmation soumission Phase 1');
+    
+    // Masquer le modal
+    const confirmModal = bootstrap.Modal.getInstance(document.getElementById('workflowConfirmModal'));
+    if (confirmModal) confirmModal.hide();
+    
+    // Afficher le loader
+    showGlobalLoader('Création de votre organisation en cours...');
+    
+    // Collecter toutes les données
+    collectAllFormData();
+    
+    // Préparer les données pour Phase 1
+    const formData = new FormData();
+    
+    // Ajouter toutes les données du formulaire
+    Object.keys(OrganisationApp.formData).forEach(key => {
+        if (OrganisationApp.formData[key] !== null && OrganisationApp.formData[key] !== undefined) {
+            formData.append(key, OrganisationApp.formData[key]);
+        }
+    });
+    
+    // Ajouter les fondateurs
+    OrganisationApp.foundateurs.forEach((fondateur, index) => {
+        Object.keys(fondateur).forEach(key => {
+            if (key !== 'id' && key !== 'dateAjout') {
+                formData.append(`fondateurs[${index}][${key}]`, fondateur[key]);
+            }
+        });
+    });
+    
+    // Ajouter les documents
+    Object.keys(OrganisationApp.uploadedDocuments).forEach(docType => {
+        const doc = OrganisationApp.uploadedDocuments[docType];
+        if (doc.file) {
+            formData.append(`documents[${docType}]`, doc.file);
+        }
+    });
+    
+    // Marquer comme workflow 2 phases
+    formData.append('_workflow', '2_phases');
+    formData.append('_phase', '1');
+    formData.append('submission_mode', 'phase1_only');
+    
+    // Envoyer la requête
+    fetch(document.getElementById('organisationForm').action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        hideGlobalLoader();
+        console.log('✅ Phase 1 réussie:', data);
+        
+        if (data.success && data.phase === 1) {
+            // Marquer comme soumis
+            WorkflowData.isPhase1Submitted = true;
+            
+            // Nettoyer le cache puisque Phase 1 est terminée
+            clearCache();
+            
+            // Notification de succès
+            showNotification(`Organisation créée avec succès ! N° ${data.data.numero_recepisse}`, 'success');
+            
+            // Redirection vers Phase 2
+            setTimeout(() => {
+                if (data.data.next_phase_url) {
+                    window.location.href = data.data.next_phase_url;
+                } else if (data.data.dossier_id) {
+                    // Fallback: construire l'URL manuellement
+                    window.location.href = `/operator/dossiers/${data.data.dossier_id}/adherents-import`;
+                } else {
+                    console.error('❌ URL Phase 2 non fournie');
+                    showNotification('Organisation créée, mais erreur de redirection vers Phase 2', 'warning');
+                }
+            }, 2000);
+        } else {
+            throw new Error(data.message || 'Réponse inattendue du serveur');
+        }
+    })
+    .catch(error => {
+        hideGlobalLoader();
+        console.error('❌ Erreur Phase 1:', error);
+        
+        let errorMessage = 'Erreur lors de la création de l\'organisation. ';
+        
+        if (error.message.includes('timeout')) {
+            errorMessage += 'Délai d\'attente dépassé. Veuillez réessayer.';
+        } else if (error.message.includes('413')) {
+            errorMessage += 'Fichiers trop volumineux. Réduisez la taille des documents.';
+        } else {
+            errorMessage += 'Veuillez vérifier vos données et réessayer.';
+        }
+        
+        showNotification(errorMessage, 'error');
+    });
+}
+
+/**
+ * Afficher le loader global
+ */
+function showGlobalLoader(message = 'Chargement...') {
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        const loadingText = loader.querySelector('.visually-hidden');
+        if (loadingText) loadingText.textContent = message;
+        loader.classList.remove('d-none');
+    }
+}
+
+/**
+ * Masquer le loader global
+ */
+function hideGlobalLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        loader.classList.add('d-none');
+    }
+}
+
+/**
+ * Vérifier la session des adhérents
+ */
+function checkSessionAdherents() {
+    // Cette fonction devrait appeler une API pour vérifier s'il y a des adhérents en session
+    // Pour l'instant, simulation
+    const sessionCount = 0; // À remplacer par vraie vérification
+    
+    const previewSection = document.getElementById('adherents-preview-section');
+    const countSpan = document.getElementById('session-adherents-count');
+    
+    if (sessionCount > 0) {
+        if (previewSection) previewSection.style.display = 'block';
+        if (countSpan) countSpan.textContent = sessionCount;
+    }
+}
+
+/**
+ * Initialiser le workflow lors de l'arrivée à l'étape 8
+ */
+function initWorkflowStep8() {
+    console.log('🔄 Initialisation workflow étape 8');
+    
+    // Sélectionner le mode par défaut
+    const defaultMode = document.getElementById('submissionPhase1Only');
+    if (defaultMode && !document.querySelector('input[name="submission_mode"]:checked')) {
+        defaultMode.checked = true;
+        defaultMode.closest('.submission-choice').classList.add('selected');
+        WorkflowData.submissionMode = 'phase1_only';
+    }
+    
+    // Configurer les gestionnaires d'événements
+    setupSubmissionModeHandlers();
+    
+    // Vérifier les adhérents en session
+    checkSessionAdherents();
+    
+    // Mettre à jour les boutons
+    updateNavigationButtonsStep8();
+    
+    // Configurer le bouton de confirmation
+    const confirmBtn = document.getElementById('confirmSubmitPhase1');
+    if (confirmBtn) {
+        confirmBtn.onclick = confirmSubmitPhase1;
+    }
+}
+
+/**
+ * Modifier la fonction changeStep existante pour gérer l'étape 8
+ */
+const originalChangeStep = window.changeStep;
+window.changeStep = function(direction) {
+    const result = originalChangeStep(direction);
+    
+    // Si on arrive à l'étape 8, initialiser le workflow
+    if (OrganisationApp.currentStep === 8) {
+        setTimeout(() => {
+            initWorkflowStep8();
+        }, 100);
+    }
+    
+    return result;
+};
+
+/**
+ * Modifier la fonction updateNavigationButtons existante
+ */
+const originalUpdateNavigationButtons = window.updateNavigationButtons || function() {};
+window.updateNavigationButtons = function() {
+    originalUpdateNavigationButtons();
+    
+    if (OrganisationApp.currentStep === 8) {
+        updateNavigationButtonsStep8();
+    }
+};
+
+// Exposer les fonctions nécessaires globalement
+window.submitPhase1 = submitPhase1;
+window.addAdherentTraditional = addAdherentTraditional;
+window.removeTraditionalAdherent = removeTraditionalAdherent;
+window.clearAllTraditionalAdherents = clearAllTraditionalAdherents;
+
+console.log('🚀 Workflow 2 Phases intégré avec succès dans create.blade.php');
+</script>

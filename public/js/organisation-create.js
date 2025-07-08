@@ -28,6 +28,32 @@ function elementMatches(element, selector) {
     return false;
 }
 
+
+// ========================================
+// FONCTION DEBOUNCE (CORRECTION BUG)
+// ========================================
+
+/**
+ * Fonction debounce pour limiter les appels fréquents
+ * @param {Function} func - Fonction à exécuter
+ * @param {number} wait - Délai d'attente en millisecondes
+ * @param {boolean} immediate - Exécuter immédiatement au premier appel
+ * @returns {Function} Fonction débounced
+ */
+function debounce(func, wait, immediate = false) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            timeout = null;
+            if (!immediate) func.apply(this, args);
+        };
+        const callNow = immediate && !timeout;
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+        if (callNow) func.apply(this, args);
+    };
+}
+
 // ========================================
 // 1. CONFIGURATION GLOBALE
 // ========================================
@@ -543,21 +569,60 @@ function updateNavigationButtons() {
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const submitBtn = document.getElementById('submitBtn');
+    const submitPhase1Btn = document.getElementById('submitPhase1Btn');
+    const submitTraditionalBtn = document.getElementById('submitTraditionalBtn');
+    const submissionInfo = document.getElementById('submission-info');
     
     // Bouton précédent
     if (prevBtn) {
-        prevBtn.style.display = OrganisationApp.currentStep === 1 ? 'none' : 'inline-block';
+        if (OrganisationApp.currentStep > 1) {
+            prevBtn.style.display = 'inline-block';
+        } else {
+            prevBtn.style.display = 'none';
+        }
     }
     
-    // Boutons suivant et soumettre
-    if (OrganisationApp.currentStep === OrganisationApp.totalSteps) {
+    // Gestion des boutons selon l'étape
+    if (OrganisationApp.currentStep === 8) {
+        // ÉTAPE 8 : Masquer bouton suivant, afficher boutons soumission
         if (nextBtn) nextBtn.style.display = 'none';
-        if (submitBtn) submitBtn.classList.remove('d-none');
+        if (submitBtn) submitBtn.style.display = 'none';
+        
+        // Afficher les informations de soumission
+        if (submissionInfo) submissionInfo.style.display = 'block';
+        
+        // Décider quel bouton afficher selon le volume d'adhérents
+        const adherentsCount = (OrganisationApp.adherents || []).length;
+        console.log(`📊 Analyse volume adhérents: ${adherentsCount}`);
+        
+        if (adherentsCount > 50 || (window.Workflow2Phases && window.Workflow2Phases.enabled)) {
+            // Gros volume ou workflow 2 phases activé : Phase 1 recommandée
+            if (submitPhase1Btn) {
+                submitPhase1Btn.style.display = 'inline-block';
+                console.log('✅ Bouton Phase 1 affiché');
+            }
+            if (submitTraditionalBtn) submitTraditionalBtn.style.display = 'none';
+        } else {
+            // Petit volume : Soumission traditionnelle
+            if (submitTraditionalBtn) {
+                submitTraditionalBtn.style.display = 'inline-block';
+                console.log('✅ Bouton traditionnel affiché');
+            }
+            if (submitPhase1Btn) submitPhase1Btn.style.display = 'none';
+        }
+        
     } else {
+        // Autres étapes : bouton suivant visible, soumission masquée
         if (nextBtn) nextBtn.style.display = 'inline-block';
-        if (submitBtn) submitBtn.classList.add('d-none');
+        if (submitBtn) submitBtn.style.display = 'none';
+        if (submitPhase1Btn) submitPhase1Btn.style.display = 'none';
+        if (submitTraditionalBtn) submitTraditionalBtn.style.display = 'none';
+        if (submissionInfo) submissionInfo.style.display = 'none';
     }
+    
+    console.log(`🔄 Boutons mis à jour pour étape ${OrganisationApp.currentStep}`);
 }
+
 
 /**
  * Scroll vers le haut avec animation
@@ -1688,90 +1753,1087 @@ function addAdherent() {
     }
 }
 
+
 /**
- * Mettre à jour la liste des adhérents
+ * Mettre à jour la liste des adhérents - VERSION 2.0
  */
 function updateAdherentsList() {
+    // Appeler la nouvelle interface moderne
+    updateAdherentsTableInterface();
+}
+
+
+/**
+ * ========================================================================
+ * TABLEAU INTERACTIF ADHÉRENTS - VERSION 2.0
+ * Fonctionnalités: Édition, Suppression, Pagination, Recherche, Tri
+ * ========================================================================
+ */
+
+// Configuration du tableau
+const TableConfig = {
+    itemsPerPage: 15,
+    currentPage: 1,
+    searchTerm: '',
+    sortField: 'nom',
+    sortDirection: 'asc',
+    filterAnomalies: 'all' // all, valid, anomalies
+};
+
+/**
+ * Mise à jour du tableau adhérents avec interface moderne
+ */
+/**
+ * Mettre à jour le compteur d'adhérents - FONCTION MANQUANTE
+ */
+function updateAdherentsCount(total = 0, valid = 0, anomalies = 0) {
+    const countSpan = document.getElementById('adherents_count');
+    if (countSpan) {
+        countSpan.textContent = total;
+    }
+    
+    // Mise à jour compteur global si disponible
+    const globalCounter = document.querySelector('.adherents-counter, #total-adherents');
+    if (globalCounter) {
+        globalCounter.textContent = total;
+    }
+    
+    // Log pour debug
+    console.log(`📊 Compteur adhérents mis à jour: ${total} total, ${valid} valides, ${anomalies} anomalies`);
+}
+
+function updateAdherentsTableInterface(preparedData = null) {
     const listContainer = document.getElementById('adherents_list');
     const countSpan = document.getElementById('adherents_count');
     
     if (!listContainer) return;
     
-    if (OrganisationApp.adherents.length === 0) {
-        listContainer.innerHTML = `
-            <div class="text-center py-4 text-muted">
-                <i class="fas fa-user-plus fa-3x mb-3"></i>
-                <p>Aucun adhérent ajouté</p>
+    // Utiliser les données préparées ou les données existantes
+    const adherentsData = preparedData ? preparedData.adherents : OrganisationApp.adherents;
+    
+    if (adherentsData.length === 0) {
+        listContainer.innerHTML = getEmptyStateHTML();
+        updateAdherentsCount(0, 0, 0);
+        return;
+    }
+    
+    // Générer l'interface complète
+    listContainer.innerHTML = generateTableInterface(adherentsData);
+    
+    // Initialiser les événements
+    initializeTableEvents();
+    
+    
+
+    // Mettre à jour le compteur
+    updateAdherentsCount(adherentsData.length);
+    
+    // Afficher la première page
+    renderTablePage(adherentsData);
+
+    
+}
+
+/**
+ * Génération de l'interface complète du tableau
+ */
+function generateTableInterface(adherentsData) {
+    return `
+        <!-- Barre de contrôles -->
+        <div class="table-controls mb-3">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control" 
+                               id="searchAdherents" 
+                               placeholder="Rechercher par nom, prénom, NIP..." 
+                               value="${TableConfig.searchTerm}">
+                        <button class="btn btn-outline-secondary" type="button" onclick="clearSearch()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filterAnomalies" onchange="filterByAnomalies()">
+                        <option value="all">Tous les adhérents</option>
+                        <option value="valid">Adhérents valides</option>
+                        <option value="anomalies">Avec anomalies</option>
+                    </select>
+                </div>
+                <div class="col-md-3 text-end">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="exportAdherentsCSV()">
+                            <i class="fas fa-download me-1"></i>Export CSV
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="addAdherentManually()">
+                            <i class="fas fa-plus me-1"></i>Ajouter
+                        </button>
+                    </div>
+                </div>
             </div>
+        </div>
+        
+        <!-- Statistiques rapides -->
+        <div class="row mb-3" id="tableStats">
+            <!-- Sera rempli dynamiquement -->
+        </div>
+        
+        <!-- Tableau principal -->
+        <div class="table-responsive">
+            <table class="table table-hover table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th scope="col" style="width: 3%">
+                            <input type="checkbox" id="selectAllAdherents" onchange="toggleSelectAll()">
+                        </th>
+                        <th scope="col" class="sortable" data-field="civilite" style="width: 8%">
+                            Civilité <i class="fas fa-sort"></i>
+                        </th>
+                        <th scope="col" class="sortable" data-field="nom" style="width: 15%">
+                            Nom <i class="fas fa-sort"></i>
+                        </th>
+                        <th scope="col" class="sortable" data-field="prenom" style="width: 15%">
+                            Prénom <i class="fas fa-sort"></i>
+                        </th>
+                        <th scope="col" class="sortable" data-field="nip" style="width: 15%">
+                            NIP <i class="fas fa-sort"></i>
+                        </th>
+                        <th scope="col" style="width: 12%">Téléphone</th>
+                        <th scope="col" style="width: 12%">Profession</th>
+                        <th scope="col" style="width: 10%">Statut</th>
+                        <th scope="col" style="width: 10%">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="adherentsTableBody">
+                    <!-- Le contenu sera généré dynamiquement -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div class="pagination-info">
+                <small class="text-muted" id="paginationInfo"></small>
+            </div>
+            <nav aria-label="Pagination adhérents">
+                <ul class="pagination pagination-sm mb-0" id="paginationControls">
+                    <!-- Pagination générée dynamiquement -->
+                </ul>
+            </nav>
+        </div>
+        
+        <!-- Actions groupées -->
+        <div class="selected-actions d-none mt-3" id="selectedActions">
+            <div class="alert alert-info">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>
+                        <i class="fas fa-check-square me-2"></i>
+                        <span id="selectedCount">0</span> adhérent(s) sélectionné(s)
+                    </span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-warning" onclick="exportSelectedAdherents()">
+                            <i class="fas fa-download me-1"></i>Exporter sélection
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="deleteSelectedAdherents()">
+                            <i class="fas fa-trash me-1"></i>Supprimer sélection
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Rendu d'une page du tableau
+ */
+function renderTablePage(adherentsData) {
+    const filteredData = getFilteredAdherents(adherentsData);
+    const totalPages = Math.ceil(filteredData.length / TableConfig.itemsPerPage);
+    
+    // Ajuster la page actuelle si nécessaire
+    if (TableConfig.currentPage > totalPages) {
+        TableConfig.currentPage = Math.max(1, totalPages);
+    }
+    
+    const startIndex = (TableConfig.currentPage - 1) * TableConfig.itemsPerPage;
+    const endIndex = Math.min(startIndex + TableConfig.itemsPerPage, filteredData.length);
+    const pageData = filteredData.slice(startIndex, endIndex);
+    
+    // Rendu des lignes
+    const tbody = document.getElementById('adherentsTableBody');
+    if (tbody) {
+        tbody.innerHTML = pageData.map((adherent, index) => 
+            generateAdherentRow(adherent, startIndex + index)
+        ).join('');
+    }
+    
+    // Mise à jour pagination
+    updatePaginationControls(filteredData.length, totalPages);
+    
+    // Mise à jour statistiques
+    updateTableStats(adherentsData, filteredData);
+}
+
+/**
+ * Génération d'une ligne adhérent
+ */
+function generateAdherentRow(adherent, globalIndex) {
+    const hasAnomalies = adherent.hasAnomalies || false;
+    const anomaliesCount = adherent.anomalies ? adherent.anomalies.length : 0;
+    
+    // Badge de statut
+    let statusBadge = '<span class="badge bg-success">Valide</span>';
+    if (hasAnomalies) {
+        const critiques = adherent.anomalies?.filter(a => a.severity === 'critique').length || 0;
+        const majeures = adherent.anomalies?.filter(a => a.severity === 'majeure').length || 0;
+        
+        if (critiques > 0) {
+            statusBadge = `<span class="badge bg-danger" title="${anomaliesCount} anomalie(s)">Critique</span>`;
+        } else if (majeures > 0) {
+            statusBadge = `<span class="badge bg-warning" title="${anomaliesCount} anomalie(s)">Majeure</span>`;
+        } else {
+            statusBadge = `<span class="badge bg-info" title="${anomaliesCount} anomalie(s)">Mineure</span>`;
+        }
+    }
+    
+    return `
+        <tr class="${hasAnomalies ? 'table-warning' : ''}" data-index="${globalIndex}">
+            <td>
+                <input type="checkbox" class="adherent-checkbox" value="${globalIndex}" onchange="updateSelectedActions()">
+            </td>
+            <td>${adherent.civilite || '-'}</td>
+            <td>
+                <strong>${adherent.nom || ''}</strong>
+                ${adherent.nip_temporaire ? '<i class="fas fa-exclamation-triangle text-warning ms-1" title="NIP temporaire généré"></i>' : ''}
+            </td>
+            <td>${adherent.prenom || ''}</td>
+            <td>
+                <code class="text-muted">${adherent.nip || ''}</code>
+                ${adherent.nip_original ? `<br><small class="text-muted">Original: ${adherent.nip_original}</small>` : ''}
+            </td>
+            <td>
+                ${adherent.telephone ? `<a href="tel:+241${adherent.telephone}" class="text-decoration-none">${adherent.telephone}</a>` : '-'}
+            </td>
+            <td>
+                <span class="text-truncate" style="max-width: 100px;" title="${adherent.profession || ''}">${adherent.profession || '-'}</span>
+            </td>
+            <td>${statusBadge}</td>
+            <td>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="editAdherent(${globalIndex})" title="Modifier">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    ${hasAnomalies ? `
+                        <button type="button" class="btn btn-outline-warning btn-sm" onclick="viewAnomalies(${globalIndex})" title="Voir anomalies">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </button>
+                    ` : ''}
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeAdherent(${globalIndex})" title="Supprimer">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+/**
+ * Initialisation des événements du tableau
+ */
+/**
+ * Initialisation des événements du tableau - VERSION CORRIGÉE
+ */
+function initializeTableEvents() {
+    console.log('🔧 Initialisation événements tableau - Version corrigée');
+    
+    try {
+        // ✅ RECHERCHE en temps réel avec debounce sécurisé
+        const searchInput = document.getElementById('searchAdherents');
+        if (searchInput) {
+            // Vérifier si debounce existe
+            if (typeof debounce === 'function') {
+                searchInput.addEventListener('input', debounce(function(e) {
+                    if (typeof TableConfig !== 'undefined') {
+                        TableConfig.searchTerm = e.target.value;
+                        TableConfig.currentPage = 1;
+                        if (typeof renderTablePage === 'function') {
+                            renderTablePage(OrganisationApp.adherents);
+                        }
+                    }
+                }, 300));
+                console.log('✅ Recherche avec debounce configurée');
+            } else {
+                // Fallback sans debounce
+                let searchTimeout;
+                searchInput.addEventListener('input', function(e) {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => {
+                        if (typeof TableConfig !== 'undefined') {
+                            TableConfig.searchTerm = e.target.value;
+                            TableConfig.currentPage = 1;
+                            if (typeof renderTablePage === 'function') {
+                                renderTablePage(OrganisationApp.adherents);
+                            }
+                        }
+                    }, 300);
+                });
+                console.log('✅ Recherche sans debounce (fallback) configurée');
+            }
+        }
+        
+        // ✅ TRI des colonnes avec gestion d'erreurs
+        document.querySelectorAll('.sortable').forEach(header => {
+            header.addEventListener('click', function() {
+                try {
+                    const field = this.getAttribute('data-field');
+                    
+                    if (typeof TableConfig !== 'undefined') {
+                        if (TableConfig.sortField === field) {
+                            TableConfig.sortDirection = TableConfig.sortDirection === 'asc' ? 'desc' : 'asc';
+                        } else {
+                            TableConfig.sortField = field;
+                            TableConfig.sortDirection = 'asc';
+                        }
+                        
+                        if (typeof renderTablePage === 'function') {
+                            renderTablePage(OrganisationApp.adherents);
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Erreur tri colonne:', error);
+                }
+            });
+        });
+        
+        console.log('✅ Événements tableau initialisés avec succès');
+        
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'initialisation des événements tableau:', error);
+        // Ne pas interrompre l'application, juste logger l'erreur
+    }
+}
+
+/**
+ * Filtrage des adhérents selon les critères
+ */
+function getFilteredAdherents(adherentsData) {
+    let filtered = [...adherentsData];
+    
+    // Filtrage par recherche
+    if (TableConfig.searchTerm.trim()) {
+        const searchTerm = TableConfig.searchTerm.toLowerCase().trim();
+        filtered = filtered.filter(adherent => {
+            return (
+                (adherent.nom || '').toLowerCase().includes(searchTerm) ||
+                (adherent.prenom || '').toLowerCase().includes(searchTerm) ||
+                (adherent.nip || '').toLowerCase().includes(searchTerm) ||
+                (adherent.telephone || '').includes(searchTerm) ||
+                (adherent.profession || '').toLowerCase().includes(searchTerm)
+            );
+        });
+    }
+    
+    // Filtrage par anomalies
+    if (TableConfig.filterAnomalies === 'valid') {
+        filtered = filtered.filter(adherent => !adherent.hasAnomalies);
+    } else if (TableConfig.filterAnomalies === 'anomalies') {
+        filtered = filtered.filter(adherent => adherent.hasAnomalies);
+    }
+    
+    // Tri
+    filtered.sort((a, b) => {
+        const field = TableConfig.sortField;
+        const direction = TableConfig.sortDirection === 'asc' ? 1 : -1;
+        
+        const valueA = (a[field] || '').toString().toLowerCase();
+        const valueB = (b[field] || '').toString().toLowerCase();
+        
+        if (valueA < valueB) return -1 * direction;
+        if (valueA > valueB) return 1 * direction;
+        return 0;
+    });
+    
+    return filtered;
+}
+
+/**
+ * Mise à jour des contrôles de pagination
+ */
+function updatePaginationControls(totalItems, totalPages) {
+    const paginationInfo = document.getElementById('paginationInfo');
+    const paginationControls = document.getElementById('paginationControls');
+    
+    if (!paginationInfo || !paginationControls) return;
+    
+    // Info pagination
+    const startItem = (TableConfig.currentPage - 1) * TableConfig.itemsPerPage + 1;
+    const endItem = Math.min(TableConfig.currentPage * TableConfig.itemsPerPage, totalItems);
+    
+    paginationInfo.textContent = `Affichage ${startItem}-${endItem} sur ${totalItems} adhérents`;
+    
+    // Contrôles pagination
+    if (totalPages <= 1) {
+        paginationControls.innerHTML = '';
+        return;
+    }
+    
+    let paginationHTML = '';
+    
+    // Bouton précédent
+    paginationHTML += `
+        <li class="page-item ${TableConfig.currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="goToPage(${TableConfig.currentPage - 1})">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+    `;
+    
+    // Pages
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, TableConfig.currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    if (startPage > 1) {
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="goToPage(1)">1</a>
+            </li>
         `;
-    } else {
-        // Générer table avec pagination si plus de 10 adhérents
-        const itemsPerPage = 10;
-        const totalPages = Math.ceil(OrganisationApp.adherents.length / itemsPerPage);
-        const currentPage = 1; // Pour l'instant, page simple
-        
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        const endIndex = startIndex + itemsPerPage;
-        const pageAdherents = OrganisationApp.adherents.slice(startIndex, endIndex);
-        
-        listContainer.innerHTML = `
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Civilité</th>
-                            <th>Nom complet</th>
-                            <th>NIP</th>
-                            <th>Téléphone</th>
-                            <th>Profession</th>
-                            <th>Statut</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${pageAdherents.map((adherent, index) => `
-                            <tr ${adherent.hasAnomalies ? 'class="table-warning"' : ''}>
-                                <td>${adherent.civilite}</td>
-                                <td><strong>${adherent.nom} ${adherent.prenom}</strong></td>
-                                <td><code>${adherent.nip}</code></td>
-                                <td>${adherent.telephone || '-'}</td>
-                                <td>${adherent.profession || '-'}</td>
-                                <td>
-                                    ${adherent.hasAnomalies ? 
-                                        `<span class="badge bg-danger" title="${adherent.anomalies[0]?.details || 'Anomalie détectée'}">Anomalie</span>` : 
-                                        `<span class="badge bg-success">Valide</span>`
-                                    }
-                                </td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeAdherent(${startIndex + index})">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-            ${totalPages > 1 ? `
-                <nav>
-                    <ul class="pagination pagination-sm justify-content-center">
-                        <!-- Pagination à implémenter si nécessaire -->
-                    </ul>
-                </nav>
-            ` : ''}
+        if (startPage > 2) {
+            paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHTML += `
+            <li class="page-item ${i === TableConfig.currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="goToPage(${i})">${i}</a>
+            </li>
         `;
     }
     
-    if (countSpan) {
-        // Compter les adhérents valides et avec anomalies
-        const valides = OrganisationApp.adherents.filter(a => !a.hasAnomalies).length;
-        const anomalies = OrganisationApp.adherents.filter(a => a.hasAnomalies).length;
-        
-        if (anomalies > 0) {
-            countSpan.innerHTML = `${OrganisationApp.adherents.length} adhérent(s) <small class="text-muted">(${valides} valides, ${anomalies} anomalies)</small>`;
-        } else {
-            countSpan.textContent = `${OrganisationApp.adherents.length} adhérent(s)`;
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
         }
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="goToPage(${totalPages})">${totalPages}</a>
+            </li>
+        `;
+    }
+    
+    // Bouton suivant
+    paginationHTML += `
+        <li class="page-item ${TableConfig.currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="goToPage(${TableConfig.currentPage + 1})">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    `;
+    
+    paginationControls.innerHTML = paginationHTML;
+}
+
+/**
+ * Mise à jour des statistiques du tableau
+ */
+function updateTableStats(allData, filteredData) {
+    const statsContainer = document.getElementById('tableStats');
+    if (!statsContainer) return;
+    
+    const totalAdherents = allData.length;
+    const filteredCount = filteredData.length;
+    const validAdherents = allData.filter(a => !a.hasAnomalies).length;
+    const anomaliesAdherents = allData.filter(a => a.hasAnomalies).length;
+    
+    statsContainer.innerHTML = `
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center py-2">
+                    <h5 class="mb-1">${totalAdherents}</h5>
+                    <small>Total</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center py-2">
+                    <h5 class="mb-1">${validAdherents}</h5>
+                    <small>Valides</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body text-center py-2">
+                    <h5 class="mb-1">${anomaliesAdherents}</h5>
+                    <small>Anomalies</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center py-2">
+                    <h5 class="mb-1">${filteredCount}</h5>
+                    <small>Affichés</small>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Actions du tableau
+ */
+
+// Navigation pagination
+function goToPage(page) {
+    TableConfig.currentPage = page;
+    renderTablePage(OrganisationApp.adherents);
+}
+
+// Filtrage par anomalies
+function filterByAnomalies() {
+    const select = document.getElementById('filterAnomalies');
+    TableConfig.filterAnomalies = select.value;
+    TableConfig.currentPage = 1;
+    renderTablePage(OrganisationApp.adherents);
+}
+
+// Recherche
+function clearSearch() {
+    document.getElementById('searchAdherents').value = '';
+    TableConfig.searchTerm = '';
+    TableConfig.currentPage = 1;
+    renderTablePage(OrganisationApp.adherents);
+}
+
+// Sélection
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAllAdherents');
+    const checkboxes = document.querySelectorAll('.adherent-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+    
+    updateSelectedActions();
+}
+
+function updateSelectedActions() {
+    const selectedCheckboxes = document.querySelectorAll('.adherent-checkbox:checked');
+    const selectedActions = document.getElementById('selectedActions');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    if (selectedCheckboxes.length > 0) {
+        selectedActions.classList.remove('d-none');
+        selectedCount.textContent = selectedCheckboxes.length;
+    } else {
+        selectedActions.classList.add('d-none');
+    }
+}
+
+// Édition d'un adhérent
+function editAdherent(index) {
+    const adherent = OrganisationApp.adherents[index];
+    if (!adherent) return;
+    
+    // Créer modal d'édition
+    const modalHTML = `
+        <div class="modal fade" id="editAdherentModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-edit me-2"></i>
+                            Modifier l'adhérent
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="editAdherentForm">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <label for="edit_civilite" class="form-label">Civilité</label>
+                                    <select class="form-select" id="edit_civilite">
+                                        <option value="M" ${adherent.civilite === 'M' ? 'selected' : ''}>M.</option>
+                                        <option value="Mme" ${adherent.civilite === 'Mme' ? 'selected' : ''}>Mme</option>
+                                        <option value="Mlle" ${adherent.civilite === 'Mlle' ? 'selected' : ''}>Mlle</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="edit_nom" class="form-label">Nom *</label>
+                                    <input type="text" class="form-control" id="edit_nom" value="${adherent.nom || ''}" required>
+                                </div>
+                                <div class="col-md-5">
+                                    <label for="edit_prenom" class="form-label">Prénom *</label>
+                                    <input type="text" class="form-control" id="edit_prenom" value="${adherent.prenom || ''}" required>
+                                </div>
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <label for="edit_nip" class="form-label">NIP *</label>
+                                    <input type="text" class="form-control" id="edit_nip" value="${adherent.nip || ''}" 
+                                           pattern="[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}" required>
+                                    <div class="form-text">Format: XX-QQQQ-YYYYMMDD</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="edit_telephone" class="form-label">Téléphone</label>
+                                    <input type="tel" class="form-control" id="edit_telephone" value="${adherent.telephone || ''}">
+                                </div>
+                            </div>
+                            
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <label for="edit_email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="edit_email" value="${adherent.email || ''}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="edit_profession" class="form-label">Profession</label>
+                                    <input type="text" class="form-control" id="edit_profession" value="${adherent.profession || ''}">
+                                </div>
+                            </div>
+                            
+                            ${adherent.hasAnomalies ? `
+                                <div class="alert alert-warning mt-3">
+                                    <h6>Anomalies détectées:</h6>
+                                    <ul class="mb-0">
+                                        ${adherent.anomalies.map(a => `<li>${a.message}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                        <button type="button" class="btn btn-primary" onclick="saveAdherentChanges(${index})">
+                            <i class="fas fa-save me-1"></i>Sauvegarder
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Supprimer modal existant et ajouter le nouveau
+    const existingModal = document.getElementById('editAdherentModal');
+    if (existingModal) existingModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = new bootstrap.Modal(document.getElementById('editAdherentModal'));
+    modal.show();
+}
+
+// Sauvegarde des modifications
+function saveAdherentChanges(index) {
+    const adherent = OrganisationApp.adherents[index];
+    if (!adherent) return;
+    
+    // Récupérer les valeurs
+    adherent.civilite = document.getElementById('edit_civilite').value;
+    adherent.nom = document.getElementById('edit_nom').value;
+    adherent.prenom = document.getElementById('edit_prenom').value;
+    adherent.nip = document.getElementById('edit_nip').value;
+    adherent.telephone = document.getElementById('edit_telephone').value;
+    adherent.email = document.getElementById('edit_email').value;
+    adherent.profession = document.getElementById('edit_profession').value;
+    
+    // Fermer modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('editAdherentModal'));
+    modal.hide();
+    
+    // Revalider l'adhérent
+    const validation = validateSingleAdherentAdvanced(adherent, adherent.lineNumber || index + 2);
+    adherent.hasAnomalies = validation.anomalies.length > 0;
+    adherent.anomalies = validation.anomalies;
+    
+    // Rafraîchir le tableau
+    renderTablePage(OrganisationApp.adherents);
+    
+    // Auto-sauvegarde
+    autoSave();
+    
+    showNotification('Adhérent modifié avec succès', 'success');
+}
+
+// Visualisation des anomalies
+function viewAnomalies(index) {
+    const adherent = OrganisationApp.adherents[index];
+    if (!adherent || !adherent.hasAnomalies) return;
+    
+    const modalHTML = `
+        <div class="modal fade" id="anomaliesModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Anomalies détectées
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6>${adherent.nom} ${adherent.prenom}</h6>
+                        <p class="text-muted">NIP: ${adherent.nip}</p>
+                        
+                        <div class="list-group">
+                            ${adherent.anomalies.map(anomalie => `
+                                <div class="list-group-item">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">
+                                            <span class="badge bg-${anomalie.severity === 'critique' ? 'danger' : anomalie.severity === 'majeure' ? 'warning' : 'info'}">
+                                                ${anomalie.severity}
+                                            </span>
+                                            ${anomalie.message}
+                                        </h6>
+                                    </div>
+                                    ${anomalie.suggestion ? `<p class="mb-1"><small>${anomalie.suggestion}</small></p>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        <button type="button" class="btn btn-primary" onclick="editAdherent(${index}); bootstrap.Modal.getInstance(document.getElementById('anomaliesModal')).hide();">
+                            <i class="fas fa-edit me-1"></i>Corriger
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const existingModal = document.getElementById('anomaliesModal');
+    if (existingModal) existingModal.remove();
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = new bootstrap.Modal(document.getElementById('anomaliesModal'));
+    modal.show();
+}
+
+/**
+ * ========================================================================
+ * FONCTION EXPORT CSV CORRIGÉE ET OPTIMISÉE
+ * Version complète avec gestion d'erreurs et fonctionnalités avancées
+ * ========================================================================
+ */
+
+/**
+ * Export CSV des adhérents avec filtres appliqués
+ */
+function exportAdherentsCSV() {
+    try {
+        console.log('📥 Début export CSV des adhérents');
+        
+        // Récupérer les données filtrées actuelles
+        const filteredData = getFilteredAdherents(OrganisationApp.adherents);
+        
+        if (filteredData.length === 0) {
+            showNotification('❌ Aucun adhérent à exporter', 'warning');
+            return;
+        }
+        
+        console.log(`📊 Export de ${filteredData.length} adhérents`);
+        
+        // ✅ HEADERS avec informations complètes
+        const headers = [
+            'Civilité',
+            'Nom', 
+            'Prénom', 
+            'NIP', 
+            'Téléphone', 
+            'Email', 
+            'Profession', 
+            'Statut',
+            'Ligne Origine',
+            'Date Export'
+        ];
+        
+        // ✅ DONNÉES avec formatage optimisé
+        const rows = filteredData.map(adherent => [
+            adherent.civilite || '',
+            adherent.nom || '',
+            adherent.prenom || '',
+            adherent.nip || '',
+            adherent.telephone || '',
+            adherent.email || '',
+            adherent.profession || '',
+            getStatusLabel(adherent),
+            adherent.lineNumber || '',
+            new Date().toLocaleString('fr-FR')
+        ]);
+        
+        // ✅ CONSTRUCTION CSV avec échappement correct
+        const csvContent = [headers, ...rows]
+            .map(row => row.map(cell => {
+                // Échappement des guillemets et retours à la ligne
+                const escapedCell = String(cell)
+                    .replace(/"/g, '""')  // Échapper les guillemets
+                    .replace(/\n/g, ' ')  // Remplacer retours à la ligne
+                    .replace(/\r/g, '');  // Supprimer retours chariot
+                
+                // Entourer de guillemets si contient virgule, point-virgule ou guillemets
+                if (escapedCell.includes(',') || escapedCell.includes(';') || escapedCell.includes('"')) {
+                    return `"${escapedCell}"`;
+                }
+                
+                return escapedCell;
+            }).join(';'))  // Utiliser point-virgule pour compatibilité Excel français
+            .join('\n');
+        
+        // ✅ AJOUT BOM pour caractères spéciaux
+        const BOM = '\uFEFF';
+        const csvWithBOM = BOM + csvContent;
+        
+        // ✅ CRÉATION ET TÉLÉCHARGEMENT
+        const blob = new Blob([csvWithBOM], { 
+            type: 'text/csv;charset=utf-8;' 
+        });
+        
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        // ✅ NOM FICHIER INTELLIGENT
+        const timestamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const searchTerm = TableConfig.searchTerm ? `_${TableConfig.searchTerm}` : '';
+        const filterTerm = TableConfig.filterAnomalies !== 'all' ? `_${TableConfig.filterAnomalies}` : '';
+        
+        const fileName = `adherents_${timestamp}${searchTerm}${filterTerm}.csv`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        
+        // ✅ DÉCLENCHEMENT TÉLÉCHARGEMENT
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // ✅ NETTOYAGE MÉMOIRE
+        URL.revokeObjectURL(url);
+        
+        // ✅ NOTIFICATION SUCCÈS
+        showNotification(
+            `✅ Export CSV réussi : ${filteredData.length} adhérents exportés`,
+            'success',
+            4000
+        );
+        
+        // ✅ LOG POUR DEBUG
+        console.log('✅ Export CSV terminé:', {
+            fileName: fileName,
+            rowsExported: filteredData.length,
+            filtersApplied: {
+                search: TableConfig.searchTerm,
+                anomalies: TableConfig.filterAnomalies
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Erreur lors de l\'export CSV:', error);
+        showNotification(
+            '❌ Erreur lors de l\'export CSV: ' + error.message,
+            'danger',
+            6000
+        );
+    }
+}
+
+/**
+ * Obtenir le label de statut d'un adhérent
+ */
+function getStatusLabel(adherent) {
+    if (!adherent.hasAnomalies) {
+        return 'Valide';
+    }
+    
+    const anomalies = adherent.anomalies || [];
+    const critiques = anomalies.filter(a => a.severity === 'critique').length;
+    const majeures = anomalies.filter(a => a.severity === 'majeure').length;
+    const mineures = anomalies.filter(a => a.severity === 'mineure').length;
+    
+    if (critiques > 0) {
+        return `Critique (${critiques})`;
+    } else if (majeures > 0) {
+        return `Majeure (${majeures})`;
+    } else if (mineures > 0) {
+        return `Mineure (${mineures})`;
+    } else {
+        return 'Anomalies';
+    }
+}
+
+/**
+ * ✅ FONCTION BONUS : Export avec sélection uniquement
+ */
+function exportSelectedAdherents() {
+    try {
+        const selectedCheckboxes = document.querySelectorAll('.adherent-checkbox:checked');
+        const selectedIndices = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+        
+        if (selectedIndices.length === 0) {
+            showNotification('❌ Aucun adhérent sélectionné', 'warning');
+            return;
+        }
+        
+        console.log(`📥 Export sélection: ${selectedIndices.length} adhérents`);
+        
+        // Récupérer les adhérents sélectionnés
+        const selectedAdherents = selectedIndices.map(index => OrganisationApp.adherents[index]).filter(Boolean);
+        
+        if (selectedAdherents.length === 0) {
+            showNotification('❌ Erreur lors de la récupération des adhérents sélectionnés', 'danger');
+            return;
+        }
+        
+        // ✅ HEADERS
+        const headers = [
+            'Civilité', 'Nom', 'Prénom', 'NIP', 'Téléphone', 
+            'Email', 'Profession', 'Statut', 'Date Export'
+        ];
+        
+        // ✅ DONNÉES SÉLECTIONNÉES
+        const rows = selectedAdherents.map(adherent => [
+            adherent.civilite || '',
+            adherent.nom || '',
+            adherent.prenom || '',
+            adherent.nip || '',
+            adherent.telephone || '',
+            adherent.email || '',
+            adherent.profession || '',
+            getStatusLabel(adherent),
+            new Date().toLocaleString('fr-FR')
+        ]);
+        
+        // ✅ CONSTRUCTION CSV
+        const csvContent = [headers, ...rows]
+            .map(row => row.map(cell => {
+                const escapedCell = String(cell).replace(/"/g, '""').replace(/\n/g, ' ');
+                return escapedCell.includes(',') || escapedCell.includes(';') || escapedCell.includes('"') 
+                    ? `"${escapedCell}"` 
+                    : escapedCell;
+            }).join(';'))
+            .join('\n');
+        
+        // ✅ TÉLÉCHARGEMENT
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const fileName = `adherents_selection_${selectedAdherents.length}_${timestamp}.csv`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showNotification(
+            `✅ Export sélection réussi : ${selectedAdherents.length} adhérents`,
+            'success',
+            4000
+        );
+        
+        console.log('✅ Export sélection terminé:', fileName);
+        
+    } catch (error) {
+        console.error('❌ Erreur export sélection:', error);
+        showNotification('❌ Erreur lors de l\'export sélection', 'danger');
+    }
+}
+
+/**
+ * ✅ FONCTION BONUS : Export avec métadonnées complètes
+ */
+function exportAdherentsWithMetadata() {
+    try {
+        const filteredData = getFilteredAdherents(OrganisationApp.adherents);
+        
+        if (filteredData.length === 0) {
+            showNotification('❌ Aucun adhérent à exporter', 'warning');
+            return;
+        }
+        
+        // ✅ HEADERS ÉTENDUS avec métadonnées
+        const headers = [
+            'Civilité', 'Nom', 'Prénom', 'NIP', 'Téléphone', 'Email', 'Profession',
+            'Statut', 'Nb Anomalies', 'Types Anomalies', 'Ligne Origine',
+            'NIP Temporaire', 'NIP Original', 'Date Import', 'Date Export'
+        ];
+        
+        // ✅ DONNÉES AVEC MÉTADONNÉES
+        const rows = filteredData.map(adherent => [
+            adherent.civilite || '',
+            adherent.nom || '',
+            adherent.prenom || '',
+            adherent.nip || '',
+            adherent.telephone || '',
+            adherent.email || '',
+            adherent.profession || '',
+            getStatusLabel(adherent),
+            (adherent.anomalies || []).length,
+            (adherent.anomalies || []).map(a => a.severity).join(', '),
+            adherent.lineNumber || '',
+            adherent.nip_temporaire ? 'Oui' : 'Non',
+            adherent.nip_original || '',
+            OrganisationApp.adherentsMetadata?.timestamp || '',
+            new Date().toLocaleString('fr-FR')
+        ]);
+        
+        // ✅ CONSTRUCTION ET TÉLÉCHARGEMENT
+        const csvContent = [headers, ...rows]
+            .map(row => row.map(cell => {
+                const escapedCell = String(cell).replace(/"/g, '""').replace(/\n/g, ' ');
+                return escapedCell.includes(',') || escapedCell.includes(';') || escapedCell.includes('"') 
+                    ? `"${escapedCell}"` 
+                    : escapedCell;
+            }).join(';'))
+            .join('\n');
+        
+        const BOM = '\uFEFF';
+        const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        const timestamp = new Date().toISOString().slice(0, 10);
+        const fileName = `adherents_complet_${timestamp}.csv`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showNotification(
+            `✅ Export complet réussi : ${filteredData.length} adhérents avec métadonnées`,
+            'success',
+            4000
+        );
+        
+    } catch (error) {
+        console.error('❌ Erreur export complet:', error);
+        showNotification('❌ Erreur lors de l\'export complet', 'danger');
     }
 }
 
@@ -1810,42 +2872,681 @@ function clearAdherentForm() {
 /**
  * Gestion de l'importation du fichier Excel/CSV des adhérents
  */
+/**
+ * ========================================================================
+ * ÉTAPE 7 OPTIMISÉE - UPLOAD FICHIER ADHÉRENTS (SESSION SEULEMENT)
+ * Version: 2.0 - UX Moderne avec Progress Bar et Validation Avancée
+ * ========================================================================
+ */
+
+/**
+ * Gestion optimisée de l'upload fichier adhérents pour Étape 7
+ * IMPORTANT: Ne stocke QUE en session, pas en base de données
+ */
 async function handleAdherentFileImport(fileInput) {
     const file = fileInput.files[0];
     if (!file) return;
     
-    console.log('📁 Début importation fichier adhérents:', file.name);
+    console.log('📁 ÉTAPE 7 v2.0: Préparation fichier adhérents (SESSION SEULEMENT)', file.name);
     
-    // Validation du fichier
+    // Validation initiale du fichier
     if (!validateAdherentFile(file)) {
         clearFileInput();
         return;
     }
     
     try {
-        showNotification('📁 Analyse du fichier en cours...', 'info');
+        // ✅ Interface moderne avec progress bar
+        showUploadProgress();
         
-        // Lire le fichier Excel/CSV
-        const adherentsData = await readAdherentFile(file);
+        // ✅ ÉTAPE 1: Lecture fichier avec progress (25%)
+        updateUploadProgress(25, '📖 Lecture du fichier en cours...');
+        const adherentsData = await readAdherentFileWithProgress(file);
         
         if (!adherentsData || adherentsData.length === 0) {
-            showNotification('❌ Le fichier est vide ou invalide', 'danger');
-            clearFileInput();
-            return;
+            throw new Error('Le fichier est vide ou ne contient pas de données valides');
         }
         
-        console.log(`📊 ${adherentsData.length} lignes détectées dans le fichier`);
+        console.log(`📊 ${adherentsData.length} adhérents détectés dans le fichier`);
         
-        // Valider et traiter les données avec système d'anomalies
-        const validationResult = await validateAdherentsImport(adherentsData);
+        // ✅ ÉTAPE 2: Validation avec progress (50%)
+        updateUploadProgress(50, `🔍 Validation de ${adherentsData.length} adhérents...`);
+        const validationResult = await validateAdherentsWithProgress(adherentsData);
         
-        // Traiter selon les résultats de validation
-        await processImportResult(validationResult);
+        // ✅ ÉTAPE 3: Normalisation et préparation (75%)
+        updateUploadProgress(75, '⚙️ Préparation des données pour session...');
+        const preparedData = await prepareAdherentsForSession(validationResult);
+        
+        // ✅ ÉTAPE 4: Stockage en session (90%)
+        updateUploadProgress(90, '💾 Sauvegarde en session...');
+        await saveAdherentsToSession(preparedData);
+        
+        // ✅ ÉTAPE 5: Mise à jour interface (100%)
+        updateUploadProgress(100, '✅ Import terminé avec succès !');
+        
+        // Actualiser l'interface avec tableau moderne
+        updateAdherentsTableInterface(preparedData);
+        
+        // Rapport de succès
+        showUploadSuccess(preparedData);
+        
+        // Nettoyer l'input
+        clearFileInput();
         
     } catch (error) {
-        console.error('❌ Erreur importation adhérents:', error);
-        showNotification('❌ Erreur lors de l\'importation: ' + error.message, 'danger');
+        console.error('❌ Erreur lors de l\'upload Étape 7:', error);
+        showUploadError(error.message);
         clearFileInput();
+    }
+}
+
+/**
+ * Lecture du fichier avec progress tracking
+ */
+async function readAdherentFileWithProgress(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const data = e.target.result;
+                let adherentsData = [];
+                
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    // Traitement CSV optimisé
+                    adherentsData = parseCSVAdvanced(data);
+                } else {
+                    // Traitement Excel avec XLSX
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    adherentsData = XLSX.utils.sheet_to_json(worksheet);
+                }
+                
+                console.log(`✅ Fichier lu avec succès: ${adherentsData.length} lignes détectées`);
+                resolve(adherentsData);
+                
+            } catch (error) {
+                console.error('❌ Erreur lors de la lecture du fichier:', error);
+                reject(new Error('Impossible de lire le fichier. Vérifiez le format.'));
+            }
+        };
+        
+        reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
+        
+        // Lire selon le type de fichier
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            reader.readAsBinaryString(file);
+        }
+    });
+}
+
+/**
+ * Parser CSV avancé avec détection automatique de délimiteur
+ */
+function parseCSVAdvanced(csvText) {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    // Détection intelligente du délimiteur
+    const delimiters = [';', ',', '\t', '|'];
+    const headerLine = lines[0];
+    
+    let bestDelimiter = ';';
+    let maxColumns = 0;
+    
+    for (let delimiter of delimiters) {
+        const columns = headerLine.split(delimiter).length;
+        if (columns > maxColumns) {
+            maxColumns = columns;
+            bestDelimiter = delimiter;
+        }
+    }
+    
+    console.log(`📋 Délimiteur détecté: "${bestDelimiter}" (${maxColumns} colonnes)`);
+    
+    // Parser avec le meilleur délimiteur
+    const headers = lines[0].split(bestDelimiter).map(h => h.trim().toLowerCase());
+    const adherentsData = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(bestDelimiter);
+        
+        if (values.length >= headers.length - 1) { // Tolérance pour colonnes manquantes
+            const adherent = {};
+            
+            headers.forEach((header, index) => {
+                adherent[header] = values[index] ? values[index].trim() : '';
+            });
+            
+            // Ne pas ajouter les lignes complètement vides
+            if (Object.values(adherent).some(val => val !== '')) {
+                adherentsData.push(adherent);
+            }
+        }
+    }
+    
+    return adherentsData;
+}
+
+/**
+ * Validation avancée des adhérents avec progress
+ */
+async function validateAdherentsWithProgress(adherentsData) {
+    const validationResult = {
+        total: adherentsData.length,
+        valides: 0,
+        invalides: 0,
+        anomalies_mineures: 0,
+        anomalies_majeures: 0,
+        anomalies_critiques: 0,
+        adherents: [],
+        rapport: {
+            erreurs: [],
+            avertissements: [],
+            infos: []
+        }
+    };
+    
+    // Mapping intelligent des champs
+    const fieldMapping = {
+        'nom': ['nom', 'lastname', 'surname', 'family_name'],
+        'prenom': ['prenom', 'prénom', 'firstname', 'first_name', 'given_name'],
+        'nip': ['nip', 'numero', 'numero_identite', 'id_number'],
+        'telephone': ['telephone', 'téléphone', 'phone', 'mobile', 'cellulaire'],
+        'email': ['email', 'mail', 'courriel', 'e-mail'],
+        'profession': ['profession', 'metier', 'job', 'occupation'],
+        'civilite': ['civilite', 'civilité', 'title', 'mr_mrs']
+    };
+    
+    // Traitement par batch pour éviter le freeze
+    const batchSize = 50;
+    const totalBatches = Math.ceil(adherentsData.length / batchSize);
+    
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * batchSize;
+        const endIndex = Math.min(startIndex + batchSize, adherentsData.length);
+        const batch = adherentsData.slice(startIndex, endIndex);
+        
+        // Traiter chaque adhérent du batch
+        batch.forEach((adherent, index) => {
+            const globalIndex = startIndex + index;
+            const lineNumber = globalIndex + 2; // +2 car ligne 1 = headers
+            
+            const normalizedAdherent = normalizeAdherentFields(adherent, fieldMapping);
+            const validation = validateSingleAdherentAdvanced(normalizedAdherent, lineNumber);
+            
+            if (validation.isValid) {
+                validationResult.valides++;
+                normalizedAdherent.lineNumber = lineNumber;
+                normalizedAdherent.hasAnomalies = validation.anomalies.length > 0;
+                normalizedAdherent.anomalies = validation.anomalies;
+                
+                validationResult.adherents.push(normalizedAdherent);
+                
+                // Compter les anomalies par niveau
+                validation.anomalies.forEach(anomalie => {
+                    switch(anomalie.severity) {
+                        case 'critique': validationResult.anomalies_critiques++; break;
+                        case 'majeure': validationResult.anomalies_majeures++; break;
+                        case 'mineure': validationResult.anomalies_mineures++; break;
+                    }
+                });
+                
+            } else {
+                validationResult.invalides++;
+                validationResult.rapport.erreurs.push({
+                    ligne: lineNumber,
+                    erreurs: validation.erreurs
+                });
+            }
+        });
+        
+        // Mise à jour progress durant la validation
+        const progress = 50 + Math.round((batchIndex + 1) / totalBatches * 20); // 50% à 70%
+        updateUploadProgress(progress, `Validation batch ${batchIndex + 1}/${totalBatches}...`);
+        
+        // Pause pour permettre l'update UI
+        if (batchIndex < totalBatches - 1) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    }
+    
+    console.log('✅ Validation terminée:', {
+        total: validationResult.total,
+        valides: validationResult.valides,
+        invalides: validationResult.invalides,
+        anomalies: validationResult.anomalies_critiques + validationResult.anomalies_majeures + validationResult.anomalies_mineures
+    });
+    
+    return validationResult;
+}
+
+/**
+ * Validation avancée d'un adhérent unique
+ */
+function validateSingleAdherentAdvanced(adherent, lineNumber) {
+    const erreurs = [];
+    const anomalies = [];
+    
+    // Validations obligatoires
+    if (!adherent.nom || adherent.nom.length < 2) {
+        erreurs.push('Nom manquant ou trop court');
+    }
+    
+    if (!adherent.prenom || adherent.prenom.length < 2) {
+        erreurs.push('Prénom manquant ou trop court');
+    }
+    
+    // Validation NIP avancée (format XX-QQQQ-YYYYMMDD)
+    if (!adherent.nip) {
+        erreurs.push('NIP manquant');
+    } else {
+        const nipPattern = /^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/;
+        if (!nipPattern.test(adherent.nip)) {
+            anomalies.push({
+                code: 'nip_format_invalide',
+                severity: 'majeure',
+                message: `Format NIP invalide: ${adherent.nip}`,
+                suggestion: 'Format attendu: XX-QQQQ-YYYYMMDD (ex: A1-2345-19901225)'
+            });
+        } else {
+            // Validation de la date dans le NIP
+            const datePart = adherent.nip.slice(-8);
+            const year = parseInt(datePart.substring(0, 4));
+            const month = parseInt(datePart.substring(4, 6));
+            const day = parseInt(datePart.substring(6, 8));
+            
+            const currentYear = new Date().getFullYear();
+            
+            if (year < 1900 || year > currentYear) {
+                anomalies.push({
+                    code: 'nip_annee_invalide',
+                    severity: 'majeure',
+                    message: `Année de naissance invalide dans NIP: ${year}`
+                });
+            }
+            
+            if (month < 1 || month > 12) {
+                anomalies.push({
+                    code: 'nip_mois_invalide',
+                    severity: 'majeure',
+                    message: `Mois invalide dans NIP: ${month}`
+                });
+            }
+            
+            if (day < 1 || day > 31) {
+                anomalies.push({
+                    code: 'nip_jour_invalide',
+                    severity: 'majeure',
+                    message: `Jour invalide dans NIP: ${day}`
+                });
+            }
+            
+            // Vérifier âge minimum (18 ans)
+            const birthDate = new Date(year, month - 1, day);
+            const age = Math.floor((new Date() - birthDate) / (365.25 * 24 * 60 * 60 * 1000));
+            
+            if (age < 18) {
+                anomalies.push({
+                    code: 'age_mineur',
+                    severity: 'critique',
+                    message: `Personne mineure (${age} ans) - non autorisée`
+                });
+            }
+        }
+    }
+    
+    // Validation email
+    if (adherent.email && adherent.email.length > 0) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(adherent.email)) {
+            anomalies.push({
+                code: 'email_invalide',
+                severity: 'mineure',
+                message: `Email invalide: ${adherent.email}`
+            });
+        }
+    }
+    
+    // Validation téléphone gabonais
+    if (adherent.telephone && adherent.telephone.length > 0) {
+        const cleanPhone = adherent.telephone.replace(/[^0-9+]/g, '');
+        
+        // Patterns téléphone gabonais
+        const gabonPatterns = [
+            /^(\+241)?[01][0-9]{7}$/, // Fixe: 01XXXXXXX
+            /^(\+241)?[67][0-9]{7}$/  // Mobile: 6XXXXXXXX ou 7XXXXXXXX
+        ];
+        
+        const isValidGabonPhone = gabonPatterns.some(pattern => pattern.test(cleanPhone));
+        
+        if (!isValidGabonPhone) {
+            anomalies.push({
+                code: 'telephone_invalide',
+                severity: 'mineure',
+                message: `Téléphone invalide: ${adherent.telephone}`,
+                suggestion: 'Format attendu: 01XXXXXXX, 6XXXXXXXX ou 7XXXXXXXX'
+            });
+        }
+    }
+    
+    // Validation civilité
+    if (adherent.civilite && !['M', 'Mme', 'Mlle', 'Mr', 'Mrs', 'Ms'].includes(adherent.civilite)) {
+        anomalies.push({
+            code: 'civilite_non_standard',
+            severity: 'mineure',
+            message: `Civilité non standard: ${adherent.civilite}`
+        });
+        
+        // Auto-correction
+        const civiliteNormalized = adherent.civilite.toLowerCase();
+        if (civiliteNormalized.includes('m') && !civiliteNormalized.includes('me')) {
+            adherent.civilite = 'M';
+        } else if (civiliteNormalized.includes('me')) {
+            adherent.civilite = 'Mme';
+        } else if (civiliteNormalized.includes('lle')) {
+            adherent.civilite = 'Mlle';
+        }
+    }
+    
+    return {
+        isValid: erreurs.length === 0,
+        erreurs: erreurs,
+        anomalies: anomalies
+    };
+}
+
+/**
+ * Préparation finale des données pour session
+ */
+async function prepareAdherentsForSession(validationResult) {
+    const preparedData = {
+        adherents: [],
+        stats: {
+            total: validationResult.total,
+            valides: validationResult.valides,
+            invalides: validationResult.invalides,
+            anomalies_mineures: validationResult.anomalies_mineures,
+            anomalies_majeures: validationResult.anomalies_majeures,
+            anomalies_critiques: validationResult.anomalies_critiques
+        },
+        rapport: validationResult.rapport,
+        timestamp: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2h
+    };
+    
+    // Préparer chaque adhérent valide
+    validationResult.adherents.forEach(adherent => {
+        // Générer un NIP temporaire si invalide mais adhérent valide
+        if (adherent.hasAnomalies && adherent.anomalies.some(a => a.code.includes('nip'))) {
+            adherent.nip_original = adherent.nip;
+            adherent.nip = generateTemporaryNIP();
+            adherent.nip_temporaire = true;
+        }
+        
+        preparedData.adherents.push({
+            civilite: adherent.civilite || 'M',
+            nom: adherent.nom,
+            prenom: adherent.prenom,
+            nip: adherent.nip,
+            telephone: adherent.telephone || '',
+            email: adherent.email || '',
+            profession: adherent.profession || '',
+            lineNumber: adherent.lineNumber,
+            hasAnomalies: adherent.hasAnomalies || false,
+            anomalies: adherent.anomalies || [],
+            nip_temporaire: adherent.nip_temporaire || false,
+            nip_original: adherent.nip_original || null
+        });
+    });
+    
+    return preparedData;
+}
+
+/**
+ * Génération d'un NIP temporaire valide
+ */
+function generateTemporaryNIP() {
+    const prefix = 'TMP';
+    const sequence = String(Math.floor(Math.random() * 9999)).padStart(4, '0');
+    const birthYear = '19900101'; // Date neutre
+    
+    return `${prefix}-${sequence}-${birthYear}`;
+}
+
+/**
+ * Sauvegarde en session avec structure optimisée
+ */
+async function saveAdherentsToSession(preparedData) {
+    console.log('💾 Sauvegarde des adhérents dans la session formulaire (Étape 7)');
+    
+    // Vider les adhérents existants dans l'application
+    OrganisationApp.adherents = [];
+    
+    // Ajouter tous les adhérents préparés
+    preparedData.adherents.forEach(adherent => {
+        OrganisationApp.adherents.push(adherent);
+    });
+    
+    // Stocker aussi les métadonnées pour Phase 2
+    OrganisationApp.adherentsMetadata = {
+        stats: preparedData.stats,
+        rapport: preparedData.rapport,
+        timestamp: preparedData.timestamp,
+        expires_at: preparedData.expires_at
+    };
+    
+    console.log(`✅ ${OrganisationApp.adherents.length} adhérents sauvegardés en session`);
+    
+    // Déclencher les mises à jour UI
+    updateAdherentsList();
+    updateFormStats();
+    autoSave();
+}
+
+/**
+ * Interface de progress moderne
+ */
+function showUploadProgress() {
+    const existingModal = document.getElementById('uploadProgressModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modalHTML = `
+        <div class="modal fade" id="uploadProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-file-upload me-2"></i>
+                            Import Fichier Adhérents - Étape 7
+                        </h5>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center mb-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Chargement...</span>
+                            </div>
+                        </div>
+                        
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                 role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                <span id="uploadProgressText">0%</span>
+                            </div>
+                        </div>
+                        
+                        <div id="uploadProgressMessage" class="text-center text-muted">
+                            Initialisation...
+                        </div>
+                        
+                        <div id="uploadProgressDetails" class="mt-3 small text-muted">
+                            <!-- Détails supplémentaires -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = new bootstrap.Modal(document.getElementById('uploadProgressModal'));
+    modal.show();
+}
+
+/**
+ * Mise à jour du progress
+ */
+function updateUploadProgress(percentage, message, details = '') {
+    const progressBar = document.getElementById('uploadProgressBar');
+    const progressText = document.getElementById('uploadProgressText');
+    const progressMessage = document.getElementById('uploadProgressMessage');
+    const progressDetails = document.getElementById('uploadProgressDetails');
+    
+    if (progressBar) {
+        progressBar.style.width = percentage + '%';
+        progressBar.setAttribute('aria-valuenow', percentage);
+    }
+    
+    if (progressText) {
+        progressText.textContent = percentage + '%';
+    }
+    
+    if (progressMessage) {
+        progressMessage.textContent = message;
+    }
+    
+    if (progressDetails && details) {
+        progressDetails.innerHTML = details;
+    }
+}
+
+/**
+ * Affichage du succès avec résumé
+ */
+function showUploadSuccess(preparedData) {
+    // Fermer le modal de progress
+    const progressModal = bootstrap.Modal.getInstance(document.getElementById('uploadProgressModal'));
+    if (progressModal) {
+        progressModal.hide();
+    }
+    
+    // Afficher notification de succès
+    const stats = preparedData.stats;
+    let message = `✅ ${stats.valides} adhérents préparés avec succès !`;
+    
+    if (stats.anomalies_mineures + stats.anomalies_majeures + stats.anomalies_critiques > 0) {
+        message += ` (${stats.anomalies_mineures + stats.anomalies_majeures + stats.anomalies_critiques} anomalies détectées)`;
+    }
+    
+    showNotification(message, 'success', 6000);
+    
+    // Afficher rapport détaillé dans l'interface
+    showDetailedReport(preparedData);
+}
+
+/**
+ * Affichage des erreurs
+ */
+function showUploadError(errorMessage) {
+    // Fermer le modal de progress
+    const progressModal = bootstrap.Modal.getInstance(document.getElementById('uploadProgressModal'));
+    if (progressModal) {
+        progressModal.hide();
+    }
+    
+    showNotification('❌ Erreur lors de l\'import: ' + errorMessage, 'danger', 8000);
+}
+
+/**
+ * Affichage du rapport détaillé
+ */
+function showDetailedReport(preparedData) {
+    const detailsContainer = document.getElementById('import_details');
+    if (!detailsContainer) return;
+    
+    const stats = preparedData.stats;
+    
+    const reportHTML = `
+        <div class="alert alert-success border-0 mt-3 fade-in">
+            <h6 class="alert-heading">
+                <i class="fas fa-file-check me-2"></i>
+                Fichier traité avec succès - Version 2.0
+            </h6>
+            
+            <div class="row text-center mb-3">
+                <div class="col-3">
+                    <div class="h4 text-primary">${stats.total}</div>
+                    <small>Total lignes</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-success">${stats.valides}</div>
+                    <small>Valides</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-warning">${stats.anomalies_mineures + stats.anomalies_majeures}</div>
+                    <small>Anomalies</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-danger">${stats.invalides}</div>
+                    <small>Rejetés</small>
+                </div>
+            </div>
+            
+            ${stats.anomalies_critiques > 0 ? `
+                <div class="alert alert-warning">
+                    <strong>⚠️ ${stats.anomalies_critiques} anomalies critiques détectées</strong><br>
+                    Ces adhérents seront marqués pour révision mais seront inclus dans l'import.
+                </div>
+            ` : ''}
+            
+            <hr>
+            
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-info-circle text-info me-2"></i>
+                    <strong>Les adhérents sont préparés pour l'importation finale en Phase 2.</strong>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleDetailedStats()">
+                    <i class="fas fa-chart-bar me-1"></i>Voir détails
+                </button>
+            </div>
+            
+            <div id="detailedStats" class="mt-3 d-none">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Types d'anomalies:</h6>
+                        <small class="text-danger">Critiques: ${stats.anomalies_critiques}</small><br>
+                        <small class="text-warning">Majeures: ${stats.anomalies_majeures}</small><br>
+                        <small class="text-info">Mineures: ${stats.anomalies_mineures}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Prochaines étapes:</h6>
+                        <small>✅ Données en session (2h)</small><br>
+                        <small>⏳ Soumission → Phase 2</small><br>
+                        <small>🚀 Import final en base</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    detailsContainer.innerHTML = reportHTML;
+    detailsContainer.classList.remove('d-none');
+}
+
+/**
+ * Toggle des statistiques détaillées
+ */
+function toggleDetailedStats() {
+    const detailedStats = document.getElementById('detailedStats');
+    if (detailedStats) {
+        detailedStats.classList.toggle('d-none');
     }
 }
 
@@ -4339,6 +6040,13 @@ function validateAllSteps() {
  * À intégrer dans organisation-create.js
  */
 
+
+// ✅ SAUVEGARDE DE LA FONCTION ORIGINALE
+if (typeof window.submitForm === 'function') {
+    window.originalSubmitForm = window.submitForm;
+    console.log('📄 Fonction submitForm originale sauvegardée');
+}
+
 /**
  * ✅ SOUMISSION FINALE CORRIGÉE - Avec chunking adaptatif pour gros volumes
  */
@@ -4371,6 +6079,9 @@ async function submitForm() {
     return await submitFormNormal();
 }
 
+// ✅ REMPLACEMENT PAR LA VERSION AMÉLIORÉE
+window.submitForm = submitFormWithErrorHandling;
+console.log('✅ Fonction submitForm remplacée par la version avec gestion CSRF');
 /**
  * ✅ NOUVELLE FONCTION : Soumission avec chunking pour gros volumes
  */
@@ -4564,150 +6275,300 @@ async function submitFormWithChunking() {
 }*/
 
 /**
+ * Diagnostic CSRF avant soumission
+ */
+function diagnoseCsrfIssue() {
+    console.log('🔍 === DIAGNOSTIC CSRF ===');
+    
+    const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const inputToken = document.querySelector('input[name="_token"]')?.value;
+    const laravelToken = window.Laravel?.csrfToken;
+    
+    console.log('Meta CSRF:', metaToken ? metaToken.substring(0, 10) + '...' : 'MANQUANT');
+    console.log('Input CSRF:', inputToken ? inputToken.substring(0, 10) + '...' : 'MANQUANT');
+    console.log('Laravel CSRF:', laravelToken ? laravelToken.substring(0, 10) + '...' : 'MANQUANT');
+    
+    // Vérifier si la page est expirée
+    const pageLoadTime = performance.timing.navigationStart;
+    const currentTime = Date.now();
+    const pageAge = Math.floor((currentTime - pageLoadTime) / 1000 / 60); // en minutes
+    
+    console.log('Âge de la page:', pageAge, 'minutes');
+    
+    if (pageAge > 120) { // Plus de 2 heures
+        console.warn('⚠️ Page possiblement expirée (plus de 2h)');
+        return false;
+    }
+    
+    return true;
+}
+
+
+/**
  * ✅ FONCTION : Soumission normale (volumes < 200 adhérents)
  */
-async function submitFormNormal() {
+/**
+ * ✅ FONCTION FINALE : submitFormNormal avec CSRF robuste
+ * REMPLACER COMPLÈTEMENT la fonction existante dans organisation-create.js
+ */
+ async function submitFormNormal() {
     try {
         showGlobalLoader(true);
         
-        // Préparation des données standard
+        // Préparation des données standard (CODE EXISTANT PRÉSERVÉ)
         const formData = new FormData();
         const data = collectFormData();
         
-        // Token CSRF
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        if (csrfToken) {
-            formData.append('_token', csrfToken);
-        }
-        
-        // Données de base
+        // Ajouter toutes les données du formulaire
         Object.keys(data).forEach(key => {
             if (data[key] !== null && data[key] !== undefined) {
-                formData.append(key, data[key]);
+                if (Array.isArray(data[key])) {
+                    data[key].forEach((item, index) => {
+                        formData.append(`${key}[${index}]`, item);
+                    });
+                } else {
+                    formData.append(key, data[key]);
+                }
             }
         });
-        
-        // Fondateurs et adhérents (volume normal)
-        formData.append('fondateurs', JSON.stringify(OrganisationApp.fondateurs));
-        formData.append('adherents', JSON.stringify(OrganisationApp.adherents));
-        
-        // Rapport d'anomalies si présent
-        if (OrganisationApp.rapportAnomalies.enabled) {
-            const rapport = generateRapportAnomalies();
-            const rapportHTML = generateRapportAnomaliesHTML();
+
+        // Ajouter les adhérents si présents
+        if (OrganisationApp.adherents && OrganisationApp.adherents.length > 0) {
+            formData.append('adherents', JSON.stringify(OrganisationApp.adherents));
+        }
+
+        // Ajouter le rapport d'anomalies si activé
+        if (OrganisationApp.rapportAnomalies && OrganisationApp.rapportAnomalies.enabled) {
+            formData.append('rapport_anomalies', JSON.stringify(OrganisationApp.rapportAnomalies));
+        }
+
+        console.log('📋 Données préparées pour soumission normale');
+
+        // ✅ NOUVEAUTÉ : Utiliser le gestionnaire CSRF robuste
+        const result = await window.submitFormWithCSRFHandling(
+            formData, 
+            '/operator/organisations',
+            { 
+                timeout: 120000 // 2 minutes
+            }
+        );
+
+        // TRAITEMENT RÉSULTAT (CODE EXISTANT PRÉSERVÉ)
+        if (result && result.success) {
+            const redirectUrl = result.redirect_url || '/operator/organisations';
             
-            formData.append('rapport_anomalies_json', JSON.stringify(rapport));
-            formData.append('rapport_anomalies_html', rapportHTML);
-            formData.append('has_anomalies', 'true');
+            let successMsg = '✅ Organisation créée avec succès !';
+            if (OrganisationApp.rapportAnomalies && OrganisationApp.rapportAnomalies.enabled) {
+                successMsg += '\n📋 Le rapport d\'anomalies a été transmis automatiquement.';
+            }
+            showNotification(successMsg, 'success', 10000);
+            
+            // Nettoyer le draft
+            localStorage.removeItem('pngdi_organisation_draft');
+            
+            setTimeout(() => {
+                window.location.href = redirectUrl;
+            }, 3000);
+            
+            return { success: true, redirectUrl };
+            
         } else {
-            formData.append('has_anomalies', 'false');
+            throw new Error(result.message || 'Erreur lors de la soumission');
         }
         
-        // Métadonnées
-        formData.append('selectedOrgType', OrganisationApp.selectedOrgType);
-        formData.append('totalFondateurs', OrganisationApp.fondateurs.length);
-        formData.append('totalAdherents', OrganisationApp.adherents.length);
-        formData.append('totalDocuments', Object.keys(OrganisationApp.documents).length);
-        formData.append('is_chunked_submission', 'false');
+    } catch (error) {
+        console.error('❌ Erreur soumission finale:', error);
         
-        // Documents
-        Object.keys(OrganisationApp.documents).forEach(docType => {
-            const doc = OrganisationApp.documents[docType];
-            if (doc.file) {
-                formData.append(`documents[${docType}]`, doc.file);
-            }
-        });
+        // Réactiver le bouton submit
+        const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Soumettre le dossier';
+        }
         
-        console.log('📋 Données préparées pour soumission normale');
+        // Afficher l'erreur avec diagnostic CSRF
+        const errorDetails = {
+            errorType: 'SubmissionError',
+            timestamp: new Date().toISOString(),
+            csrfDiagnostic: window.CSRFManager ? window.CSRFManager.diagnoseCSRFContext() : 'CSRFManager non disponible'
+        };
         
-        // Soumettre
-        const formElement = document.getElementById('organisationForm');
-        const response = await fetch(formElement.action, {
-            method: 'POST',
-            body: formData,
+        if (typeof showErrorModal === 'function') {
+            showErrorModal('Erreur de Soumission', error.message, errorDetails);
+        } else {
+            showNotification(`❌ Erreur: ${error.message}`, 'danger');
+        }
+        
+        throw error;
+        
+    } finally {
+        showGlobalLoader(false);
+    }
+}
+
+/**
+ * ✅ FONCTION HELPER : Récupération robuste du token CSRF
+ */
+async function getCurrentCSRFToken() {
+    // Méthode 1: Depuis meta tag Laravel
+    let csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    
+    // Méthode 2: Fallback depuis input caché
+    if (!csrfToken) {
+        csrfToken = document.querySelector('input[name="_token"]')?.value;
+    }
+    
+    // Méthode 3: Fallback depuis window.Laravel
+    if (!csrfToken && window.Laravel && window.Laravel.csrfToken) {
+        csrfToken = window.Laravel.csrfToken;
+    }
+    
+    // Méthode 4: Dernier recours - récupérer depuis le serveur
+    if (!csrfToken || csrfToken.length < 10) {
+        console.log('🔄 Token CSRF invalide ou manquant, récupération depuis serveur...');
+        csrfToken = await refreshCSRFToken();
+    }
+    
+    return csrfToken;
+}
+
+/**
+ * ✅ FONCTION HELPER : Rafraîchir le token CSRF
+ */
+async function refreshCSRFToken() {
+    console.log('🔄 Tentative de rafraîchissement du token CSRF...');
+    
+    try {
+        const response = await fetch('/csrf-token', {
+            method: 'GET',
             headers: {
+                'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
         });
         
         if (response.ok) {
-            const result = await response.json();
-
-            // ✅ GESTION SPÉCIFIQUE PHASE 2
-            if (result.phase === 'organisation_created_phase2_pending' || 
-                    (result.data && result.data.phase2_required)) {
-    
-                    console.log('✅ Phase 2 détectée - Redirection automatique');
-    
-                    showNotification('✅ Organisation créée ! Préparation Phase 2...', 'success', 3000);
-    
-                    let redirectUrl = null;
-    
-                if (result.data && result.data.redirect_url) {
-                        redirectUrl = result.data.redirect_url;
-                } else if (result.redirect) {
-                        redirectUrl = result.redirect;
-                } else if (result.data && result.data.dossier_id) {
-                        redirectUrl = `/operator/dossiers/confirmation/${result.data.dossier_id}`;
-                }
-    
-                if (redirectUrl) {
-                    console.log('🚀 Redirection Phase 2 vers:', redirectUrl);
-        
-                    setTimeout(() => {
-                    window.location.href = redirectUrl;
-                    }, 2000);
-        
-                return;
-                }
+            const data = await response.json();
+            const newToken = data.csrf_token;
+            
+            // Mettre à jour le meta tag
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            if (metaTag) {
+                metaTag.setAttribute('content', newToken);
             }
             
-            if (result.success) {
-                // Succès - même logique de redirection
-                let redirectUrl = null;
-                
-                if (result.data && result.data.redirect_url) {
-                    redirectUrl = result.data.redirect_url;
-                } else if (result.data && result.data.dossier_id) {
-                    redirectUrl = `/operator/dossiers/confirmation/${result.data.dossier_id}`;
-                } else if (result.redirect) {
-                    redirectUrl = result.redirect;
-                } else {
-                    redirectUrl = '/operator/dossiers';
-                }
-                
-                let successMsg = '🎉 Dossier soumis avec succès !';
-                if (OrganisationApp.rapportAnomalies.enabled) {
-                    successMsg += '\n📋 Le rapport d\'anomalies a été transmis automatiquement.';
-                }
-                showNotification(successMsg, 'success', 10000);
-                
-                localStorage.removeItem('pngdi_organisation_draft');
-                
-                setTimeout(() => {
-                    window.location.href = redirectUrl;
-                }, 3000);
-                
-            } else {
-                throw new Error(result.message || 'Erreur lors de la soumission');
+            // Mettre à jour les inputs cachés
+            const tokenInputs = document.querySelectorAll('input[name="_token"]');
+            tokenInputs.forEach(input => {
+                input.value = newToken;
+            });
+            
+            // Mettre à jour Laravel global si disponible
+            if (window.Laravel) {
+                window.Laravel.csrfToken = newToken;
             }
+            
+            console.log('✅ Token CSRF rafraîchi avec succès');
+            return newToken;
         } else {
-            throw new Error(`Erreur HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
     } catch (error) {
-    console.error('❌ Erreur soumission normale:', error);
-    showNotification(`❌ Erreur soumission: ${error.message}`, 'danger');
+        console.error('❌ Erreur lors du rafraîchissement CSRF:', error);
+        return null;
+    }
+}
+
+/**
+ * ✅ FONCTION HELPER : Diagnostic CSRF (améliorée)
+ */
+function diagnoseCsrfIssue() {
+    console.log('🔍 === DIAGNOSTIC CSRF ===');
     
-    // ✅ Réactiver bouton en cas d'erreur
-    const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = 'Soumettre le dossier';
+    const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const inputToken = document.querySelector('input[name="_token"]')?.value;
+    const laravelToken = window.Laravel?.csrfToken;
+    
+    console.log('Meta CSRF:', metaToken ? metaToken.substring(0, 10) + '...' : 'MANQUANT');
+    console.log('Input CSRF:', inputToken ? inputToken.substring(0, 10) + '...' : 'MANQUANT');
+    console.log('Laravel CSRF:', laravelToken ? laravelToken.substring(0, 10) + '...' : 'MANQUANT');
+    
+    // Vérifier les cookies de session
+    const hasSessionCookie = document.cookie.includes('pngdi_session') || document.cookie.includes('laravel_session');
+    const hasXSRFCookie = document.cookie.includes('XSRF-TOKEN');
+    
+    console.log('Cookie session:', hasSessionCookie ? 'PRÉSENT' : 'MANQUANT');
+    console.log('Cookie XSRF:', hasXSRFCookie ? 'PRÉSENT' : 'MANQUANT');
+    
+    // Vérifier si la page est expirée
+    const pageLoadTime = performance.timing.navigationStart;
+    const currentTime = Date.now();
+    const pageAge = Math.floor((currentTime - pageLoadTime) / 1000 / 60); // en minutes
+    
+    console.log('Âge de la page:', pageAge, 'minutes');
+    
+    if (pageAge > 120) { // Plus de 2 heures
+        console.warn('⚠️ Page possiblement expirée (plus de 2h)');
+        return false;
     }
     
-    } finally {
-        showGlobalLoader(false);
+    // Vérifier qu'au moins un token est présent
+    const hasValidToken = (metaToken && metaToken.length >= 10) || 
+                         (inputToken && inputToken.length >= 10) || 
+                         (laravelToken && laravelToken.length >= 10);
+    
+    if (!hasValidToken) {
+        console.error('❌ Aucun token CSRF valide trouvé');
+        return false;
+    }
+    
+    console.log('✅ Diagnostic CSRF: OK');
+    return true;
+}
+
+/**
+ * ✅ WRAPPER PRINCIPAL : Remplace la fonction submitForm existante
+ */
+async function submitFormWithErrorHandling() {
+    try {
+        // Désactiver le bouton de soumission
+        const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Soumission en cours...';
+        }
+        
+        const result = await submitFormNormal();
+        return result;
+        
+    } catch (error) {
+        console.error('❌ Erreur soumission finale:', error);
+        
+        // Réactiver le bouton
+        const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Soumettre le dossier';
+        }
+        
+        // Gestion spécifique des messages d'erreur
+        if (error.message.includes('419') || error.message.includes('CSRF')) {
+            showNotification('❌ Session expirée. Veuillez recharger la page et recommencer.', 'danger', 10000);
+            
+            // Proposer un rechargement automatique après 5 secondes
+            setTimeout(() => {
+                if (confirm('La session a expiré. Voulez-vous recharger la page ?\n\n⚠️ Attention : Les données non sauvegardées seront perdues.')) {
+                    window.location.reload();
+                }
+            }, 5000);
+        } else if (error.message.includes('Timeout')) {
+            showNotification('❌ Timeout de soumission. Essayez de réduire le nombre d\'adhérents ou réessayez plus tard.', 'warning', 8000);
+        } else {
+            showNotification(`❌ Erreur : ${error.message}`, 'danger');
+        }
+        
+        throw error;
     }
 }
 
@@ -5314,20 +7175,61 @@ function setupEventListeners() {
 /**
  * Initialiser l'importation de fichier adhérents
  */
+/**
+ * Initialiser l'importation de fichier adhérents - VERSION CORRIGÉE
+ */
 function initializeAdherentFileImport() {
+    console.log('🔧 Initialisation import fichier adhérents - Version corrigée');
+    
     const fileInput = document.getElementById('adherents_file');
-    if (fileInput) {
-        // Supprimer les anciens event listeners
-        fileInput.removeEventListener('change', handleAdherentFileImport);
-        
-        // Ajouter le nouvel event listener
-        fileInput.addEventListener('change', function() {
-            if (this.files.length > 0) {
-                handleAdherentFileImport(this);
-            }
-        });
-        console.log('✅ Événement importation fichier adhérents configuré');
+    if (!fileInput) {
+        console.warn('⚠️ Input file #adherents_file non trouvé');
+        return;
     }
+    
+    // ✅ NETTOYER les anciens event listeners
+    const newFileInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(newFileInput, fileInput);
+    
+    // ✅ AJOUTER le nouvel event listener avec gestion d'erreurs
+    newFileInput.addEventListener('change', function(event) {
+        console.log('📁 Event change détecté sur input file');
+        
+        try {
+            if (this.files && this.files.length > 0) {
+                const file = this.files[0];
+                console.log(`📄 Fichier sélectionné: ${file.name} (${file.size} bytes)`);
+                
+                // Vérifier si handleAdherentFileImport existe
+                if (typeof handleAdherentFileImport === 'function') {
+                    handleAdherentFileImport(this);
+                } else {
+                    console.error('❌ Fonction handleAdherentFileImport non définie');
+                    showNotification('❌ Erreur: Gestionnaire d\'import non trouvé', 'danger');
+                }
+            } else {
+                console.log('ℹ️ Aucun fichier sélectionné');
+            }
+        } catch (error) {
+            console.error('❌ Erreur dans event listener fichier:', error);
+            showNotification(`❌ Erreur sélection fichier: ${error.message}`, 'danger');
+        }
+    });
+    
+    // ✅ AJOUTER event listener pour bouton de sélection
+   const selectBtn = document.querySelector('button[onclick*="adherents_file"], #select-file-btn, #select-file-btn-manual');
+    if (selectBtn) {
+        selectBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('🖱️ Clic sur bouton sélection fichier');
+            newFileInput.click();
+        });
+        console.log('✅ Bouton sélection fichier configuré');
+    } else {
+        console.warn('⚠️ Bouton sélection fichier non trouvé');
+    }
+    
+    console.log('✅ Événement importation fichier adhérents configuré (VERSION CORRIGÉE)');
 }
 
 /**
@@ -5590,15 +7492,36 @@ function addAdherentWithNipValidation() {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Vérifier que nous sommes sur la bonne page
-    if (document.getElementById('organisationForm')) {
-        initializeApplication();
-        
-        // Vérifier l'intégrité du système d'anomalies
-        verifyAnomaliesSystem();
-        
-        // Configurer les événements spéciaux
-        setupSpecialEventListeners();
+ // Vérifier que nous sommes sur la bonne page
+if (document.getElementById('organisationForm')) {
+initializeApplication();
+// Vérifier l'intégrité du système d'anomalies
+verifyAnomaliesSystem();
+// Configurer les événements spéciaux
+setupSpecialEventListeners();
+
+// ✅ CORRECTION ÉTAPE 7: Préparation adhérents pour Phase 2 (sans chunking backend)
+console.log('🔧 Correction Étape 7: Préparation adhérents pour Phase 2');
+
+// Forcer l'utilisation de la fonction originale handleAdherentFileImport
+// qui prépare les données en session SANS les envoyer au backend
+if (window.handleAdherentFileImport && window.originalHandleAdherentFileImport) {
+    console.log('🔄 Restauration fonction Phase 1: préparation session uniquement');
+    window.handleAdherentFileImport = window.originalHandleAdherentFileImport;
+}
+
+// Désactiver le chunking backend pour Phase 1 (sera utilisé en Phase 2)
+if (typeof window.shouldUseChunking === 'function') {
+    window.originalShouldUseChunking = window.shouldUseChunking;
+    window.shouldUseChunking = function() {
+        console.log('ℹ️ Phase 1: Chunking reporté à Phase 2');
+        return false; // Pas de chunking backend en Phase 1
+    };
+}
+
+console.log('✅ Phase 1 configurée: Upload + Session (Chunking reporté à Phase 2)');
+
+
     }
     
     // Ajouter les styles pour les animations de notifications
@@ -5840,4 +7763,1543 @@ setTimeout(() => {
     
 }, 1000);
 
+
+
+/**
+ * Lecture simple du fichier (SANS CHUNKING)
+ */
+async function readAdherentFileSimple(file) {
+    console.log('📖 Lecture simple du fichier:', file.name);
+    
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const data = e.target.result;
+                let adherentsData = [];
+                
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    // Traitement CSV simple
+                    adherentsData = parseCSVSimple(data);
+                    
+                } else {
+                    // Traitement Excel avec XLSX
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    adherentsData = XLSX.utils.sheet_to_json(worksheet);
+                }
+                
+                console.log(`✅ Fichier lu: ${adherentsData.length} lignes`);
+                resolve(adherentsData);
+                
+            } catch (error) {
+                console.error('❌ Erreur lecture fichier:', error);
+                reject(new Error('Impossible de lire le fichier: ' + error.message));
+            }
+        };
+        
+        reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
+        
+        // Lire selon le type
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            reader.readAsBinaryString(file);
+        }
+    });
+}
+
+/**
+ * Parser CSV simple (sans chunking)
+ */
+function parseCSVSimple(csvText) {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    // Détecter le délimiteur
+    const delimiters = [';', ',', '\t'];
+    const headerLine = lines[0];
+    let delimiter = ';'; // Par défaut
+    
+    for (let del of delimiters) {
+        if (headerLine.includes(del)) {
+            delimiter = del;
+            break;
+        }
+    }
+    
+    // Parser les lignes
+    const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+    const adherentsData = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(delimiter);
+        if (values.length >= headers.length) {
+            const adherent = {};
+            headers.forEach((header, index) => {
+                adherent[header] = values[index] ? values[index].trim() : '';
+            });
+            adherentsData.push(adherent);
+        }
+    }
+    
+    return adherentsData;
+}
+
+/**
+ * Validation pour session (pas d'import base)
+ */
+async function validateAdherentsForSession(adherentsData) {
+    console.log('🔍 Validation pour session (Étape 7)');
+    
+    const validationResult = {
+        total: adherentsData.length,
+        valides: 0,
+        invalides: 0,
+        anomalies_mineures: 0,
+        anomalies_majeures: 0,
+        anomalies_critiques: 0,
+        adherents: [],
+        rapport: {
+            erreurs: [],
+            avertissements: [],
+            infos: []
+        }
+    };
+    
+    // Normaliser les champs
+    const fieldMapping = {
+        'nom': ['nom', 'lastname', 'surname'],
+        'prenom': ['prenom', 'prénom', 'firstname'],
+        'nip': ['nip', 'numero', 'numero_identite'],
+        'telephone': ['telephone', 'téléphone', 'phone'],
+        'email': ['email', 'mail', 'courriel'],
+        'profession': ['profession', 'metier', 'job'],
+        'civilite': ['civilite', 'civilité', 'title']
+    };
+    
+    adherentsData.forEach((adherent, index) => {
+        const lineNumber = index + 2; // +2 car ligne 1 = headers
+        const normalizedAdherent = normalizeAdherentFields(adherent, fieldMapping);
+        
+        // Validation de base
+        const validation = validateSingleAdherent(normalizedAdherent, lineNumber);
+        
+        if (validation.isValid) {
+            validationResult.valides++;
+            normalizedAdherent.lineNumber = lineNumber;
+            validationResult.adherents.push(normalizedAdherent);
+            
+            // Compter les anomalies
+            if (validation.anomalies) {
+                validation.anomalies.forEach(anomalie => {
+                    switch(anomalie.severity) {
+                        case 'critique': validationResult.anomalies_critiques++; break;
+                        case 'majeure': validationResult.anomalies_majeures++; break;
+                        case 'mineure': validationResult.anomalies_mineures++; break;
+                    }
+                });
+            }
+            
+        } else {
+            validationResult.invalides++;
+            validationResult.rapport.erreurs.push({
+                ligne: lineNumber,
+                erreurs: validation.erreurs
+            });
+        }
+    });
+    
+    console.log('✅ Validation terminée:', {
+        total: validationResult.total,
+        valides: validationResult.valides,
+        invalides: validationResult.invalides
+    });
+    
+    return validationResult;
+}
+
+/**
+ * Normaliser les champs d'un adhérent
+ */
+function normalizeAdherentFields(adherent, fieldMapping) {
+    const normalized = {};
+    
+    Object.keys(fieldMapping).forEach(targetField => {
+        const possibleFields = fieldMapping[targetField];
+        
+        for (let field of possibleFields) {
+            if (adherent[field] !== undefined && adherent[field] !== '') {
+                normalized[targetField] = adherent[field];
+                break;
+            }
+        }
+        
+        // Valeur par défaut si rien trouvé
+        if (!normalized[targetField]) {
+            normalized[targetField] = '';
+        }
+    });
+    
+    return normalized;
+}
+
+/**
+ * Validation d'un adhérent unique
+ */
+function validateSingleAdherent(adherent, lineNumber) {
+    const erreurs = [];
+    const anomalies = [];
+    
+    // Validations obligatoires
+    if (!adherent.nom || adherent.nom.length < 2) {
+        erreurs.push('Nom manquant ou trop court');
+    }
+    
+    if (!adherent.prenom || adherent.prenom.length < 2) {
+        erreurs.push('Prénom manquant ou trop court');
+    }
+    
+    // Validation NIP (nouveau format XX-QQQQ-YYYYMMDD)
+    if (!adherent.nip) {
+        erreurs.push('NIP manquant');
+    } else {
+        const nipPattern = /^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/;
+        if (!nipPattern.test(adherent.nip)) {
+            anomalies.push({
+                code: 'nip_format_invalide',
+                severity: 'majeure',
+                message: `Format NIP invalide: ${adherent.nip}`
+            });
+        }
+    }
+    
+    // Validation email
+    if (adherent.email && adherent.email.length > 0) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(adherent.email)) {
+            anomalies.push({
+                code: 'email_invalide',
+                severity: 'mineure',
+                message: `Email invalide: ${adherent.email}`
+            });
+        }
+    }
+    
+    // Validation téléphone
+    if (adherent.telephone && adherent.telephone.length > 0) {
+        const cleanPhone = adherent.telephone.replace(/[^0-9+]/g, '');
+        if (cleanPhone.length < 8) {
+            anomalies.push({
+                code: 'telephone_invalide',
+                severity: 'mineure',
+                message: `Téléphone invalide: ${adherent.telephone}`
+            });
+        }
+    }
+    
+    return {
+        isValid: erreurs.length === 0,
+        erreurs: erreurs,
+        anomalies: anomalies
+    };
+}
+
+/**
+ * Sauvegarder dans OrganisationApp.adherents (PAS EN BASE)
+ */
+/**
+ * Sauvegarder dans OrganisationApp.adherents (PAS EN BASE)
+ */
+async function saveAdherentsToFormData(validationResult) {
+    console.log('💾 Redirection vers nouvelle fonction de session');
+    
+    const preparedData = {
+        adherents: validationResult.adherents,
+        stats: {
+            total: validationResult.total,
+            valides: validationResult.valides,
+            invalides: validationResult.invalides,
+            anomalies_mineures: validationResult.anomalies_mineures,
+            anomalies_majeures: validationResult.anomalies_majeures,
+            anomalies_critiques: validationResult.anomalies_critiques
+        },
+        rapport: validationResult.rapport,
+        timestamp: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+    };
+    
+    // Appeler la nouvelle fonction de session
+    await saveAdherentsToSession(preparedData);
+}
+
+/**
+ * Afficher le rapport d'import session
+ */
+function showImportSessionReport(validationResult) {
+    const reportHTML = `
+        <div class="alert alert-success border-0 mt-3">
+            <h6 class="alert-heading">
+                <i class="fas fa-file-check me-2"></i>
+                Fichier traité avec succès
+            </h6>
+            <div class="row text-center">
+                <div class="col-3">
+                    <div class="h4 text-primary">${validationResult.total}</div>
+                    <small>Total lignes</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-success">${validationResult.valides}</div>
+                    <small>Valides</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-warning">${validationResult.anomalies_mineures + validationResult.anomalies_majeures}</div>
+                    <small>Anomalies</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-danger">${validationResult.invalides}</div>
+                    <small>Erreurs</small>
+                </div>
+            </div>
+            <hr>
+            <p class="mb-0">
+                <i class="fas fa-info-circle text-info me-2"></i>
+                <strong>Les adhérents seront importés en base lors de la soumission finale du formulaire.</strong>
+            </p>
+        </div>
+    `;
+    
+    // Afficher dans la zone des détails d'import
+    const detailsContainer = document.getElementById('import_details');
+    if (detailsContainer) {
+        detailsContainer.innerHTML = reportHTML;
+        detailsContainer.classList.remove('d-none');
+    }
+}
+
+/**
+ * Lecture du fichier avec progress tracking
+ */
+async function readAdherentFileWithProgress(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const data = e.target.result;
+                let adherentsData = [];
+                
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    // Traitement CSV optimisé
+                    adherentsData = parseCSVAdvanced(data);
+                } else {
+                    // Traitement Excel avec XLSX
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    adherentsData = XLSX.utils.sheet_to_json(worksheet);
+                }
+                
+                console.log(`✅ Fichier lu avec succès: ${adherentsData.length} lignes détectées`);
+                resolve(adherentsData);
+                
+            } catch (error) {
+                console.error('❌ Erreur lors de la lecture du fichier:', error);
+                reject(new Error('Impossible de lire le fichier. Vérifiez le format.'));
+            }
+        };
+        
+        reader.onerror = () => reject(new Error('Erreur de lecture du fichier'));
+        
+        // Lire selon le type de fichier
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            reader.readAsBinaryString(file);
+        }
+    });
+}
+
+/**
+ * Parser CSV avancé avec détection automatique de délimiteur
+ */
+function parseCSVAdvanced(csvText) {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    // Détection intelligente du délimiteur
+    const delimiters = [';', ',', '\t', '|'];
+    const headerLine = lines[0];
+    
+    let bestDelimiter = ';';
+    let maxColumns = 0;
+    
+    for (let delimiter of delimiters) {
+        const columns = headerLine.split(delimiter).length;
+        if (columns > maxColumns) {
+            maxColumns = columns;
+            bestDelimiter = delimiter;
+        }
+    }
+    
+    console.log(`📋 Délimiteur détecté: "${bestDelimiter}" (${maxColumns} colonnes)`);
+    
+    // Parser avec le meilleur délimiteur
+    const headers = lines[0].split(bestDelimiter).map(h => h.trim().toLowerCase());
+    const adherentsData = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(bestDelimiter);
+        
+        if (values.length >= headers.length - 1) { // Tolérance pour colonnes manquantes
+            const adherent = {};
+            
+            headers.forEach((header, index) => {
+                adherent[header] = values[index] ? values[index].trim() : '';
+            });
+            
+            // Ne pas ajouter les lignes complètement vides
+            if (Object.values(adherent).some(val => val !== '')) {
+                adherentsData.push(adherent);
+            }
+        }
+    }
+    
+    return adherentsData;
+}
+
+/**
+ * Validation avancée des adhérents avec progress
+ */
+async function validateAdherentsWithProgress(adherentsData) {
+    const validationResult = {
+        total: adherentsData.length,
+        valides: 0,
+        invalides: 0,
+        anomalies_mineures: 0,
+        anomalies_majeures: 0,
+        anomalies_critiques: 0,
+        adherents: [],
+        rapport: {
+            erreurs: [],
+            avertissements: [],
+            infos: []
+        }
+    };
+    
+    // Mapping intelligent des champs
+    const fieldMapping = {
+        'nom': ['nom', 'lastname', 'surname', 'family_name'],
+        'prenom': ['prenom', 'prénom', 'firstname', 'first_name', 'given_name'],
+        'nip': ['nip', 'numero', 'numero_identite', 'id_number'],
+        'telephone': ['telephone', 'téléphone', 'phone', 'mobile', 'cellulaire'],
+        'email': ['email', 'mail', 'courriel', 'e-mail'],
+        'profession': ['profession', 'metier', 'job', 'occupation'],
+        'civilite': ['civilite', 'civilité', 'title', 'mr_mrs']
+    };
+    
+    // Traitement par batch pour éviter le freeze
+    const batchSize = 50;
+    const totalBatches = Math.ceil(adherentsData.length / batchSize);
+    
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * batchSize;
+        const endIndex = Math.min(startIndex + batchSize, adherentsData.length);
+        const batch = adherentsData.slice(startIndex, endIndex);
+        
+        // Traiter chaque adhérent du batch
+        batch.forEach((adherent, index) => {
+            const globalIndex = startIndex + index;
+            const lineNumber = globalIndex + 2; // +2 car ligne 1 = headers
+            
+            const normalizedAdherent = normalizeAdherentFields(adherent, fieldMapping);
+            const validation = validateSingleAdherentAdvanced(normalizedAdherent, lineNumber);
+            
+            if (validation.isValid) {
+                validationResult.valides++;
+                normalizedAdherent.lineNumber = lineNumber;
+                normalizedAdherent.hasAnomalies = validation.anomalies.length > 0;
+                normalizedAdherent.anomalies = validation.anomalies;
+                
+                validationResult.adherents.push(normalizedAdherent);
+                
+                // Compter les anomalies par niveau
+                validation.anomalies.forEach(anomalie => {
+                    switch(anomalie.severity) {
+                        case 'critique': validationResult.anomalies_critiques++; break;
+                        case 'majeure': validationResult.anomalies_majeures++; break;
+                        case 'mineure': validationResult.anomalies_mineures++; break;
+                    }
+                });
+                
+            } else {
+                validationResult.invalides++;
+                validationResult.rapport.erreurs.push({
+                    ligne: lineNumber,
+                    erreurs: validation.erreurs
+                });
+            }
+        });
+        
+        // Mise à jour progress durant la validation
+        const progress = 50 + Math.round((batchIndex + 1) / totalBatches * 20); // 50% à 70%
+        updateUploadProgress(progress, `Validation batch ${batchIndex + 1}/${totalBatches}...`);
+        
+        // Pause pour permettre l'update UI
+        if (batchIndex < totalBatches - 1) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    }
+    
+    console.log('✅ Validation terminée:', {
+        total: validationResult.total,
+        valides: validationResult.valides,
+        invalides: validationResult.invalides,
+        anomalies: validationResult.anomalies_critiques + validationResult.anomalies_majeures + validationResult.anomalies_mineures
+    });
+    
+    return validationResult;
+}
+
+/**
+ * Validation avancée d'un adhérent unique
+ */
+function validateSingleAdherentAdvanced(adherent, lineNumber) {
+    const erreurs = [];
+    const anomalies = [];
+    
+    // Validations obligatoires
+    if (!adherent.nom || adherent.nom.length < 2) {
+        erreurs.push('Nom manquant ou trop court');
+    }
+    
+    if (!adherent.prenom || adherent.prenom.length < 2) {
+        erreurs.push('Prénom manquant ou trop court');
+    }
+    
+    // Validation NIP avancée (format XX-QQQQ-YYYYMMDD)
+    if (!adherent.nip) {
+        erreurs.push('NIP manquant');
+    } else {
+        const nipPattern = /^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/;
+        if (!nipPattern.test(adherent.nip)) {
+            anomalies.push({
+                code: 'nip_format_invalide',
+                severity: 'majeure',
+                message: `Format NIP invalide: ${adherent.nip}`,
+                suggestion: 'Format attendu: XX-QQQQ-YYYYMMDD (ex: A1-2345-19901225)'
+            });
+        } else {
+            // Validation de la date dans le NIP
+            const datePart = adherent.nip.slice(-8);
+            const year = parseInt(datePart.substring(0, 4));
+            const month = parseInt(datePart.substring(4, 6));
+            const day = parseInt(datePart.substring(6, 8));
+            
+            const currentYear = new Date().getFullYear();
+            
+            if (year < 1900 || year > currentYear) {
+                anomalies.push({
+                    code: 'nip_annee_invalide',
+                    severity: 'majeure',
+                    message: `Année de naissance invalide dans NIP: ${year}`
+                });
+            }
+            
+            if (month < 1 || month > 12) {
+                anomalies.push({
+                    code: 'nip_mois_invalide',
+                    severity: 'majeure',
+                    message: `Mois invalide dans NIP: ${month}`
+                });
+            }
+            
+            if (day < 1 || day > 31) {
+                anomalies.push({
+                    code: 'nip_jour_invalide',
+                    severity: 'majeure',
+                    message: `Jour invalide dans NIP: ${day}`
+                });
+            }
+            
+            // Vérifier âge minimum (18 ans)
+            const birthDate = new Date(year, month - 1, day);
+            const age = Math.floor((new Date() - birthDate) / (365.25 * 24 * 60 * 60 * 1000));
+            
+            if (age < 18) {
+                anomalies.push({
+                    code: 'age_mineur',
+                    severity: 'critique',
+                    message: `Personne mineure (${age} ans) - non autorisée`
+                });
+            }
+        }
+    }
+    
+    // Validation email
+    if (adherent.email && adherent.email.length > 0) {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(adherent.email)) {
+            anomalies.push({
+                code: 'email_invalide',
+                severity: 'mineure',
+                message: `Email invalide: ${adherent.email}`
+            });
+        }
+    }
+    
+    // Validation téléphone gabonais
+    if (adherent.telephone && adherent.telephone.length > 0) {
+        const cleanPhone = adherent.telephone.replace(/[^0-9+]/g, '');
+        
+        // Patterns téléphone gabonais
+        const gabonPatterns = [
+            /^(\+241)?[01][0-9]{7}$/, // Fixe: 01XXXXXXX
+            /^(\+241)?[67][0-9]{7}$/  // Mobile: 6XXXXXXXX ou 7XXXXXXXX
+        ];
+        
+        const isValidGabonPhone = gabonPatterns.some(pattern => pattern.test(cleanPhone));
+        
+        if (!isValidGabonPhone) {
+            anomalies.push({
+                code: 'telephone_invalide',
+                severity: 'mineure',
+                message: `Téléphone invalide: ${adherent.telephone}`,
+                suggestion: 'Format attendu: 01XXXXXXX, 6XXXXXXXX ou 7XXXXXXXX'
+            });
+        }
+    }
+    
+    // Validation civilité
+    if (adherent.civilite && !['M', 'Mme', 'Mlle', 'Mr', 'Mrs', 'Ms'].includes(adherent.civilite)) {
+        anomalies.push({
+            code: 'civilite_non_standard',
+            severity: 'mineure',
+            message: `Civilité non standard: ${adherent.civilite}`
+        });
+        
+        // Auto-correction
+        const civiliteNormalized = adherent.civilite.toLowerCase();
+        if (civiliteNormalized.includes('m') && !civiliteNormalized.includes('me')) {
+            adherent.civilite = 'M';
+        } else if (civiliteNormalized.includes('me')) {
+            adherent.civilite = 'Mme';
+        } else if (civiliteNormalized.includes('lle')) {
+            adherent.civilite = 'Mlle';
+        }
+    }
+    
+    return {
+        isValid: erreurs.length === 0,
+        erreurs: erreurs,
+        anomalies: anomalies
+    };
+}
+
+/**
+ * Préparation finale des données pour session
+ */
+async function prepareAdherentsForSession(validationResult) {
+    const preparedData = {
+        adherents: [],
+        stats: {
+            total: validationResult.total,
+            valides: validationResult.valides,
+            invalides: validationResult.invalides,
+            anomalies_mineures: validationResult.anomalies_mineures,
+            anomalies_majeures: validationResult.anomalies_majeures,
+            anomalies_critiques: validationResult.anomalies_critiques
+        },
+        rapport: validationResult.rapport,
+        timestamp: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2h
+    };
+    
+    // Préparer chaque adhérent valide
+    validationResult.adherents.forEach(adherent => {
+        // Générer un NIP temporaire si invalide mais adhérent valide
+        if (adherent.hasAnomalies && adherent.anomalies.some(a => a.code.includes('nip'))) {
+            adherent.nip_original = adherent.nip;
+            adherent.nip = generateTemporaryNIP();
+            adherent.nip_temporaire = true;
+        }
+        
+        preparedData.adherents.push({
+            civilite: adherent.civilite || 'M',
+            nom: adherent.nom,
+            prenom: adherent.prenom,
+            nip: adherent.nip,
+            telephone: adherent.telephone || '',
+            email: adherent.email || '',
+            profession: adherent.profession || '',
+            lineNumber: adherent.lineNumber,
+            hasAnomalies: adherent.hasAnomalies || false,
+            anomalies: adherent.anomalies || [],
+            nip_temporaire: adherent.nip_temporaire || false,
+            nip_original: adherent.nip_original || null
+        });
+    });
+    
+    return preparedData;
+}
+
+/**
+ * Génération d'un NIP temporaire valide
+ */
+function generateTemporaryNIP() {
+    const prefix = 'TMP';
+    const sequence = String(Math.floor(Math.random() * 9999)).padStart(4, '0');
+    const birthYear = '19900101'; // Date neutre
+    
+    return `${prefix}-${sequence}-${birthYear}`;
+}
+
+/**
+ * Sauvegarde en session avec structure optimisée
+ */
+async function saveAdherentsToSession(preparedData) {
+    console.log('💾 Sauvegarde des adhérents dans la session formulaire (Étape 7)');
+    
+    // Vider les adhérents existants dans l'application
+    OrganisationApp.adherents = [];
+    
+    // Ajouter tous les adhérents préparés
+    preparedData.adherents.forEach(adherent => {
+        OrganisationApp.adherents.push(adherent);
+    });
+    
+    // Stocker aussi les métadonnées pour Phase 2
+    OrganisationApp.adherentsMetadata = {
+        stats: preparedData.stats,
+        rapport: preparedData.rapport,
+        timestamp: preparedData.timestamp,
+        expires_at: preparedData.expires_at
+    };
+    
+    console.log(`✅ ${OrganisationApp.adherents.length} adhérents sauvegardés en session`);
+    
+    // Déclencher les mises à jour UI
+    updateAdherentsList();
+    updateFormStats();
+    autoSave();
+}
+
+/**
+ * Interface de progress moderne
+ */
+function showUploadProgress() {
+    const existingModal = document.getElementById('uploadProgressModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modalHTML = `
+        <div class="modal fade" id="uploadProgressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">
+                            <i class="fas fa-file-upload me-2"></i>
+                            Import Fichier Adhérents - Étape 7
+                        </h5>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center mb-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Chargement...</span>
+                            </div>
+                        </div>
+                        
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div id="uploadProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                 role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                <span id="uploadProgressText">0%</span>
+                            </div>
+                        </div>
+                        
+                        <div id="uploadProgressMessage" class="text-center text-muted">
+                            Initialisation...
+                        </div>
+                        
+                        <div id="uploadProgressDetails" class="mt-3 small text-muted">
+                            <!-- Détails supplémentaires -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = new bootstrap.Modal(document.getElementById('uploadProgressModal'));
+    modal.show();
+}
+
+/**
+ * Mise à jour du progress
+ */
+function updateUploadProgress(percentage, message, details = '') {
+    const progressBar = document.getElementById('uploadProgressBar');
+    const progressText = document.getElementById('uploadProgressText');
+    const progressMessage = document.getElementById('uploadProgressMessage');
+    const progressDetails = document.getElementById('uploadProgressDetails');
+    
+    if (progressBar) {
+        progressBar.style.width = percentage + '%';
+        progressBar.setAttribute('aria-valuenow', percentage);
+    }
+    
+    if (progressText) {
+        progressText.textContent = percentage + '%';
+    }
+    
+    if (progressMessage) {
+        progressMessage.textContent = message;
+    }
+    
+    if (progressDetails && details) {
+        progressDetails.innerHTML = details;
+    }
+}
+
+/**
+ * Affichage du succès avec résumé
+ */
+function showUploadSuccess(preparedData) {
+    // Fermer le modal de progress
+    const progressModal = bootstrap.Modal.getInstance(document.getElementById('uploadProgressModal'));
+    if (progressModal) {
+        progressModal.hide();
+    }
+    
+    // Afficher notification de succès
+    const stats = preparedData.stats;
+    let message = `✅ ${stats.valides} adhérents préparés avec succès !`;
+    
+    if (stats.anomalies_mineures + stats.anomalies_majeures + stats.anomalies_critiques > 0) {
+        message += ` (${stats.anomalies_mineures + stats.anomalies_majeures + stats.anomalies_critiques} anomalies détectées)`;
+    }
+    
+    showNotification(message, 'success', 6000);
+    
+    // Afficher rapport détaillé dans l'interface
+    showDetailedReport(preparedData);
+}
+
+/**
+ * Affichage des erreurs
+ */
+function showUploadError(errorMessage) {
+    // Fermer le modal de progress
+    const progressModal = bootstrap.Modal.getInstance(document.getElementById('uploadProgressModal'));
+    if (progressModal) {
+        progressModal.hide();
+    }
+    
+    showNotification('❌ Erreur lors de l\'import: ' + errorMessage, 'danger', 8000);
+}
+
+/**
+ * Affichage du rapport détaillé
+ */
+function showDetailedReport(preparedData) {
+    const detailsContainer = document.getElementById('import_details');
+    if (!detailsContainer) return;
+    
+    const stats = preparedData.stats;
+    
+    const reportHTML = `
+        <div class="alert alert-success border-0 mt-3 fade-in">
+            <h6 class="alert-heading">
+                <i class="fas fa-file-check me-2"></i>
+                Fichier traité avec succès - Version 2.0
+            </h6>
+            
+            <div class="row text-center mb-3">
+                <div class="col-3">
+                    <div class="h4 text-primary">${stats.total}</div>
+                    <small>Total lignes</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-success">${stats.valides}</div>
+                    <small>Valides</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-warning">${stats.anomalies_mineures + stats.anomalies_majeures}</div>
+                    <small>Anomalies</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-danger">${stats.invalides}</div>
+                    <small>Rejetés</small>
+                </div>
+            </div>
+            
+            ${stats.anomalies_critiques > 0 ? `
+                <div class="alert alert-warning">
+                    <strong>⚠️ ${stats.anomalies_critiques} anomalies critiques détectées</strong><br>
+                    Ces adhérents seront marqués pour révision mais seront inclus dans l'import.
+                </div>
+            ` : ''}
+            
+            <hr>
+            
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <i class="fas fa-info-circle text-info me-2"></i>
+                    <strong>Les adhérents sont préparés pour l'importation finale en Phase 2.</strong>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleDetailedStats()">
+                    <i class="fas fa-chart-bar me-1"></i>Voir détails
+                </button>
+            </div>
+            
+            <div id="detailedStats" class="mt-3 d-none">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Types d'anomalies:</h6>
+                        <small class="text-danger">Critiques: ${stats.anomalies_critiques}</small><br>
+                        <small class="text-warning">Majeures: ${stats.anomalies_majeures}</small><br>
+                        <small class="text-info">Mineures: ${stats.anomalies_mineures}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Prochaines étapes:</h6>
+                        <small>✅ Données en session (2h)</small><br>
+                        <small>⏳ Soumission → Phase 2</small><br>
+                        <small>🚀 Import final en base</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    detailsContainer.innerHTML = reportHTML;
+    detailsContainer.classList.remove('d-none');
+}
+
+/**
+ * Toggle des statistiques détaillées
+ */
+function toggleDetailedStats() {
+    const detailedStats = document.getElementById('detailedStats');
+    if (detailedStats) {
+        detailedStats.classList.toggle('d-none');
+    }
+}
+
+/**
+ * ========================================================================
+ * CORRECTION VARIABLES SESSION - COMPATIBILITÉ ÉTAPE 7 ↔ CONFIRMATION
+ * Assurer la correspondance exacte entre Étape 7 et confirmation.blade.php
+ * ========================================================================
+ */
+
+/**
+ * ⚠️ CORRECTION MAJEURE : saveAdherentsToSession()
+ * Assurer la compatibilité avec confirmation.blade.php
+ */
+async function saveAdherentsToSession(preparedData) {
+    console.log('💾 Sauvegarde des adhérents en session avec compatibilité Phase 2');
+    
+    // ✅ NOUVEAU: Récupérer l'ID du dossier pour la session Phase 2
+    const dossierId = getCurrentDossierId();
+    
+    if (!dossierId) {
+        console.warn('⚠️ Impossible de déterminer l\'ID du dossier - utilisation session locale');
+        
+        // Fallback: utiliser OrganisationApp pour la session locale
+        OrganisationApp.adherents = [];
+        preparedData.adherents.forEach(adherent => {
+            OrganisationApp.adherents.push(adherent);
+        });
+        
+        OrganisationApp.adherentsMetadata = {
+            stats: preparedData.stats,
+            rapport: preparedData.rapport,
+            timestamp: preparedData.timestamp,
+            expires_at: preparedData.expires_at
+        };
+        
+        console.log(`✅ ${OrganisationApp.adherents.length} adhérents sauvegardés localement`);
+        return;
+    }
+    
+    // ✅ CORRECT: Utiliser le format attendu par confirmation.blade.php
+    const sessionKey = `phase2_adherents_${dossierId}`;
+    const expirationKey = `phase2_expires_${dossierId}`;
+    
+    // Structure exacte attendue par confirmation.blade.php
+    const sessionData = {
+        data: preparedData.adherents,  // Array des adhérents
+        total: preparedData.adherents.length,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2h
+        user_id: getCurrentUserId(),
+        dossier_id: dossierId,
+        metadata: {
+            stats: preparedData.stats,
+            rapport: preparedData.rapport,
+            source: 'etape7_upload',
+            version: '2.0'
+        }
+    };
+    
+    try {
+        // ✅ Sauvegarder en session serveur via AJAX
+        const response = await fetch('/operator/organisations/save-session-adherents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': getCSRFToken(),
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                session_key: sessionKey,
+                expiration_key: expirationKey,
+                data: sessionData,
+                dossier_id: dossierId
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('✅ Session serveur sauvegardée:', result);
+        } else {
+            throw new Error('Erreur sauvegarde session serveur');
+        }
+        
+    } catch (error) {
+        console.warn('⚠️ Fallback: sauvegarde session côté client', error);
+        
+        // Fallback: simulation session côté client
+        if (typeof Storage !== 'undefined') {
+            sessionStorage.setItem(sessionKey, JSON.stringify(sessionData));
+            sessionStorage.setItem(expirationKey, sessionData.expires_at);
+        }
+    }
+    
+    // ✅ TOUJOURS: Mettre à jour OrganisationApp pour compatibilité locale
+    OrganisationApp.adherents = [];
+    preparedData.adherents.forEach(adherent => {
+        OrganisationApp.adherents.push(adherent);
+    });
+    
+    OrganisationApp.adherentsMetadata = sessionData.metadata;
+    OrganisationApp.sessionInfo = {
+        sessionKey: sessionKey,
+        expirationKey: expirationKey,
+        dossierId: dossierId,
+        expiresAt: sessionData.expires_at
+    };
+    
+    console.log(`✅ ${OrganisationApp.adherents.length} adhérents sauvegardés (session + local)`);
+    console.log(`🔑 Session key: ${sessionKey}`);
+    console.log(`⏰ Expiration: ${sessionData.expires_at}`);
+    
+    // Déclencher les mises à jour UI
+    updateAdherentsList();
+    updateFormStats();
+    autoSave();
+    
+    // ✅ NOTIFICATION: Informer l'utilisateur de la session active
+    showSessionSaveNotification(preparedData.adherents.length, sessionData.expires_at);
+}
+
+/**
+ * Obtenir l'ID du dossier actuel
+ */
+function getCurrentDossierId() {
+    // Méthode 1: Depuis l'URL (si on est déjà sur une page de dossier)
+    const urlMatch = window.location.pathname.match(/\/dossiers\/(\d+)/);
+    if (urlMatch) {
+        return parseInt(urlMatch[1]);
+    }
+    
+    // Méthode 2: Depuis OrganisationApp (si défini)
+    if (window.OrganisationApp && window.OrganisationApp.dossierId) {
+        return window.OrganisationApp.dossierId;
+    }
+    
+    // Méthode 3: Depuis meta tag (à ajouter dans create.blade.php)
+    const metaTag = document.querySelector('meta[name="dossier-id"]');
+    if (metaTag) {
+        return parseInt(metaTag.getAttribute('content'));
+    }
+    
+    // Méthode 4: Depuis un champ caché du formulaire
+    const hiddenField = document.getElementById('current_dossier_id');
+    if (hiddenField) {
+        return parseInt(hiddenField.value);
+    }
+    
+    console.warn('⚠️ Impossible de déterminer l\'ID du dossier');
+    return null;
+}
+
+/**
+ * Obtenir l'ID utilisateur actuel
+ */
+function getCurrentUserId() {
+    // Méthode 1: Depuis meta tag Laravel
+    const metaTag = document.querySelector('meta[name="user-id"]');
+    if (metaTag) {
+        return parseInt(metaTag.getAttribute('content'));
+    }
+    
+    // Méthode 2: Depuis une variable globale
+    if (window.currentUserId) {
+        return window.currentUserId;
+    }
+    
+    return null;
+}
+
+/**
+ * Obtenir le token CSRF
+ */
+function getCSRFToken() {
+    // Méthode 1: Depuis meta tag Laravel
+    const metaTag = document.querySelector('meta[name="csrf-token"]');
+    if (metaTag) {
+        return metaTag.getAttribute('content');
+    }
+    
+    // Méthode 2: Depuis un champ caché
+    const hiddenField = document.querySelector('input[name="_token"]');
+    if (hiddenField) {
+        return hiddenField.value;
+    }
+    
+    return null;
+}
+
+/**
+ * Notification de sauvegarde session
+ */
+function showSessionSaveNotification(adherentsCount, expiresAt) {
+    const expirationTime = new Date(expiresAt);
+    const expirationFormatted = expirationTime.toLocaleString('fr-FR');
+    
+    const notificationHTML = `
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-save fa-2x me-3 text-success"></i>
+                <div>
+                    <h6 class="mb-1">
+                        <i class="fas fa-check-circle me-1"></i>
+                        Session préparée pour Phase 2
+                    </h6>
+                    <p class="mb-1">
+                        <strong>${adherentsCount} adhérents</strong> sauvegardés en session sécurisée.
+                        <br>
+                        <small class="text-muted">
+                            <i class="fas fa-clock me-1"></i>
+                            Session expire le ${expirationFormatted}
+                        </small>
+                    </p>
+                    <p class="mb-0">
+                        <small class="text-success">
+                            <i class="fas fa-arrow-right me-1"></i>
+                            Les données seront automatiquement récupérées lors de la soumission finale.
+                        </small>
+                    </p>
+                </div>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Afficher dans la zone de détails
+    const detailsContainer = document.getElementById('import_details');
+    if (detailsContainer) {
+        detailsContainer.innerHTML = notificationHTML + detailsContainer.innerHTML;
+        detailsContainer.classList.remove('d-none');
+    }
+}
+
+/**
+ * ✅ NOUVEAU: Vérifier la session avant soumission
+ */
+function checkSessionBeforeSubmit() {
+    const sessionInfo = OrganisationApp.sessionInfo;
+    
+    if (!sessionInfo) {
+        console.log('ℹ️ Aucune session adhérents active');
+        return { valid: true, adherentsCount: 0 };
+    }
+    
+    const now = new Date();
+    const expiresAt = new Date(sessionInfo.expiresAt);
+    
+    if (now > expiresAt) {
+        console.warn('⚠️ Session adhérents expirée');
+        showNotification('⚠️ Session des adhérents expirée. Veuillez réimporter le fichier.', 'warning', 8000);
+        return { valid: false, reason: 'expired' };
+    }
+    
+    const adherentsCount = OrganisationApp.adherents.length;
+    console.log(`✅ Session active: ${adherentsCount} adhérents, expire le ${expiresAt.toLocaleString()}`);
+    
+    return { 
+        valid: true, 
+        adherentsCount: adherentsCount,
+        sessionKey: sessionInfo.sessionKey,
+        expiresAt: sessionInfo.expiresAt
+    };
+}
+
+/**
+ * ✅ INTÉGRATION: Modifier submitForm() pour inclure info session
+ */
+function enhanceSubmitFormWithSession() {
+    // Chercher la fonction submitForm existante et l'améliorer
+    if (typeof window.submitForm === 'function') {
+        const originalSubmitForm = window.submitForm;
+        
+        window.submitForm = function() {
+            // Vérifier session avant soumission
+            const sessionCheck = checkSessionBeforeSubmit();
+            
+            if (!sessionCheck.valid) {
+                if (sessionCheck.reason === 'expired') {
+                    // Proposer de réimporter
+                    if (confirm('La session des adhérents a expiré. Voulez-vous retourner à l\'étape 7 pour réimporter ?')) {
+                        goToStep(7);
+                    }
+                }
+                return false;
+            }
+            
+            // Ajouter les infos de session au formulaire
+            if (sessionCheck.adherentsCount > 0) {
+                const formData = new FormData();
+                formData.append('has_session_adherents', 'true');
+                formData.append('session_adherents_count', sessionCheck.adherentsCount);
+                formData.append('session_key', sessionCheck.sessionKey);
+                formData.append('session_expires_at', sessionCheck.expiresAt);
+                
+                // Informer l'utilisateur
+                showNotification(
+                    `🚀 Soumission avec ${sessionCheck.adherentsCount} adhérents préparés en session`,
+                    'info',
+                    4000
+                );
+            }
+            
+            // Appeler la fonction originale
+            return originalSubmitForm.call(this);
+        };
+        
+        console.log('✅ submitForm() améliorée avec gestion session');
+    }
+}
+
+/**
+ * ✅ INITIALISATION: Auto-setup au chargement
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    // Attendre que les autres scripts soient chargés
+    setTimeout(() => {
+        enhanceSubmitFormWithSession();
+        
+        // Vérifier s'il y a déjà une session active
+        const dossierId = getCurrentDossierId();
+        if (dossierId) {
+            checkExistingSession(dossierId);
+        }
+    }, 1000);
+});
+
+/**
+ * Vérifier session existante au chargement
+ */
+async function checkExistingSession(dossierId) {
+    const sessionKey = `phase2_adherents_${dossierId}`;
+    
+    try {
+        // Vérifier côté serveur d'abord
+        const response = await fetch('/operator/organisations/check-session-adherents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': getCSRFToken(),
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                session_key: sessionKey,
+                dossier_id: dossierId
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            if (result.exists && result.data) {
+                console.log('✅ Session existante détectée:', result.data.total, 'adhérents');
+                
+                // Restaurer dans OrganisationApp
+                OrganisationApp.adherents = result.data.data || [];
+                OrganisationApp.adherentsMetadata = result.data.metadata || {};
+                OrganisationApp.sessionInfo = {
+                    sessionKey: sessionKey,
+                    dossierId: dossierId,
+                    expiresAt: result.data.expires_at
+                };
+                
+                // Mettre à jour l'interface
+                updateAdherentsList();
+                
+                // Notification
+                showNotification(
+                    `🔄 Session récupérée: ${result.data.total} adhérents préparés`,
+                    'info',
+                    4000
+                );
+            }
+        }
+    } catch (error) {
+        console.log('ℹ️ Pas de session serveur active:', error.message);
+        
+        // Fallback: vérifier sessionStorage
+        if (typeof Storage !== 'undefined') {
+            const localSessionData = sessionStorage.getItem(sessionKey);
+            if (localSessionData) {
+                try {
+                    const parsedData = JSON.parse(localSessionData);
+                    const expiresAt = new Date(parsedData.expires_at);
+                    
+                    if (new Date() < expiresAt) {
+                        console.log('✅ Session locale récupérée');
+                        OrganisationApp.adherents = parsedData.data || [];
+                        updateAdherentsList();
+                    } else {
+                        sessionStorage.removeItem(sessionKey);
+                        console.log('🧹 Session locale expirée supprimée');
+                    }
+                } catch (e) {
+                    sessionStorage.removeItem(sessionKey);
+                }
+            }
+        }
+    }
+}
+
+// ========================================
+// ✅ INTÉGRATION WRAPPER SOUMISSION CSRF
+// À ajouter à la fin de organisation-create.js
+// ========================================
+
+/**
+ * ✅ WRAPPER PRINCIPAL : Remplace la fonction submitForm existante
+ * Intégration automatique avec gestion CSRF
+ */
+ async function submitFormWithErrorHandling() {
+    try {
+        // Désactiver le bouton de soumission
+        const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Soumission en cours...';
+        }
+        
+        const result = await submitFormNormal();
+        return result;
+        
+    } catch (error) {
+        console.error('❌ Erreur soumission finale:', error);
+        
+        // Réactiver le bouton
+        const submitBtn = document.querySelector('button[type="submit"], .btn-submit, #submitBtn');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Soumettre le dossier';
+        }
+        
+        // Gestion spécifique des messages d'erreur
+        if (error.message.includes('419') || error.message.includes('CSRF')) {
+            showNotification('❌ Session expirée. Veuillez recharger la page et recommencer.', 'danger', 10000);
+            
+            // Proposer un rechargement automatique après 5 secondes
+            setTimeout(() => {
+                if (confirm('La session a expiré. Voulez-vous recharger la page ?\n\n⚠️ Attention : Les données non sauvegardées seront perdues.')) {
+                    window.location.reload();
+                }
+            }, 5000);
+        } else if (error.message.includes('Timeout')) {
+            showNotification('❌ Timeout de soumission. Essayez de réduire le nombre d\'adhérents ou réessayez plus tard.', 'warning', 8000);
+        } else {
+            showNotification(`❌ Erreur : ${error.message}`, 'danger');
+        }
+        
+        throw error;
+    }
+}
+
+/**
+ * ✅ INTÉGRATION AUTOMATIQUE : Remplacer submitForm existante
+ * Cette section s'exécute automatiquement au chargement
+ */
+(function() {
+    console.log('🔧 Initialisation wrapper CSRF...');
+    
+    // Attendre que toutes les fonctions soient chargées
+    setTimeout(function() {
+        // Sauvegarder la fonction originale si elle existe
+        if (typeof window.submitForm === 'function') {
+            window.originalSubmitForm = window.submitForm;
+            console.log('📄 Fonction submitForm originale sauvegardée');
+        }
+        
+        // Remplacer par la version améliorée
+        window.submitForm = submitFormWithErrorHandling;
+        console.log('✅ Fonction submitForm remplacée par la version avec gestion CSRF');
+        
+        // Vérifier que submitFormNormal existe
+        if (typeof submitFormNormal !== 'function') {
+            console.error('❌ Fonction submitFormNormal non trouvée - vérifiez l\'intégration');
+        } else {
+            console.log('✅ Fonction submitFormNormal détectée');
+        }
+        
+        // Intégrer également dans les gestionnaires d'événements
+        const form = document.getElementById('organisationForm');
+        if (form) {
+            // Rechercher les gestionnaires existants et les remplacer
+            const existingListeners = form.cloneNode(true);
+            form.parentNode.replaceChild(existingListeners, form);
+            
+            // Ajouter le nouveau gestionnaire
+            existingListeners.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                console.log('📝 Soumission formulaire interceptée par wrapper CSRF');
+                await submitFormWithErrorHandling();
+            });
+            
+            console.log('✅ Gestionnaire de soumission intégré');
+        }
+        
+    }, 1000); // Attendre 1 seconde pour que tout soit chargé
+})();
+
+/**
+ * ✅ FONCTIONS HELPER POUR LE WRAPPER
+ */
+
+// Fonction de récupération robuste du token CSRF
+async function getCurrentCSRFToken() {
+    // Méthode 1: Depuis meta tag Laravel
+    let csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    
+    // Méthode 2: Fallback depuis input caché
+    if (!csrfToken) {
+        csrfToken = document.querySelector('input[name="_token"]')?.value;
+    }
+    
+    // Méthode 3: Fallback depuis window.Laravel
+    if (!csrfToken && window.Laravel && window.Laravel.csrfToken) {
+        csrfToken = window.Laravel.csrfToken;
+    }
+    
+    // Méthode 4: Dernier recours - récupérer depuis le serveur
+    if (!csrfToken || csrfToken.length < 10) {
+        console.log('🔄 Token CSRF invalide ou manquant, récupération depuis serveur...');
+        csrfToken = await refreshCSRFToken();
+    }
+    
+    return csrfToken;
+}
+
+// Fonction de rafraîchissement du token CSRF
+async function refreshCSRFToken() {
+    console.log('🔄 Tentative de rafraîchissement du token CSRF...');
+    
+    try {
+        const response = await fetch('/csrf-token', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const newToken = data.csrf_token;
+            
+            // Mettre à jour le meta tag
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            if (metaTag) {
+                metaTag.setAttribute('content', newToken);
+            }
+            
+            // Mettre à jour les inputs cachés
+            const tokenInputs = document.querySelectorAll('input[name="_token"]');
+            tokenInputs.forEach(input => {
+                input.value = newToken;
+            });
+            
+            // Mettre à jour Laravel global si disponible
+            if (window.Laravel) {
+                window.Laravel.csrfToken = newToken;
+            }
+            
+            console.log('✅ Token CSRF rafraîchi avec succès');
+            return newToken;
+        } else {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+    } catch (error) {
+        console.error('❌ Erreur lors du rafraîchissement CSRF:', error);
+        return null;
+    }
+}
+
+// Fonction de diagnostic CSRF améliorée
+function diagnoseCsrfIssue() {
+    console.log('🔍 === DIAGNOSTIC CSRF ===');
+    
+    const metaToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const inputToken = document.querySelector('input[name="_token"]')?.value;
+    const laravelToken = window.Laravel?.csrfToken;
+    
+    console.log('Meta CSRF:', metaToken ? metaToken.substring(0, 10) + '...' : 'MANQUANT');
+    console.log('Input CSRF:', inputToken ? inputToken.substring(0, 10) + '...' : 'MANQUANT');
+    console.log('Laravel CSRF:', laravelToken ? laravelToken.substring(0, 10) + '...' : 'MANQUANT');
+    
+    // Vérifier les cookies de session
+    const hasSessionCookie = document.cookie.includes('pngdi_session') || document.cookie.includes('laravel_session');
+    const hasXSRFCookie = document.cookie.includes('XSRF-TOKEN');
+    
+    console.log('Cookie session:', hasSessionCookie ? 'PRÉSENT' : 'MANQUANT');
+    console.log('Cookie XSRF:', hasXSRFCookie ? 'PRÉSENT' : 'MANQUANT');
+    
+    // Vérifier si la page est expirée
+    const pageLoadTime = performance.timing.navigationStart;
+    const currentTime = Date.now();
+    const pageAge = Math.floor((currentTime - pageLoadTime) / 1000 / 60); // en minutes
+    
+    console.log('Âge de la page:', pageAge, 'minutes');
+    
+    if (pageAge > 120) { // Plus de 2 heures
+        console.warn('⚠️ Page possiblement expirée (plus de 2h)');
+        return false;
+    }
+    
+    // Vérifier qu'au moins un token est présent
+    const hasValidToken = (metaToken && metaToken.length >= 10) || 
+                         (inputToken && inputToken.length >= 10) || 
+                         (laravelToken && laravelToken.length >= 10);
+    
+    if (!hasValidToken) {
+        console.error('❌ Aucun token CSRF valide trouvé');
+        return false;
+    }
+    
+    console.log('✅ Diagnostic CSRF: OK');
+    return true;
+}
+
+console.log('✅ Wrapper soumission CSRF chargé et prêt');
 // Fin du fichier JavaScript complet

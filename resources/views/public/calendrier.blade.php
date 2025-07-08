@@ -11,7 +11,7 @@
                 <h1 class="page-title">Calendrier des événements</h1>
                 <p class="page-subtitle">
                     Consultez les dates importantes, formations et échéances 
-                    pour ne rien manquer de l'actualité du PNGDI.
+                    pour ne rien manquer de l'actualité du SGLP.
                 </p>
             </div>
             <div class="col-lg-4 text-lg-end">

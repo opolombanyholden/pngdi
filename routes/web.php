@@ -262,7 +262,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 | Routes Operator - CORRECTION APPLIQUÉE POUR MIDDLEWARE dossier.lock
 |--------------------------------------------------------------------------
 */
-Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'operator'])->group(function () {
+Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verified', 'operator'])->group(function () {
     
 // ✅ NOUVELLES ROUTES CHUNKING - À AJOUTER ICI
     Route::prefix('chunking')->name('chunking.')->group(function() {
@@ -321,9 +321,33 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
     Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
     Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
 
+    // ✅ NOUVELLES ROUTES SESSION ADHÉRENTS ÉTAPE 7
+    Route::post('/save-session-adherents', [OrganisationController::class, 'saveSessionAdherents'])
+        ->name('save-session-adherents');
     
+    Route::post('/check-session-adherents', [OrganisationController::class, 'checkSessionAdherents'])
+        ->name('check-session-adherents');
+    
+    Route::post('/clear-session-adherents', [OrganisationController::class, 'clearSessionAdherents'])
+        ->name('clear-session-adherents');
+    
+    // ✅ NOUVELLES ROUTES - LOTS SUPPLÉMENTAIRES ET SOUMISSION FINALE
+    Route::post('/{dossier}/upload-additional-batch', [OrganisationController::class, 'uploadAdditionalBatch'])
+        ->name('upload-additional-batch')
+        ->middleware(['throttle:10,1']); // Limiter à 10 uploads par minute
+    
+    Route::get('/{dossier}/adherents-statistics', [OrganisationController::class, 'getAdherentsStatisticsRealTime'])
+        ->name('adherents-statistics')
+        ->middleware(['throttle:60,1']); // Limiter à 60 requêtes par minute
+    
+    Route::post('/{dossier}/submit-to-administration', [OrganisationController::class, 'submitToAdministration'])
+        ->name('submit-to-administration')
+        ->middleware(['throttle:5,1']); // Limiter à 5 soumissions par minute (sécurité)
+    
+    Route::post('/organisations/store-phase1', [OrganisationController::class, 'storePhase1'])->name('organisations.store-phase1');
+
 });
-    
+ 
     // ========================================
     // 🔧 CORRECTION MAJEURE : GESTION DES DOSSIERS
     // ========================================
@@ -335,17 +359,22 @@ Route::prefix('operator')->name('operator.')->middleware(['auth', 'verified', 'o
             ->name('confirmation')
             ->middleware(['throttle:60,1']); // Protection contre les abus seulement
         
+        // ✅ NOUVELLE ROUTE - CONFIRMATION DÉFINITIVE APRÈS SOUMISSION
+        Route::get('/final-confirmation/{dossier}', [OrganisationController::class, 'finalConfirmation'])
+        ->name('final-confirmation')
+        ->middleware(['throttle:60,1']); // Protection contre les abus
+
         // ✅ NOUVELLES ROUTES WORKFLOW 2 PHASES - PHASE 2
-    Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])
+        Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])
         ->name('adherents-import');
         
-    Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])
+        Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])
         ->name('store-adherents');
         
-    Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
+        Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
         ->name('process-session-adherents');
         
-    Route::get('/{dossier}/phase2-status', function($dossierId) {
+        Route::get('/{dossier}/phase2-status', function($dossierId) {
         $sessionKey = 'phase2_adherents_' . $dossierId;
         $expirationKey = 'phase2_expires_' . $dossierId;
         
@@ -1552,3 +1581,79 @@ Route::get('/csrf-token', function () {
         'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString()
     ]);
 })->middleware('auth');
+
+Route::post('/diagnostic-form-data', function(\Illuminate\Http\Request $request) {
+    \Log::info('🔍 DIAGNOSTIC ROUTE ATTEINTE', [
+        'method' => $request->method(),
+        'ip' => $request->ip(),
+        'session_id' => session()->getId()
+    ]);
+    
+    $csrfDiagnostic = [
+        'meta_token' => $request->header('X-CSRF-TOKEN'),
+        'input_token' => $request->input('_token'),
+        'session_token' => session()->token(),
+        'tokens_match' => session()->token() === $request->input('_token')
+    ];
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Diagnostic sans CSRF réussi',
+        'csrf_diagnostic' => $csrfDiagnostic,
+        'form_data' => $request->all()
+    ]);
+}); // ✅ AUCUN MIDDLEWARE
+
+Route::post('/diagnostic-with-csrf', function(\Illuminate\Http\Request $request) {
+    \Log::info('🔐 DIAGNOSTIC AVEC CSRF ATTEINTE !', [
+        'method' => $request->method(),
+        'session_id' => session()->getId(),
+        'csrf_input' => $request->input('_token'),
+        'csrf_session' => session()->token(),
+        'csrf_match' => session()->token() === $request->input('_token')
+    ]);
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Route avec CSRF réussie !',
+        'csrf_diagnostic' => [
+            'tokens_match' => session()->token() === $request->input('_token')
+        ]
+    ]);
+})->middleware(['web']); // ← AVEC middleware CSRF
+
+
+Route::post('/debug-validation-data', function(\Illuminate\Http\Request $request) {
+    \Log::info('🔍 DEBUG VALIDATION', [
+        'total_fields' => count($request->all()),
+        'all_data' => $request->all()
+    ]);
+    
+    // Test validation simple
+    $rules = [
+        'type' => 'required|string',
+        'type_organisation' => 'required|string',
+        'nom_organisation' => 'required|string|min:3',
+        'fondateurs' => 'required|array|min:1',
+    ];
+    
+    try {
+        $validated = $request->validate($rules);
+        return response()->json([
+            'success' => true,
+            'message' => 'Validation réussie !',
+            'validated_fields' => array_keys($validated)
+        ]);
+        
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'success' => false,
+            'errors' => $e->errors(),
+            'received_fields' => array_keys($request->all())
+        ], 422);
+    }
+});
+
+Route::any('/test-simple', function() {
+    return response()->json(['success' => true, 'message' => 'Route simple OK']);
+});

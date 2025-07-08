@@ -1,0 +1,1112 @@
+/* ========================================================================
+   CONFIRMATION.CSS - STYLES GABONAIS OPTIMISÉS POUR CONFIRMATION.BLADE.PHP
+   Version: 1.0 - Design gabonais moderne avec couleurs officielles
+   ======================================================================== */
+
+/* ========================================
+   1. VARIABLES CSS GABONAISES
+   ======================================== */
+:root {
+    /* Couleurs officielles du Gabon */
+    --gabon-green: #009e3f;
+    --gabon-green-light: #00b347;
+    --gabon-green-dark: #006d2c;
+    --gabon-yellow: #ffcd00;
+    --gabon-yellow-light: #ffd700;
+    --gabon-yellow-dark: #b8930b;
+    --gabon-blue: #003f7f;
+    --gabon-blue-light: #0056b3;
+    --gabon-blue-dark: #002855;
+    --gabon-red: #8b1538;
+    --gabon-red-light: #c41e3a;
+    
+    /* Gradients thématiques */
+    --primary-gradient: linear-gradient(135deg, var(--gabon-green) 0%, var(--gabon-green-light) 100%);
+    --warning-gradient: linear-gradient(135deg, var(--gabon-yellow) 0%, #fd7e14 100%);
+    --info-gradient: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+    --secondary-gradient: linear-gradient(135deg, var(--gabon-blue) 0%, var(--gabon-blue-light) 100%);
+    --danger-gradient: linear-gradient(135deg, var(--gabon-red) 0%, var(--gabon-red-light) 100%);
+    
+    /* Design system */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+    --border-radius: 12px;
+    --border-radius-lg: 16px;
+    --transition: 0.3s ease;
+    --transition-fast: 0.2s ease;
+}
+
+/* ========================================
+   2. LAYOUT ET SECTIONS PRINCIPALES
+   ======================================== */
+
+/* Cards modernes gabonaises */
+.section-card {
+    border: none !important;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition);
+    overflow: hidden;
+}
+
+.section-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+/* Headers de cards avec couleurs gabonaises */
+.header-success {
+    background: var(--primary-gradient);
+    color: white;
+}
+
+.card-header-phase2 {
+    background: var(--warning-gradient);
+    color: white;
+}
+
+.card-header-upload {
+    background: var(--secondary-gradient);
+    color: white;
+}
+
+.card-header-success {
+    background: var(--primary-gradient);
+    color: white;
+}
+
+.card-header-modes {
+    background: var(--secondary-gradient);
+    color: white;
+}
+
+.card-header-info {
+    background: var(--info-gradient);
+    color: white;
+}
+
+/* ========================================
+   3. STATISTICS CARDS GABONAISES
+   ======================================== */
+
+.stats-card {
+    transition: transform var(--transition), box-shadow var(--transition);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    position: relative;
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg) !important;
+}
+
+.stats-card-green {
+    background: var(--primary-gradient);
+}
+
+.stats-card-yellow {
+    background: var(--warning-gradient);
+}
+
+.stats-card-blue {
+    background: var(--secondary-gradient);
+}
+
+.stats-card-red {
+    background: var(--danger-gradient);
+}
+
+.icon-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+}
+
+.icon-circle-dark {
+    background: rgba(0,0,0,0.1);
+}
+
+.progress-small {
+    height: 4px;
+    background-color: rgba(255,255,255,0.1);
+}
+
+/* ========================================
+   4. PROGRESS BARS MODERNES
+   ======================================== */
+
+.progress {
+    border-radius: 10px;
+    background-color: rgba(255,255,255,0.1);
+    overflow: hidden;
+}
+
+.progress-main {
+    height: 20px;
+    border-radius: 10px;
+}
+
+.progress-import {
+    height: 25px;
+    border-radius: 15px;
+}
+
+.progress-bar {
+    border-radius: 10px;
+    transition: width var(--transition);
+}
+
+.progress-bar-success {
+    background: var(--primary-gradient) !important;
+}
+
+.progress-bar-warning {
+    background: var(--warning-gradient) !important;
+}
+
+.progress-bar-info {
+    background: var(--info-gradient) !important;
+}
+
+.progress-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+/* ========================================
+   5. BOUTONS GABONAIS PERSONNALISÉS
+   ======================================== */
+
+.btn-success-custom {
+    background: var(--primary-gradient);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-fast);
+}
+
+.btn-success-custom:hover {
+    background: linear-gradient(135deg, var(--gabon-green-dark) 0%, var(--gabon-green) 100%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: white;
+}
+
+.btn-warning-custom {
+    background: var(--warning-gradient);
+    border: none;
+    color: #000;
+    font-weight: 600;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-fast);
+}
+
+.btn-warning-custom:hover {
+    background: linear-gradient(135deg, var(--gabon-yellow-dark) 0%, var(--gabon-yellow) 100%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: #000;
+}
+
+.btn-info-custom {
+    background: var(--secondary-gradient);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: var(--border-radius);
+    transition: all var(--transition-fast);
+}
+
+.btn-info-custom:hover {
+    background: linear-gradient(135deg, var(--gabon-blue-dark) 0%, var(--gabon-blue) 100%);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: white;
+}
+
+/* ========================================
+   6. BADGES GABONAIS
+   ======================================== */
+
+.badge-success-custom {
+    background: var(--primary-gradient);
+    color: white;
+    font-weight: 600;
+}
+
+.badge-warning-custom {
+    background: var(--warning-gradient);
+    color: #000;
+    font-weight: 600;
+}
+
+.badge-info-custom {
+    background: var(--secondary-gradient);
+    color: white;
+    font-weight: 600;
+}
+
+.badge-danger-custom {
+    background: var(--danger-gradient);
+    color: white;
+    font-weight: 600;
+}
+
+.badge-status-success {
+    background: var(--gabon-green);
+    color: white;
+}
+
+.badge-status-warning {
+    background: var(--gabon-yellow);
+    color: #000;
+}
+
+/* ========================================
+   7. ALERTS GABONAISES
+   ======================================== */
+
+.alert-success-custom {
+    background: linear-gradient(135deg, rgba(0,158,63,0.1), rgba(0,158,63,0.05));
+    border: 1px solid rgba(0,158,63,0.2);
+    color: var(--gabon-green-dark);
+    border-radius: var(--border-radius);
+}
+
+.alert-warning-custom {
+    background: linear-gradient(135deg, rgba(255,205,0,0.1), rgba(255,205,0,0.05));
+    border: 1px solid rgba(255,205,0,0.2);
+    color: var(--gabon-yellow-dark);
+    border-radius: var(--border-radius);
+}
+
+.alert-info-custom {
+    background: linear-gradient(135deg, rgba(0,63,127,0.1), rgba(0,63,127,0.05));
+    border: 1px solid rgba(0,63,127,0.2);
+    color: var(--gabon-blue-dark);
+    border-radius: var(--border-radius);
+}
+
+.alert-danger-custom {
+    background: linear-gradient(135deg, rgba(139,21,56,0.1), rgba(139,21,56,0.05));
+    border: 1px solid rgba(139,21,56,0.2);
+    color: var(--gabon-red);
+    border-radius: var(--border-radius);
+}
+
+.alert-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.alert-icon-success {
+    background: var(--gabon-green);
+}
+
+.alert-icon-warning {
+    background: var(--gabon-yellow);
+}
+
+.alert-icon-info {
+    background: var(--gabon-blue);
+}
+
+.alert-icon-danger {
+    background: var(--gabon-red);
+}
+
+/* ========================================
+   8. MODULE UPLOAD AVANCÉ
+   ======================================== */
+
+/* Modes d'ajout */
+.modes-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.mode-card {
+    transition: all var(--transition);
+}
+
+.mode-option {
+    transition: all var(--transition);
+    cursor: pointer;
+    border-radius: var(--border-radius);
+    background: #f8f9fa;
+    padding: 1rem;
+    border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+}
+
+.mode-option:hover {
+    background: #e9ecef;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.mode-card input:checked + label .mode-option {
+    background: linear-gradient(135deg, rgba(0,158,63,0.1), rgba(0,158,63,0.05));
+    border-color: var(--gabon-green) !important;
+    border-width: 2px;
+}
+
+.mode-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.mode-icon-green {
+    background: rgba(0,158,63,0.1);
+}
+
+.mode-icon-yellow {
+    background: rgba(255,205,0,0.1);
+}
+
+/* Upload zone */
+.upload-zone {
+    transition: all var(--transition);
+    cursor: pointer;
+    border-radius: var(--border-radius);
+    background: linear-gradient(135deg, rgba(0,158,63,0.02), rgba(0,158,63,0.05));
+    backdrop-filter: blur(5px);
+    border: 2px dashed var(--gabon-yellow);
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+.upload-zone:hover {
+    background: linear-gradient(135deg, rgba(0,158,63,0.08), rgba(0,158,63,0.12));
+    border-color: var(--gabon-green);
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
+}
+
+.upload-zone.dragover {
+    background: linear-gradient(135deg, rgba(0,158,63,0.15), rgba(0,158,63,0.2));
+    border-color: var(--gabon-green);
+    border-style: solid;
+    transform: scale(1.05);
+    box-shadow: var(--shadow-lg);
+}
+
+.upload-icon {
+    transition: all var(--transition);
+    margin-bottom: 1rem;
+}
+
+.upload-zone:hover .upload-icon {
+    transform: scale(1.1);
+}
+
+.template-info-card {
+    background: linear-gradient(135deg, #cce7ff, #b3d9ff);
+}
+
+/* ========================================
+   9. STATUS ET SUCCESS ELEMENTS
+   ======================================== */
+
+.status-badge {
+    background: rgba(255,255,255,0.2);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    backdrop-filter: blur(10px);
+}
+
+.success-icon {
+    position: relative;
+}
+
+.icon-circle {
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+}
+
+/* Animation pour l'icône de succès */
+#success-check {
+    animation: successPulse 2s ease-in-out infinite;
+}
+
+@keyframes successPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* ========================================
+   10. TIMELINE ET PROCESSUS
+   ======================================== */
+
+.timeline-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.timeline-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    font-weight: bold;
+    color: white;
+}
+
+.timeline-item-success .timeline-icon {
+    background: var(--gabon-green);
+}
+
+.timeline-item-warning .timeline-icon {
+    background: var(--gabon-yellow);
+    color: #000;
+}
+
+.timeline-item-info .timeline-icon {
+    background: var(--gabon-blue);
+}
+
+/* ========================================
+   11. INFORMATIONS ET SECTIONS
+   ======================================== */
+
+.info-section {
+    border-left: 3px solid;
+    padding-left: 1rem;
+}
+
+.info-section-warning {
+    border-color: var(--gabon-yellow);
+}
+
+.info-section-info {
+    border-color: var(--gabon-blue);
+}
+
+.declaration-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.declaration-item {
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    background: white;
+    margin-bottom: 1rem;
+    transition: all var(--transition-fast);
+}
+
+.declaration-item:hover {
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+
+/* ========================================
+   12. SUMMARY ET RÉCAPITULATIF
+   ======================================== */
+
+.summary-card {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.summary-item {
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    text-align: center;
+    transition: all var(--transition-fast);
+}
+
+.summary-item:hover {
+    transform: translateY(-2px);
+}
+
+.summary-item-success {
+    background: rgba(0,158,63,0.1);
+    color: var(--gabon-green);
+}
+
+.summary-item-warning {
+    background: rgba(255,205,0,0.1);
+    color: var(--gabon-yellow-dark);
+}
+
+.summary-item-info {
+    background: rgba(0,63,127,0.1);
+    color: var(--gabon-blue);
+}
+
+.summary-item-danger {
+    background: rgba(139,21,56,0.1);
+    color: var(--gabon-red);
+}
+
+/* ========================================
+   13. LOTS HISTORY
+   ======================================== */
+
+.lots-history {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.lot-item {
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    border: 1px solid;
+    transition: all var(--transition-fast);
+}
+
+.lot-item:hover {
+    transform: translateX(5px);
+}
+
+.lot-item-success {
+    background: rgba(0,158,63,0.1);
+    border-color: var(--gabon-green);
+}
+
+.lot-item-warning {
+    background: rgba(255,205,0,0.1);
+    border-color: var(--gabon-yellow);
+}
+
+.lot-item-info {
+    background: rgba(0,63,127,0.1);
+    border-color: var(--gabon-blue);
+}
+
+/* ========================================
+   14. FAB (FLOATING ACTION BUTTON) GABONAIS
+   ======================================== */
+
+.fab-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    z-index: 1000;
+}
+
+.fab-menu {
+    position: relative;
+}
+
+.fab-main {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gabon-green) 0%, var(--gabon-yellow) 50%, var(--gabon-blue) 100%);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform var(--transition);
+    border: none;
+}
+
+.fab-main:hover {
+    transform: scale(1.1);
+}
+
+.fab-icon {
+    color: white;
+    font-size: 1.5rem;
+    transition: transform var(--transition);
+}
+
+.fab-options {
+    position: absolute;
+    bottom: 70px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all var(--transition);
+}
+
+.fab-menu.active .fab-options {
+    opacity: 1;
+    visibility: visible;
+}
+
+.fab-menu.active .fab-icon {
+    transform: rotate(45deg);
+}
+
+.fab-option {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    border: none;
+    color: white;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.fab-option:hover {
+    transform: scale(1.1);
+}
+
+.fab-option-green {
+    background: var(--gabon-green);
+}
+
+.fab-option-yellow {
+    background: var(--gabon-yellow);
+    color: #000;
+}
+
+.fab-option-blue {
+    background: var(--gabon-blue);
+}
+
+.fab-option-red {
+    background: var(--gabon-red);
+}
+
+/* ========================================
+   15. ANIMATIONS ET EFFETS
+   ======================================== */
+
+/* Animation d'entrée des cards */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.section-card {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+/* Animation pour les nouveaux adhérents */
+.adherent-row-new {
+    animation: slideInFromRight 0.5s ease-out;
+    background: rgba(0,158,63,0.1) !important;
+}
+
+@keyframes slideInFromRight {
+    from {
+        opacity: 0;
+        transform: translateX(50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Animation pour les particules de succès */
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* Validation temps réel */
+.nip-validating {
+    border-color: var(--gabon-yellow) !important;
+    box-shadow: 0 0 0 0.2rem rgba(255,205,0,0.25);
+}
+
+.nip-valid {
+    border-color: var(--gabon-green) !important;
+    box-shadow: 0 0 0 0.2rem rgba(0,158,63,0.25);
+}
+
+.nip-invalid {
+    border-color: var(--gabon-red) !important;
+    box-shadow: 0 0 0 0.2rem rgba(139,21,56,0.25);
+}
+
+/* ========================================
+   16. RESPONSIVE DESIGN
+   ======================================== */
+
+@media (max-width: 768px) {
+    .fab-container {
+        bottom: 1rem;
+        right: 1rem;
+    }
+    
+    .fab-main {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .fab-option {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .stats-card {
+        margin-bottom: 1rem;
+    }
+    
+    .upload-zone {
+        min-height: 150px;
+        padding: 1rem;
+    }
+    
+    .mode-option {
+        text-align: center;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .mode-icon {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    .timeline-item {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+    
+    .timeline-icon {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    .summary-item {
+        margin-bottom: 1rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .section-card {
+        margin-bottom: 1rem;
+    }
+    
+    .stats-card .card-body {
+        padding: 1rem;
+    }
+    
+    .stats-card h3 {
+        font-size: 1.5rem;
+    }
+    
+    .upload-zone {
+        padding: 0.5rem;
+        min-height: 120px;
+    }
+    
+    .upload-icon {
+        margin-bottom: 0.5rem;
+    }
+    
+    .upload-zone h5 {
+        font-size: 1rem;
+    }
+    
+    .btn-lg {
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+    }
+    
+    .progress-main {
+        height: 15px;
+    }
+    
+    .progress-import {
+        height: 20px;
+    }
+}
+
+/* ========================================
+   17. PRINT STYLES
+   ======================================== */
+
+@media print {
+    .fab-container,
+    .btn,
+    .alert,
+    #import-progress,
+    #import-controls,
+    #additional_fichier_section,
+    .no-print {
+        display: none !important;
+    }
+    
+    .section-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    
+    .stats-card {
+        background: #f8f9fa !important;
+        color: #000 !important;
+    }
+    
+    .card-header {
+        background: #f8f9fa !important;
+        color: #000 !important;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    body {
+        -webkit-print-color-adjust: exact;
+        color-adjust: exact;
+    }
+    
+    .page-break {
+        page-break-before: always;
+    }
+    
+    .print-only {
+        display: block !important;
+    }
+}
+
+/* ========================================
+   18. UTILITAIRES ET HELPERS
+   ======================================== */
+
+.text-gabon-green {
+    color: var(--gabon-green) !important;
+}
+
+.text-gabon-yellow {
+    color: var(--gabon-yellow-dark) !important;
+}
+
+.text-gabon-blue {
+    color: var(--gabon-blue) !important;
+}
+
+.text-gabon-red {
+    color: var(--gabon-red) !important;
+}
+
+.bg-gabon-green {
+    background: var(--primary-gradient) !important;
+}
+
+.bg-gabon-yellow {
+    background: var(--warning-gradient) !important;
+}
+
+.bg-gabon-blue {
+    background: var(--secondary-gradient) !important;
+}
+
+.bg-gabon-red {
+    background: var(--danger-gradient) !important;
+}
+
+.border-gabon-green {
+    border-color: var(--gabon-green) !important;
+}
+
+.border-gabon-yellow {
+    border-color: var(--gabon-yellow) !important;
+}
+
+.border-gabon-blue {
+    border-color: var(--gabon-blue) !important;
+}
+
+.border-gabon-red {
+    border-color: var(--gabon-red) !important;
+}
+
+/* Classes d'espacement personnalisées */
+.gap-custom {
+    gap: 1rem;
+}
+
+.gap-custom-sm {
+    gap: 0.5rem;
+}
+
+.gap-custom-lg {
+    gap: 1.5rem;
+}
+
+/* Effets hover globaux */
+.hover-lift {
+    transition: transform var(--transition-fast);
+}
+
+.hover-lift:hover {
+    transform: translateY(-2px);
+}
+
+.hover-scale {
+    transition: transform var(--transition-fast);
+}
+
+.hover-scale:hover {
+    transform: scale(1.05);
+}
+
+/* Classes pour les états de chargement */
+.loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin-top: -10px;
+    margin-left: -10px;
+    border: 2px solid var(--gabon-green);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Classes pour les transitions fluides */
+.smooth-transition {
+    transition: all var(--transition);
+}
+
+.smooth-transition-fast {
+    transition: all var(--transition-fast);
+}
+
+/* ========================================
+   19. DARK MODE SUPPORT (OPTIONNEL)
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+    .section-card {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .template-info-card {
+        background: linear-gradient(135deg, #4a5568, #2d3748);
+    }
+    
+    .summary-card,
+    .modes-card,
+    .progress-card {
+        background: linear-gradient(135deg, #4a5568, #2d3748);
+    }
+    
+    .declaration-card {
+        background: linear-gradient(135deg, #4a5568, #2d3748);
+    }
+    
+    .mode-option {
+        background: #4a5568;
+        color: #e2e8f0;
+    }
+    
+    .mode-option:hover {
+        background: #2d3748;
+    }
+    
+    .upload-zone {
+        background: linear-gradient(135deg, rgba(0,158,63,0.05), rgba(0,158,63,0.1));
+        border-color: var(--gabon-green);
+    }
+}
+
+/* ========================================
+   20. PERFORMANCE OPTIMISATIONS
+   ======================================== */
+
+/* Optimisations GPU pour les animations */
+.stats-card,
+.section-card,
+.fab-main,
+.fab-option,
+.mode-option {
+    will-change: transform;
+    transform: translateZ(0);
+}
+
+/* Lazy loading pour les éléments non visibles */
+.lazy-load {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.6s ease;
+}
+
+.lazy-load.loaded {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Réduction des animations pour les utilisateurs sensibles */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .fab-icon,
+    .upload-icon,
+    #success-check {
+        animation: none !important;
+    }
+    
+    .stats-card:hover,
+    .section-card:hover,
+    .mode-option:hover {
+        transform: none !important;
+    }
+}

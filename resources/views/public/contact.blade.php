@@ -160,8 +160,8 @@
                         </div>
                         <div class="contact-details">
                             <h6>Email</h6>
-                            <p><a href="mailto:contact@pngdi.ga">contact@pngdi.ga</a><br>
-                            <a href="mailto:support@pngdi.ga">support@pngdi.ga</a></p>
+                            <p><a href="mailto:contact@SGLP.ga">contact@SGLP.ga</a><br>
+                            <a href="mailto:support@SGLP.ga">support@SGLP.ga</a></p>
                         </div>
                     </div>
                     

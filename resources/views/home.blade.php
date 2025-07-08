@@ -9,7 +9,7 @@
         <div class="row align-items-center min-vh-75">
             <div class="col-lg-6">
                 <h1>Simplifiez vos démarches administratives</h1>
-                <p class="hero-subtitle">Portail National de Gestion des Libertés Individuelles</p>
+                <p class="hero-subtitle">Système de Gestion des Libertés Publiques</p>
                 <p class="text-white fs-5 mb-4">
                     Créez, gérez et formalisez vos organisations associatives, religieuses et politiques 
                     en toute simplicité grâce à notre plateforme numérique moderne et sécurisée.
@@ -354,7 +354,7 @@
     <div class="container">
         <div class="row align-items-center">
             <div class="col-lg-6 mb-5 mb-lg-0">
-                <h2 class="display-5 fw-bold text-primary mb-4 fade-in">Pourquoi choisir PNGDI ?</h2>
+                <h2 class="display-5 fw-bold text-primary mb-4 fade-in">Pourquoi choisir SGLP ?</h2>
                 <div class="d-flex mb-4 fade-in">
                     <div class="flex-shrink-0">
                         <div class="bg-primary text-white rounded-circle p-3">
