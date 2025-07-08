@@ -1,0 +1,693 @@
+/* ============================================================================
+   CONFIRMATION-IMPORT.CSS - STYLES INTERFACE D'IMPORT ADHÉRENTS
+   Version: 2.0 - Spécifique à confirmation.blade.php
+   
+   Styles pour l'interface d'import modernisée avec détection automatique
+   ============================================================================ */
+
+/* ============================================================================
+   HEADER PRINCIPAL
+   ============================================================================ */
+.confirmation-header {
+    background: var(--gradient-secondary);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
+}
+
+.confirmation-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--gabon-pattern-bg);
+    opacity: 0.1;
+}
+
+.header-content {
+    position: relative;
+    z-index: 2;
+    container: container;
+    padding: 0 15px;
+}
+
+.phase-indicator {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: var(--border-radius-pill);
+    padding: 0.5rem 1.5rem;
+    display: inline-block;
+    margin-bottom: 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    animation: gabon-pulse 3s ease-in-out infinite;
+}
+
+.header-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.header-subtitle {
+    font-size: 1.2rem;
+    opacity: 0.9;
+    margin-bottom: 0.5rem;
+}
+
+.header-meta {
+    font-size: 0.95rem;
+    opacity: 0.8;
+}
+
+.header-meta .badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* ============================================================================
+   DASHBOARD STATISTIQUES
+   ============================================================================ */
+.stats-dashboard {
+    background: white;
+    border-radius: var(--border-radius-xl);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.dashboard-title {
+    color: var(--gabon-green);
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.dashboard-subtitle {
+    color: #6c757d;
+    font-size: 0.95rem;
+    margin-bottom: 0;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+    transition: all var(--transition-normal);
+    border: 2px solid #e9ecef;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--gabon-green);
+    transform: scaleX(0);
+    transition: transform var(--transition-normal);
+}
+
+.stat-card:hover::before {
+    transform: scaleX(1);
+}
+
+.stat-card:hover {
+    transform: translateY(-8px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--gabon-green);
+}
+
+.stat-card.highlight {
+    background: var(--gradient-primary);
+    color: white;
+    border-color: var(--gabon-green-dark);
+}
+
+.stat-card.warning {
+    background: var(--gradient-accent);
+    color: #333;
+    border-color: var(--gabon-yellow-dark);
+}
+
+.stat-card.danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border-color: #bd2130;
+}
+
+.stat-card.success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border-color: #1e7e34;
+}
+
+.stat-card.info {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    border-color: #117a8b;
+}
+
+.stat-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+.stat-content {
+    position: relative;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+/* ============================================================================
+   INDICATEUR DE CAPACITÉ
+   ============================================================================ */
+.capacity-indicator {
+    background: #f8f9fa;
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    border: 1px solid #e9ecef;
+}
+
+.capacity-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.capacity-label {
+    font-weight: 600;
+    color: var(--gabon-blue);
+}
+
+.capacity-mode {
+    font-size: 0.875rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--border-radius-pill);
+    background: var(--gabon-green);
+    color: white;
+    font-weight: 600;
+}
+
+.capacity-bar {
+    height: 12px;
+    background: #e9ecef;
+    border-radius: var(--border-radius-pill);
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.capacity-fill {
+    height: 100%;
+    background: var(--gradient-primary);
+    border-radius: var(--border-radius-pill);
+    transition: width 0.8s ease;
+    position: relative;
+}
+
+.capacity-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+.capacity-info {
+    text-align: center;
+}
+
+/* ============================================================================
+   INTERFACE D'IMPORT
+   ============================================================================ */
+.import-interface {
+    background: white;
+    border-radius: var(--border-radius-xl);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.import-header {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #f8f9fa;
+}
+
+.import-title {
+    color: var(--gabon-green);
+    font-weight: 700;
+    margin-bottom: 0;
+}
+
+.import-options .btn-group {
+    border-radius: var(--border-radius-pill);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.import-options .btn {
+    border-radius: 0;
+    border: 2px solid var(--gabon-green);
+    color: var(--gabon-green);
+    background: white;
+    font-weight: 600;
+    transition: all var(--transition-fast);
+}
+
+.import-options .btn:first-child {
+    border-radius: var(--border-radius-pill) 0 0 var(--border-radius-pill);
+}
+
+.import-options .btn:last-child {
+    border-radius: 0 var(--border-radius-pill) var(--border-radius-pill) 0;
+}
+
+.import-options .btn.active,
+.import-options .btn-check:checked + .btn {
+    background: var(--gradient-primary);
+    color: white;
+    border-color: var(--gabon-green);
+}
+
+.import-section {
+    background: #f8f9fa;
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    border: 2px dashed #dee2e6;
+    transition: all var(--transition-normal);
+}
+
+.import-section.active {
+    border-color: var(--gabon-green);
+    background: var(--gabon-green-ultra-light);
+}
+
+/* Styles pour zones de drop */
+.upload-zone {
+    border: 3px dashed #dee2e6;
+    border-radius: var(--border-radius-lg);
+    padding: 3rem 2rem;
+    text-align: center;
+    background: #f8f9fa;
+    transition: all var(--transition-normal);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.upload-zone:hover {
+    border-color: var(--gabon-green);
+    background: var(--gabon-green-ultra-light);
+    transform: scale(1.02);
+}
+
+.upload-zone.dragover {
+    border-color: var(--gabon-green);
+    background: var(--gabon-green-ultra-light);
+    transform: scale(1.05);
+    box-shadow: var(--shadow-lg);
+}
+
+.upload-zone::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 158, 63, 0.1), transparent);
+    transition: left 0.5s;
+}
+
+.upload-zone:hover::before {
+    left: 100%;
+}
+
+.upload-icon {
+    font-size: 4rem;
+    color: var(--gabon-green);
+    margin-bottom: 1rem;
+    transition: all var(--transition-normal);
+}
+
+.upload-zone:hover .upload-icon {
+    transform: scale(1.2);
+    color: var(--gabon-green-dark);
+}
+
+.upload-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gabon-green);
+    margin-bottom: 1rem;
+}
+
+.upload-subtitle {
+    color: #6c757d;
+    margin-bottom: 2rem;
+}
+
+/* ============================================================================
+   FORMULAIRES DE SAISIE
+   ============================================================================ */
+.manual-form {
+    background: white;
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    border: 1px solid #e9ecef;
+}
+
+.manual-form .form-control,
+.manual-form .form-select {
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius-md);
+    padding: 0.75rem 1rem;
+    transition: all var(--transition-normal);
+}
+
+.manual-form .form-control:focus,
+.manual-form .form-select:focus {
+    border-color: var(--gabon-green);
+    box-shadow: 0 0 0 0.2rem rgba(0, 158, 63, 0.25);
+}
+
+.manual-form .btn-add {
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    border-radius: var(--border-radius-pill);
+    padding: 0.75rem 2rem;
+    font-weight: 600;
+    transition: all var(--transition-normal);
+}
+
+.manual-form .btn-add:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* ============================================================================
+   INDICATEURS ET ÉTATS
+   ============================================================================ */
+.processing-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: var(--gabon-green-ultra-light);
+    border-radius: var(--border-radius-lg);
+    border: 2px solid var(--gabon-green);
+}
+
+.processing-spinner {
+    width: 3rem;
+    height: 3rem;
+    border: 4px solid rgba(0, 158, 63, 0.3);
+    border-top: 4px solid var(--gabon-green);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.success-indicator {
+    text-align: center;
+    padding: 2rem;
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border-radius: var(--border-radius-lg);
+    border: 2px solid #28a745;
+}
+
+.success-icon {
+    font-size: 4rem;
+    color: #28a745;
+    margin-bottom: 1rem;
+    animation: gabon-bounce-in 0.8s ease-out;
+}
+
+.error-indicator {
+    text-align: center;
+    padding: 2rem;
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border-radius: var(--border-radius-lg);
+    border: 2px solid #dc3545;
+}
+
+.error-icon {
+    font-size: 4rem;
+    color: #dc3545;
+    margin-bottom: 1rem;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+@media (max-width: 1200px) {
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .confirmation-header {
+        padding: 1.5rem 0;
+    }
+    
+    .header-title {
+        font-size: 2rem;
+    }
+    
+    .header-subtitle {
+        font-size: 1rem;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .import-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .import-options .btn-group {
+        width: 100%;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+    }
+    
+    .upload-zone {
+        padding: 2rem 1rem;
+    }
+    
+    .upload-icon {
+        font-size: 3rem;
+    }
+    
+    .upload-title {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .stats-dashboard,
+    .import-interface {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .dashboard-header,
+    .import-header {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+    }
+    
+    .capacity-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+    
+    .manual-form {
+        padding: 1rem;
+    }
+}
+
+/* ============================================================================
+   ÉTATS D'INTERACTION
+   ============================================================================ */
+.import-section:not(.active) {
+    display: none;
+}
+
+.import-section.active {
+    display: block;
+    animation: gabon-fade-in 0.5s ease-out;
+}
+
+.stat-card.updating {
+    animation: gabon-pulse 1s ease-in-out infinite;
+}
+
+.capacity-mode.chunking {
+    background: var(--gabon-yellow);
+    color: #333;
+}
+
+.capacity-mode.standard {
+    background: var(--gabon-green);
+    color: white;
+}
+
+.capacity-mode.massive {
+    background: var(--gabon-blue);
+    color: white;
+}
+
+/* ============================================================================
+   UTILITAIRES SPÉCIFIQUES
+   ============================================================================ */
+.fade-in-up {
+    animation: gabon-fade-in 0.6s ease-out;
+}
+
+.slide-in-left {
+    animation: gabon-slide-in-left 0.5s ease-out;
+}
+
+.slide-in-right {
+    animation: gabon-slide-in-right 0.5s ease-out;
+}
+
+.bounce-in {
+    animation: gabon-bounce-in 0.8s ease-out;
+}
+
+.pulse {
+    animation: gabon-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================================
+   THÈME SOMBRE (OPTIONNEL)
+   ============================================================================ */
+@media (prefers-color-scheme: dark) {
+    .stats-dashboard,
+    .import-interface {
+        background: #2d3748;
+        color: white;
+    }
+    
+    .stat-card:not(.highlight):not(.warning):not(.danger):not(.success):not(.info) {
+        background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        color: white;
+        border-color: #4a5568;
+    }
+    
+    .import-section {
+        background: #2d3748;
+        border-color: #4a5568;
+    }
+    
+    .upload-zone {
+        background: #2d3748;
+        border-color: #4a5568;
+        color: white;
+    }
+    
+    .manual-form {
+        background: #2d3748;
+        border-color: #4a5568;
+    }
+    
+    .manual-form .form-control,
+    .manual-form .form-select {
+        background: #4a5568;
+        border-color: #718096;
+        color: white;
+    }
+}

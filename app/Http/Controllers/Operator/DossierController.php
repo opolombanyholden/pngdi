@@ -17,6 +17,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+
+use App\Models\Adherent;
+
 use Exception;
 
 class DossierController extends Controller
@@ -114,6 +117,47 @@ class DossierController extends Controller
         $documentTypes = $this->getRequiredDocuments($fullType);
         
         return view('operator.dossiers.create', compact('type', 'fullType', 'provinces', 'guides', 'documentTypes'));
+    }
+
+
+    /**
+     * ✅ MÉTHODE TEMPLATE EXCEL ADHÉRENTS
+     * Résout: Route [operator.templates.adherents-excel] not defined
+     */
+    public function downloadTemplate()
+    {
+        try {
+            Log::info("=== TÉLÉCHARGEMENT TEMPLATE ADHÉRENTS ===", [
+                'user_id' => auth()->id(),
+                'timestamp' => now()
+            ]);
+
+            // Créer le contenu CSV du template
+            $csvContent = "NIP,Nom,Prénom,Téléphone,Profession,Adresse\n";
+            $csvContent .= "A1-0001-19801225,MOUNDOUNGA,Jean,+24101234567,Ingénieur,Libreville\n";
+            $csvContent .= "B2-0002-19751110,OBAME,Marie,+24101234568,Professeur,Port-Gentil\n";
+            $csvContent .= "C3-0003-19900315,NGUEMA,Paul,+24101234569,Médecin,Franceville\n";
+
+            $fileName = 'template_adherents_' . date('Y-m-d') . '.csv';
+
+            return response($csvContent, 200, [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+                'Cache-Control' => 'no-cache, no-store, must-revalidate',
+                'Pragma' => 'no-cache',
+                'Expires' => '0'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("=== ERREUR TÉLÉCHARGEMENT TEMPLATE ===", [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Erreur lors du téléchargement du template : ' . $e->getMessage());
+        }
     }
 
     /**
@@ -1323,4 +1367,205 @@ private function getAccuseReceptionDownloadUrl(Dossier $dossier)
             return redirect()->back()->with('error', 'Erreur lors de la résolution de l\'anomalie');
         }
     }
+
+
+    /**
+     * ✅ MÉTHODE MANQUANTE 1: Téléchargement accusé de réception
+     * Résout: Route [operator.dossiers.download-accuse] not defined
+     */
+    public function downloadAccuse($dossier)
+    {
+        try {
+            Log::info("=== DÉBUT TÉLÉCHARGEMENT ACCUSÉ ===", [
+                'dossier_param' => $dossier,
+                'user_id' => auth()->id()
+            ]);
+
+            // Charger le dossier avec vérification d'accès
+            $dossierObj = Dossier::with(['organisation', 'documents'])
+                ->where('id', $dossier)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossierObj) {
+                Log::error("=== DOSSIER NON TROUVÉ POUR TÉLÉCHARGEMENT ===", [
+                    'dossier_id' => $dossier,
+                    'user_id' => auth()->id()
+                ]);
+                
+                return redirect()->route('operator.dashboard')
+                    ->with('error', 'Dossier non trouvé ou accès non autorisé.');
+            }
+
+            // Rechercher l'accusé de réception dans les documents
+            $accuseDocument = $dossierObj->documents()
+                ->where('nom_fichier', 'like', 'accuse_reception_%')
+                ->orWhere('nom_original', 'like', '%Accusé%')
+                ->first();
+
+            if (!$accuseDocument) {
+                Log::warning("=== ACCUSÉ NON TROUVÉ ===", [
+                    'dossier_id' => $dossier,
+                    'documents_count' => $dossierObj->documents()->count()
+                ]);
+                
+                return redirect()->back()
+                    ->with('error', 'Accusé de réception non trouvé.');
+            }
+
+            // Construire le chemin du fichier
+            $filePath = storage_path('app/public/' . $accuseDocument->chemin_fichier);
+            
+            if (!file_exists($filePath)) {
+                Log::error("=== FICHIER ACCUSÉ INTROUVABLE ===", [
+                    'file_path' => $filePath,
+                    'document_id' => $accuseDocument->id
+                ]);
+                
+                return redirect()->back()
+                    ->with('error', 'Fichier accusé de réception introuvable.');
+            }
+
+            Log::info("=== TÉLÉCHARGEMENT ACCUSÉ RÉUSSI ===", [
+                'dossier_id' => $dossier,
+                'file_name' => $accuseDocument->nom_fichier,
+                'file_size' => filesize($filePath)
+            ]);
+
+            // Télécharger le fichier
+            return response()->download($filePath, $accuseDocument->nom_original ?? $accuseDocument->nom_fichier);
+
+        } catch (\Exception $e) {
+            Log::error("=== ERREUR TÉLÉCHARGEMENT ACCUSÉ ===", [
+                'dossier_id' => $dossier,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Erreur lors du téléchargement : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE 2: Import adhérents Phase 2
+     * Résout le workflow 2 phases
+     */
+    public function storeAdherents(Request $request, $dossier)
+    {
+        try {
+            Log::info("=== DÉBUT STORE ADHERENTS PHASE 2 ===", [
+                'dossier_param' => $dossier,
+                'user_id' => auth()->id(),
+                'request_data_keys' => array_keys($request->all())
+            ]);
+
+            // Charger le dossier avec vérification d'accès
+            $dossierObj = Dossier::with(['organisation'])
+                ->where('id', $dossier)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossierObj) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dossier non trouvé ou accès non autorisé.'
+                ], 403);
+            }
+
+            // Valider les données d'entrée
+            $validated = $request->validate([
+                'adherents' => 'required|array|min:1',
+                'adherents.*.nip' => 'required|string|size:13',
+                'adherents.*.nom' => 'required|string|max:100',
+                'adherents.*.prenom' => 'required|string|max:100',
+                'adherents.*.telephone' => 'nullable|string|max:20',
+                'adherents.*.profession' => 'nullable|string|max:100',
+                'adherents.*.adresse' => 'nullable|string|max:255'
+            ]);
+
+            $adherentsData = $validated['adherents'];
+            $successCount = 0;
+            $errorCount = 0;
+            $errors = [];
+
+            DB::beginTransaction();
+
+            foreach ($adherentsData as $index => $adherentData) {
+                try {
+                    // Créer l'adhérent
+                    $adherent = new \App\Models\Adherent();
+                    $adherent->organisation_id = $dossierObj->organisation->id;
+                    $adherent->nip = $adherentData['nip'];
+                    $adherent->nom = $adherentData['nom'];
+                    $adherent->prenom = $adherentData['prenom'];
+                    $adherent->telephone = $adherentData['telephone'] ?? null;
+                    $adherent->profession = $adherentData['profession'] ?? null;
+                    $adherent->adresse = $adherentData['adresse'] ?? null;
+                    $adherent->date_adhesion = now();
+                    $adherent->is_active = true;
+                    $adherent->save();
+
+                    $successCount++;
+
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    $errors[] = [
+                        'index' => $index,
+                        'nip' => $adherentData['nip'] ?? 'N/A',
+                        'nom' => $adherentData['nom'] ?? 'N/A',
+                        'error' => $e->getMessage()
+                    ];
+
+                    Log::warning("=== ERREUR CRÉATION ADHÉRENT ===", [
+                        'index' => $index,
+                        'adherent_data' => $adherentData,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            Log::info("=== STORE ADHERENTS TERMINÉ ===", [
+                'dossier_id' => $dossier,
+                'total_processed' => count($adherentsData),
+                'success_count' => $successCount,
+                'error_count' => $errorCount
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Import terminé : {$successCount} adhérents créés, {$errorCount} erreurs",
+                'data' => [
+                    'total_processed' => count($adherentsData),
+                    'success_count' => $successCount,
+                    'error_count' => $errorCount,
+                    'errors' => $errors
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            Log::error("=== ERREUR CRITIQUE STORE ADHERENTS ===", [
+                'dossier_id' => $dossier,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'import : ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
 }

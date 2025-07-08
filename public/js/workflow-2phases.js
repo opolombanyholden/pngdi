@@ -187,7 +187,7 @@ window.Workflow2Phases.preparePhase1Data = function() {
 window.Workflow2Phases.handlePhase1Success = function(response) {
     this.hideLoadingState();
     
-    if (response.success && response.phase === 1) {
+    if (response.success && (response.phase === 1 || response.phase === "complete")) {
         this.log('🎉 Phase 1 complétée avec succès');
         
         // Sauvegarder la réponse
@@ -197,21 +197,33 @@ window.Workflow2Phases.handlePhase1Success = function(response) {
         // Afficher notification
         this.showSuccessNotification('✅ Phase 1 complétée ! Organisation créée avec succès.');
         
-        // Décider de la suite
+        // Vérifier s'il y a des adhérents à traiter
         const hasAdherents = this.state.savedAdherents && this.state.savedAdherents.length > 0;
-        
-        if (hasAdherents) {
+
+        // Si la réponse indique "confirmation", c'est qu'il n'y a pas d'adhérents
+        const shouldRedirectToPhase2 = hasAdherents && response.redirect_to !== "confirmation";
+
+        if (shouldRedirectToPhase2) {
+            this.log('📋 Adhérents détectés, redirection vers Phase 2');
             if (this.config.options.autoRedirectPhase2) {
                 this.showPhase2RedirectDialog(response);
             } else {
                 this.redirectToPhase2(response);
-            }
+                }
         } else {
+            this.log('🏁 Pas d\'adhérents ou création complète, redirection vers confirmation');
             this.redirectToConfirmation(response);
         }
         
     } else {
-        throw new Error(response.message || 'Réponse Phase 1 invalide');
+            // Gestion spéciale si pas d'adhérents
+            if (response.success && response.phase === "complete" && response.redirect_to === "confirmation") {
+            this.log('🏁 Phase 1 complète sans adhérents - redirection vers confirmation');
+            this.showSuccessNotification('✅ Organisation créée avec succès !');
+            this.redirectToConfirmation(response);
+            return;
+            }
+            throw new Error(response.message || 'Réponse Phase 1 invalide');
     }
 };
 
@@ -323,20 +335,27 @@ window.Workflow2Phases.redirectToConfirmation = function(phase1Response) {
     this.log('🏁 Redirection vers confirmation');
     
     if (phase1Response.data && phase1Response.data.dossier_id) {
-        const confirmationUrl = this.config.routes.confirmation_template.replace('{dossier}', phase1Response.data.dossier_id);
-        
-        this.showLoadingState('Redirection vers la confirmation...');
-        
-        setTimeout(() => {
-            window.location.href = confirmationUrl;
-        }, 1500);
-    } else {
-        this.log('❌ Dossier ID non fourni pour confirmation');
-        this.showErrorNotification('Erreur: impossible de rediriger vers la confirmation');
-    }
+    const confirmationUrl = this.config.routes.confirmation_template.replace('{dossier}', phase1Response.data.dossier_id);
+    
+    this.log('🏁 Redirection vers confirmation:', confirmationUrl);
+    this.showLoadingState('Redirection vers la confirmation...');
+    
+    setTimeout(() => {
+        window.location.href = confirmationUrl;
+    }, 1500);
+} else if (response.success && response.phase === "complete") {
+    // Fallback si dossier_id pas dans data mais dans response directe
+    this.log('🏁 Fallback redirection: organisation créée sans adhérents');
+    this.showSuccessNotification('Organisation créée avec succès !');
+    
+    // Redirection simple vers la liste des organisations
+    setTimeout(() => {
+        window.location.href = '/operator/organisations';
+    }, 2000);
     
     // Nettoyer les données temporaires
     this.cleanupTemporaryData();
+}
 };
 
 // =============================================
@@ -489,19 +508,31 @@ window.Workflow2Phases.hideSimpleLoading = function() {
  */
 window.Workflow2Phases.handlePhase1Error = function(error) {
     this.hideLoadingState();
-    
     this.log('❌ Erreur Phase 1:', error);
     
+    // Analyser le type d'erreur
     let errorMessage = 'Erreur lors de la création de l\'organisation';
     
-    if (error.response && error.response.errors) {
-        const validationErrors = Object.values(error.response.errors).flat();
-        errorMessage = validationErrors.join('<br>');
+    if (typeof error === 'string') {
+        // Si c'est juste un message (comme dans votre cas)
+        if (error.includes('Organisation créée avec succès')) {
+            // Ce n'est pas vraiment une erreur, c'est un succès mal géré
+            this.log('✅ Faux erreur détectée - c\'est en fait un succès');
+            this.showSuccessNotification('✅ ' + error);
+            
+            // Redirection simple vers les organisations
+            setTimeout(() => {
+                window.location.href = '/operator/organisations';
+            }, 2000);
+            return;
+        }
+        errorMessage += ': ' + error;
     } else if (error.message) {
-        errorMessage = error.message;
+        errorMessage += ': ' + error.message;
     }
     
-    this.showErrorNotification(errorMessage);
+    // Afficher notification d'erreur seulement si c'est vraiment une erreur
+    this.showErrorNotification('❌ ' + errorMessage);
 };
 
 /**
@@ -542,4 +573,27 @@ window.Workflow2Phases.checkPhase1Continuation = function() {
         this.log('Continuation depuis Phase 1 détectée');
         this.state.phase1Response = JSON.parse(phase1Response);
     }
+
+
+/**
+ * Nettoyer les données temporaires
+ */
+window.Workflow2Phases.cleanupTemporaryData = function() {
+    try {
+        // Nettoyer sessionStorage
+        sessionStorage.removeItem('workflow_phase1_response');
+        sessionStorage.removeItem('workflow_phase2_adherents');
+        
+        // Réinitialiser l'état
+        this.state.currentPhase = 1;
+        this.state.phase1Response = null;
+        this.state.savedAdherents = null;
+        
+        this.log('🧹 Données temporaires nettoyées');
+    } catch (error) {
+        this.log('❌ Erreur nettoyage:', error);
+    }
+};
+
+
 };

@@ -1,0 +1,815 @@
+/* ============================================================================
+   CHUNKING-INTERFACE.CSS - INTERFACE CHUNKING GROS VOLUMES
+   Version: 2.0 - Interface de traitement par lots avec progression temps réel
+   
+   Styles pour modal, barres de progression, contrôles et statistiques chunking
+   ============================================================================ */
+
+/* ============================================================================
+   MODAL DE PROGRESSION CHUNKING
+   ============================================================================ */
+.chunking-modal .modal-content {
+    border: none;
+    border-radius: var(--border-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-xl);
+}
+
+.chunking-modal .modal-header {
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+}
+
+.chunking-modal .modal-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--gabon-pattern-bg);
+    opacity: 0.1;
+}
+
+.chunking-modal .modal-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    position: relative;
+    z-index: 2;
+}
+
+.chunking-modal .modal-subtitle {
+    opacity: 0.9;
+    font-size: 1rem;
+    position: relative;
+    z-index: 2;
+}
+
+.chunking-modal .modal-body {
+    padding: 2rem;
+    background: white;
+}
+
+.chunking-modal .modal-footer {
+    background: #f8f9fa;
+    border: none;
+    padding: 1.5rem 2rem;
+    justify-content: center;
+}
+
+/* ============================================================================
+   INDICATEUR DE PHASE
+   ============================================================================ */
+.chunking-phase-indicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--gabon-green-ultra-light);
+    border-radius: var(--border-radius-lg);
+    border: 2px solid var(--gabon-green);
+}
+
+.phase-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 1.2rem;
+    margin: 0 1rem;
+    transition: all var(--transition-normal);
+    position: relative;
+}
+
+.phase-step.completed {
+    background: var(--gradient-primary);
+    color: white;
+    box-shadow: var(--shadow-md);
+}
+
+.phase-step.active {
+    background: var(--gradient-accent);
+    color: #333;
+    box-shadow: var(--shadow-md);
+    animation: gabon-pulse 2s ease-in-out infinite;
+}
+
+.phase-step.pending {
+    background: #e9ecef;
+    color: #6c757d;
+    border: 2px dashed #dee2e6;
+}
+
+.phase-connector {
+    flex: 1;
+    height: 4px;
+    background: #e9ecef;
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+}
+
+.phase-connector.active {
+    background: var(--gabon-green);
+}
+
+.phase-connector.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+
+/* ============================================================================
+   PROGRESSION PRINCIPALE
+   ============================================================================ */
+.chunking-progress-main {
+    margin-bottom: 2rem;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.progress-label {
+    font-weight: 600;
+    color: var(--gabon-green);
+    font-size: 1.1rem;
+}
+
+.progress-percentage {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--gabon-green);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chunking-progress-bar {
+    height: 20px;
+    background: #e9ecef;
+    border-radius: var(--border-radius-pill);
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chunking-progress-fill {
+    height: 100%;
+    background: var(--gradient-primary);
+    border-radius: var(--border-radius-pill);
+    transition: width 0.8s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.chunking-progress-fill::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+.progress-text {
+    text-align: center;
+    margin-top: 1rem;
+    font-weight: 600;
+    color: var(--gabon-blue);
+    font-size: 1rem;
+}
+
+/* ============================================================================
+   STATISTIQUES TEMPS RÉEL
+   ============================================================================ */
+.chunking-stats {
+    background: #f8f9fa;
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 1px solid #e9ecef;
+}
+
+.stats-grid-chunking {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    text-align: center;
+}
+
+.stat-item-chunking {
+    background: white;
+    border-radius: var(--border-radius-md);
+    padding: 1rem 0.5rem;
+    border: 1px solid #e9ecef;
+    transition: all var(--transition-normal);
+}
+
+.stat-item-chunking:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-sm);
+    border-color: var(--gabon-green);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gabon-green);
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.stat-item-chunking.primary .stat-value {
+    color: var(--gabon-green);
+}
+
+.stat-item-chunking.secondary .stat-value {
+    color: var(--gabon-blue);
+}
+
+.stat-item-chunking.accent .stat-value {
+    color: var(--gabon-yellow-dark);
+}
+
+.stat-item-chunking.success .stat-value {
+    color: #28a745;
+}
+
+.stat-item-chunking.warning .stat-value {
+    color: #ffc107;
+}
+
+.stat-item-chunking.danger .stat-value {
+    color: #dc3545;
+}
+
+/* ============================================================================
+   DÉTAILS DU LOT ACTUEL
+   ============================================================================ */
+.current-chunk-details {
+    background: white;
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 2px solid var(--gabon-green);
+    position: relative;
+    overflow: hidden;
+}
+
+.current-chunk-details::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--gradient-primary);
+}
+
+.chunk-header {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.chunk-title {
+    font-weight: 700;
+    color: var(--gabon-green);
+    font-size: 1.1rem;
+    margin-bottom: 0;
+}
+
+.chunk-number {
+    background: var(--gradient-primary);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius-pill);
+    font-weight: 700;
+    font-size: 0.875rem;
+}
+
+.chunk-progress {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: var(--border-radius-pill);
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.chunk-progress-fill {
+    height: 100%;
+    background: var(--gradient-accent);
+    border-radius: var(--border-radius-pill);
+    transition: width 0.5s ease;
+}
+
+.chunk-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+    text-align: center;
+}
+
+.chunk-detail-item {
+    background: #f8f9fa;
+    border-radius: var(--border-radius-sm);
+    padding: 0.75rem 0.5rem;
+}
+
+.chunk-detail-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--gabon-blue);
+    margin-bottom: 0.25rem;
+}
+
+.chunk-detail-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   CONTRÔLES DE CHUNKING
+   ============================================================================ */
+.chunking-controls {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.chunking-controls .btn {
+    border-radius: var(--border-radius-pill);
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    transition: all var(--transition-normal);
+    min-width: 120px;
+}
+
+.btn-chunking-pause {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    color: #333;
+    border: none;
+}
+
+.btn-chunking-pause:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: #333;
+}
+
+.btn-chunking-resume {
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+}
+
+.btn-chunking-resume:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: white;
+}
+
+.btn-chunking-cancel {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+}
+
+.btn-chunking-cancel:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: white;
+}
+
+.btn-chunking-complete {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+}
+
+.btn-chunking-complete:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    color: white;
+}
+
+/* État désactivé */
+.chunking-controls .btn:disabled {
+    opacity: 0.6;
+    transform: none !important;
+    box-shadow: none !important;
+    cursor: not-allowed;
+}
+
+/* ============================================================================
+   LOG EN TEMPS RÉEL
+   ============================================================================ */
+.chunking-log {
+    background: #2d3748;
+    color: #e2e8f0;
+    border-radius: var(--border-radius-lg);
+    padding: 1rem;
+    margin-bottom: 2rem;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    border: 1px solid #4a5568;
+}
+
+.chunking-log::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chunking-log::-webkit-scrollbar-track {
+    background: #4a5568;
+    border-radius: 4px;
+}
+
+.chunking-log::-webkit-scrollbar-thumb {
+    background: var(--gabon-green);
+    border-radius: 4px;
+}
+
+.log-entry {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #4a5568;
+    transition: background-color var(--transition-fast);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-entry.new {
+    background: rgba(0, 158, 63, 0.2);
+    animation: log-highlight 1s ease-out;
+}
+
+@keyframes log-highlight {
+    0% { background: rgba(0, 158, 63, 0.4); }
+    100% { background: transparent; }
+}
+
+.log-timestamp {
+    color: #9ca3af;
+    margin-right: 0.5rem;
+}
+
+.log-level-info {
+    color: #60a5fa;
+}
+
+.log-level-success {
+    color: #34d399;
+}
+
+.log-level-warning {
+    color: #fbbf24;
+}
+
+.log-level-error {
+    color: #f87171;
+}
+
+/* ============================================================================
+   RÉSULTATS FINAUX
+   ============================================================================ */
+.chunking-results {
+    background: white;
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    border: 2px solid #28a745;
+    display: none;
+}
+
+.chunking-results.show {
+    display: block;
+    animation: gabon-bounce-in 0.8s ease-out;
+}
+
+.results-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.results-icon {
+    font-size: 4rem;
+    color: #28a745;
+    margin-bottom: 1rem;
+    animation: gabon-bounce-in 1s ease-out;
+}
+
+.results-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #28a745;
+    margin-bottom: 0.5rem;
+}
+
+.results-subtitle {
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+.results-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.result-stat {
+    background: #f8f9fa;
+    border-radius: var(--border-radius-md);
+    padding: 1rem;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+
+.result-stat-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.result-stat-value.success {
+    color: #28a745;
+}
+
+.result-stat-value.warning {
+    color: #ffc107;
+}
+
+.result-stat-value.danger {
+    color: #dc3545;
+}
+
+.result-stat-value.info {
+    color: #17a2b8;
+}
+
+.result-stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   ERREURS ET ANOMALIES
+   ============================================================================ */
+.chunking-errors {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border: 2px solid #dc3545;
+    border-radius: var(--border-radius-lg);
+    padding: 1rem;
+    margin-top: 1rem;
+    display: none;
+}
+
+.chunking-errors.show {
+    display: block;
+    animation: gabon-slide-in-left 0.5s ease-out;
+}
+
+.errors-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    color: #721c24;
+}
+
+.errors-icon {
+    font-size: 1.5rem;
+    margin-right: 0.5rem;
+}
+
+.errors-title {
+    font-weight: 700;
+    margin-bottom: 0;
+}
+
+.errors-list {
+    max-height: 150px;
+    overflow-y: auto;
+    background: white;
+    border-radius: var(--border-radius-sm);
+    padding: 1rem;
+}
+
+.error-item {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f3f4;
+    font-size: 0.875rem;
+}
+
+.error-item:last-child {
+    border-bottom: none;
+}
+
+.error-chunk {
+    font-weight: 600;
+    color: #dc3545;
+}
+
+.error-message {
+    color: #721c24;
+    margin-left: 1rem;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+@media (max-width: 992px) {
+    .chunking-modal .modal-dialog {
+        margin: 1rem;
+        max-width: none;
+    }
+    
+    .stats-grid-chunking {
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .chunk-details-grid {
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .results-stats {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.75rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .chunking-modal .modal-body {
+        padding: 1rem;
+    }
+    
+    .chunking-modal .modal-header {
+        padding: 1.5rem 1rem;
+    }
+    
+    .chunking-modal .modal-footer {
+        padding: 1rem;
+    }
+    
+    .chunking-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .chunking-controls .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    .chunking-phase-indicator {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .phase-connector {
+        width: 4px;
+        height: 30px;
+        align-self: center;
+    }
+    
+    .chunk-header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .progress-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+}
+
+@media (max-width: 576px) {
+    .stats-grid-chunking {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .chunk-details-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .results-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .phase-step {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .stat-value {
+        font-size: 1.2rem;
+    }
+    
+    .progress-percentage {
+        font-size: 1.5rem;
+    }
+    
+    .chunking-log {
+        font-size: 0.75rem;
+        max-height: 150px;
+    }
+}
+
+/* ============================================================================
+   ANIMATIONS SPÉCIFIQUES CHUNKING
+   ============================================================================ */
+@keyframes chunk-processing {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.chunk-processing {
+    animation: chunk-processing 1s ease-in-out infinite;
+}
+
+@keyframes data-flow {
+    0% { opacity: 0; transform: translateX(-20px); }
+    50% { opacity: 1; transform: translateX(0); }
+    100% { opacity: 0; transform: translateX(20px); }
+}
+
+.data-flow-animation {
+    animation: data-flow 2s ease-in-out infinite;
+}
+
+/* ============================================================================
+   ÉTATS FINAUX
+   ============================================================================ */
+.chunking-completed .chunking-progress-fill {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.chunking-paused .chunking-progress-fill {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    animation: paused-pulse 2s ease-in-out infinite;
+}
+
+@keyframes paused-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.chunking-error .chunking-progress-fill {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+}
+
+.chunking-cancelled .chunking-progress-fill {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+}

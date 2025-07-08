@@ -1112,6 +1112,7 @@ if ($hasAdherents) {
                 'organisation_id' => $organisation->id,
                 'dossier_id' => $dossier->id,
                 'numero_recepisse' => $numeroRecepisse,
+                'next_phase_url' => route('operator.dossiers.adherents-import', $dossier->id),
                 'adherents_count' => count($validatedData['adherents'])
             ],
             'next_action' => 'PROCEED_TO_PHASE_2',
@@ -1133,10 +1134,11 @@ if ($hasAdherents) {
             'data' => [
                 'organisation_id' => $organisation->id,
                 'dossier_id' => $dossier->id,
-                'numero_recepisse' => $numeroRecepisse
+                'numero_recepisse' => $numeroRecepisse,
+                'next_phase_url' => route('operator.dossiers.adherents-import', $dossier->id)
             ],
             'next_action' => 'WORKFLOW_COMPLETE',
-            'redirect_to' => 'confirmation'
+            'redirect_to' => 'adherents-import'
         ]);
     } else {
         return redirect()->route('operator.dossiers.confirmation', $dossier->id)

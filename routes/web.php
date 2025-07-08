@@ -264,6 +264,33 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 */
 Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verified', 'operator'])->group(function () {
     
+
+        // ✅ AJOUTER CETTE SECTION COMPLÈTE AVANT les autres routes :
+    
+    // Templates et modèles
+    Route::prefix('templates')->name('templates.')->group(function () {
+        Route::get('/adherents-excel', [AdherentController::class, 'downloadTemplate'])->name('adherents-excel');
+        Route::get('/adherents-csv', [AdherentController::class, 'downloadTemplate'])->name('adherents-csv');
+    });
+
+
+    // ✅ ROUTES MANQUANTES - À AJOUTER APRÈS LA SECTION templates EXISTANTE
+    
+    // Route download-accuse manquante dans dossiers
+    Route::prefix('dossiers')->name('dossiers.')->group(function () {
+        
+        // ✅ ROUTE DOWNLOAD-ACCUSE (résout l'erreur operator.dossiers.download-accuse)
+        Route::get('/{dossier}/download-accuse', [DossierController::class, 'downloadAccuse'])
+            ->name('download-accuse')
+            ->middleware(['throttle:30,1']); // Protection contre abus
+            
+        // ✅ ROUTE STORE-ADHERENTS (Phase 2 workflow)
+        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherents'])
+            ->name('store-adherents')
+            ->middleware(['throttle:10,1']);
+    });
+
+
 // ✅ NOUVELLES ROUTES CHUNKING - À AJOUTER ICI
     Route::prefix('chunking')->name('chunking.')->group(function() {
         Route::post('/get-session-data', [\App\Http\Controllers\Operator\ChunkingController::class, 'getSessionData'])

@@ -66,8 +66,24 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::get('/templates', [DossierController::class, 'templates'])->name('templates');
         Route::post('/create-from-template/{template}', [DossierController::class, 'createFromTemplate'])
             ->name('create-from-template');
+
+        // Templates et modèles
+        Route::prefix('templates')->name('templates.')->group(function () {
+        Route::get('/adherents-excel', [AdherentController::class, 'downloadTemplate'])->name('adherents-excel');
+        Route::get('/adherents-csv', [AdherentController::class, 'downloadTemplate'])->name('adherents-csv');
+        });
+
     });
     
+
+    # Vérifier dans routes/operator.php la section :
+    Route::prefix('chunking')->name('chunking.')->group(function() {
+        Route::post('/process-chunk', [ChunkingController::class, 'processChunk']);
+        Route::get('/health', [ChunkingController::class, 'healthCheck']);
+        // ... autres routes
+    });
+
+
     /*
     |--------------------------------------------------------------------------
     | 🏢 ORGANISATIONS - GESTION AVANCÉE ET NOUVEAUTÉS ✨

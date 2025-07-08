@@ -1,0 +1,603 @@
+/* ============================================================================
+   GABON-CHARTE.CSS - CHARTE GRAPHIQUE OFFICIELLE DU GABON
+   Version: 2.0 - Compatible avec SGLP et Bootstrap 5
+   
+   Couleurs officielles et éléments de design gabonais réutilisables
+   ============================================================================ */
+
+/* ============================================================================
+   VARIABLES CSS OFFICIELLES DU GABON
+   ============================================================================ */
+:root {
+    /* Couleurs officielles du drapeau gabonais */
+    --gabon-green: #009e3f;
+    --gabon-green-light: #00b347;
+    --gabon-green-dark: #006d2c;
+    --gabon-green-ultra-light: #e8f5e8;
+    
+    --gabon-yellow: #ffcd00;
+    --gabon-yellow-light: #ffd700;
+    --gabon-yellow-dark: #b8930b;
+    --gabon-yellow-ultra-light: #fffacd;
+    
+    --gabon-blue: #003f7f;
+    --gabon-blue-light: #0056b3;
+    --gabon-blue-dark: #002855;
+    --gabon-blue-ultra-light: #e6f0ff;
+    
+    /* Gradients officiels */
+    --gradient-primary: linear-gradient(135deg, var(--gabon-green) 0%, var(--gabon-green-light) 100%);
+    --gradient-secondary: linear-gradient(135deg, var(--gabon-blue) 0%, var(--gabon-blue-light) 100%);
+    --gradient-accent: linear-gradient(135deg, var(--gabon-yellow) 0%, var(--gabon-yellow-light) 100%);
+    --gradient-tricolore: linear-gradient(135deg, var(--gabon-green) 0%, var(--gabon-yellow) 50%, var(--gabon-blue) 100%);
+    
+    /* Ombres et effets */
+    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.2);
+    --shadow-xl: 0 16px 64px rgba(0, 0, 0, 0.25);
+    
+    /* Transitions */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.3s ease;
+    --transition-slow: 0.5s ease;
+    
+    /* Bordures et rayons */
+    --border-radius-sm: 0.375rem;
+    --border-radius-md: 0.5rem;
+    --border-radius-lg: 0.75rem;
+    --border-radius-xl: 1rem;
+    --border-radius-pill: 50px;
+    
+    /* Espacements gabonais */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-xxl: 3rem;
+}
+
+/* ============================================================================
+   TYPOGRAPHIE GABONAISE
+   ============================================================================ */
+body {
+    font-family: 'Inter', 'Segoe UI', 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    color: #212529;
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+.gabon-title {
+    font-weight: 700;
+    color: var(--gabon-green);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.gabon-subtitle {
+    font-weight: 500;
+    color: var(--gabon-blue);
+    opacity: 0.9;
+}
+
+.gabon-text-tricolore {
+    background: var(--gradient-tricolore);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 700;
+}
+
+/* ============================================================================
+   BOUTONS GABONAIS
+   ============================================================================ */
+.btn-gabon {
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--border-radius-pill);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all var(--transition-normal);
+    border: none;
+    position: relative;
+    overflow: hidden;
+    min-width: 120px;
+}
+
+.btn-gabon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.btn-gabon:hover::before {
+    left: 100%;
+}
+
+.btn-gabon-primary {
+    background: var(--gradient-primary);
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 158, 63, 0.3);
+}
+
+.btn-gabon-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 158, 63, 0.4);
+    color: white;
+}
+
+.btn-gabon-secondary {
+    background: var(--gradient-secondary);
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 63, 127, 0.3);
+}
+
+.btn-gabon-secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 63, 127, 0.4);
+    color: white;
+}
+
+.btn-gabon-accent {
+    background: var(--gradient-accent);
+    color: #333;
+    box-shadow: 0 4px 15px rgba(255, 205, 0, 0.3);
+}
+
+.btn-gabon-accent:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(255, 205, 0, 0.4);
+    color: #333;
+}
+
+.btn-gabon-outline {
+    background: transparent;
+    color: var(--gabon-green);
+    border: 2px solid var(--gabon-green);
+}
+
+.btn-gabon-outline:hover {
+    background: var(--gabon-green);
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* ============================================================================
+   CARTES GABONAISES
+   ============================================================================ */
+.card-gabon {
+    border: none;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-normal);
+    overflow: hidden;
+}
+
+.card-gabon:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg);
+}
+
+.card-gabon-primary {
+    border-left: 5px solid var(--gabon-green);
+}
+
+.card-gabon-secondary {
+    border-left: 5px solid var(--gabon-blue);
+}
+
+.card-gabon-accent {
+    border-left: 5px solid var(--gabon-yellow);
+}
+
+.card-gabon-gradient {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.card-gabon-tricolore::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--gradient-tricolore);
+}
+
+/* ============================================================================
+   BADGES ET INDICATEURS
+   ============================================================================ */
+.badge-gabon {
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius-pill);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.75rem;
+}
+
+.badge-gabon-primary {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.badge-gabon-secondary {
+    background: var(--gradient-secondary);
+    color: white;
+}
+
+.badge-gabon-accent {
+    background: var(--gradient-accent);
+    color: #333;
+}
+
+.badge-gabon-success {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+}
+
+.badge-gabon-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    color: #333;
+}
+
+.badge-gabon-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+/* ============================================================================
+   BARRES DE PROGRESSION GABONAISES
+   ============================================================================ */
+.progress-gabon {
+    height: 1rem;
+    border-radius: var(--border-radius-pill);
+    background-color: rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.progress-gabon .progress-bar {
+    background: var(--gradient-primary);
+    border-radius: var(--border-radius-pill);
+    transition: width 0.6s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-gabon .progress-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+@keyframes progress-bar-stripes {
+    0% { background-position: 1rem 0; }
+    100% { background-position: 0 0; }
+}
+
+/* ============================================================================
+   FORMULAIRES GABONAIS
+   ============================================================================ */
+.form-control-gabon {
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius-md);
+    padding: 0.75rem 1rem;
+    transition: all var(--transition-normal);
+    background: white;
+}
+
+.form-control-gabon:focus {
+    border-color: var(--gabon-green);
+    box-shadow: 0 0 0 0.2rem rgba(0, 158, 63, 0.25);
+    background: var(--gabon-green-ultra-light);
+}
+
+.form-control-gabon.is-valid {
+    border-color: var(--gabon-green);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath fill='%23009e3f' d='m2.3 6.73.94-.94 1.64 1.64 3.62-3.62.94.94-4.56 4.56z'/%3e%3c/svg%3e");
+}
+
+.form-control-gabon.is-invalid {
+    border-color: #dc3545;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23dc3545' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+}
+
+.form-select-gabon {
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius-md);
+    padding: 0.75rem 1rem;
+    background: white;
+    transition: all var(--transition-normal);
+}
+
+.form-select-gabon:focus {
+    border-color: var(--gabon-green);
+    box-shadow: 0 0 0 0.2rem rgba(0, 158, 63, 0.25);
+}
+
+/* ============================================================================
+   BREADCRUMB GABONAIS
+   ============================================================================ */
+.breadcrumb-gabon {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: var(--border-radius-pill);
+    padding: 0.5rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.breadcrumb-gabon .breadcrumb {
+    margin-bottom: 0;
+}
+
+.breadcrumb-gabon .breadcrumb-item + .breadcrumb-item::before {
+    content: '›';
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: bold;
+}
+
+.breadcrumb-gabon .breadcrumb-item a {
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.breadcrumb-gabon .breadcrumb-item a:hover {
+    color: white;
+}
+
+.breadcrumb-gabon .breadcrumb-item.active {
+    color: white;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   ALERTES GABONAISES
+   ============================================================================ */
+.alert-gabon {
+    border: none;
+    border-radius: var(--border-radius-lg);
+    padding: 1rem 1.5rem;
+    border-left: 5px solid;
+}
+
+.alert-gabon-success {
+    background: var(--gabon-green-ultra-light);
+    border-left-color: var(--gabon-green);
+    color: var(--gabon-green-dark);
+}
+
+.alert-gabon-info {
+    background: var(--gabon-blue-ultra-light);
+    border-left-color: var(--gabon-blue);
+    color: var(--gabon-blue-dark);
+}
+
+.alert-gabon-warning {
+    background: var(--gabon-yellow-ultra-light);
+    border-left-color: var(--gabon-yellow);
+    color: var(--gabon-yellow-dark);
+}
+
+.alert-gabon-danger {
+    background: #f8d7da;
+    border-left-color: #dc3545;
+    color: #721c24;
+}
+
+/* ============================================================================
+   ICÔNES ET CERCLES
+   ============================================================================ */
+.icon-circle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-normal);
+}
+
+.icon-circle-primary {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.icon-circle-secondary {
+    background: var(--gradient-secondary);
+    color: white;
+}
+
+.icon-circle-accent {
+    background: var(--gradient-accent);
+    color: #333;
+}
+
+.icon-circle:hover {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-md);
+}
+
+/* ============================================================================
+   ANIMATIONS GABONAISES
+   ============================================================================ */
+@keyframes gabon-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes gabon-slide-in-left {
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes gabon-slide-in-right {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes gabon-bounce-in {
+    0% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes gabon-pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* Classes utilitaires pour animations */
+.gabon-fade-in {
+    animation: gabon-fade-in 0.6s ease-out;
+}
+
+.gabon-slide-in-left {
+    animation: gabon-slide-in-left 0.5s ease-out;
+}
+
+.gabon-slide-in-right {
+    animation: gabon-slide-in-right 0.5s ease-out;
+}
+
+.gabon-bounce-in {
+    animation: gabon-bounce-in 0.8s ease-out;
+}
+
+.gabon-pulse {
+    animation: gabon-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================================
+   MOTIFS ET TEXTURES GABONAIS
+   ============================================================================ */
+.gabon-pattern-bg {
+    background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="gabon-pattern" x="0" y="0" width="25" height="25" patternUnits="userSpaceOnUse"><circle cx="12.5" cy="12.5" r="2" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23gabon-pattern)"/></svg>');
+}
+
+.gabon-texture-overlay::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--gabon-pattern-bg);
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+/* ============================================================================
+   RESPONSIVE ET ADAPTABILITÉ
+   ============================================================================ */
+@media (max-width: 768px) {
+    .btn-gabon {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.875rem;
+        min-width: 100px;
+    }
+    
+    .icon-circle {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .card-gabon {
+        margin-bottom: 1rem;
+    }
+    
+    .breadcrumb-gabon {
+        padding: 0.375rem 0.75rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .btn-gabon {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    .gabon-text-tricolore {
+        font-size: 1.5rem;
+    }
+}
+
+/* ============================================================================
+   UTILITAIRES SPÉCIAUX
+   ============================================================================ */
+.gabon-shadow-sm { box-shadow: var(--shadow-sm); }
+.gabon-shadow-md { box-shadow: var(--shadow-md); }
+.gabon-shadow-lg { box-shadow: var(--shadow-lg); }
+.gabon-shadow-xl { box-shadow: var(--shadow-xl); }
+
+.gabon-rounded-sm { border-radius: var(--border-radius-sm); }
+.gabon-rounded-md { border-radius: var(--border-radius-md); }
+.gabon-rounded-lg { border-radius: var(--border-radius-lg); }
+.gabon-rounded-xl { border-radius: var(--border-radius-xl); }
+.gabon-rounded-pill { border-radius: var(--border-radius-pill); }
+
+.gabon-bg-primary { background: var(--gradient-primary); }
+.gabon-bg-secondary { background: var(--gradient-secondary); }
+.gabon-bg-accent { background: var(--gradient-accent); }
+.gabon-bg-tricolore { background: var(--gradient-tricolore); }
+
+.gabon-text-primary { color: var(--gabon-green) !important; }
+.gabon-text-secondary { color: var(--gabon-blue) !important; }
+.gabon-text-accent { color: var(--gabon-yellow-dark) !important; }
