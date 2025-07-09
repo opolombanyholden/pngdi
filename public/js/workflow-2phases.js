@@ -17,8 +17,10 @@ window.Workflow2Phases = {
     config: {
         routes: {
             phase1: '/operator/organisations/store-phase1',
+            // ✅ CORRECTION CRITIQUE : Route corrigée dossiers au lieu d'organisations
             phase2_template: '/operator/dossiers/{dossier}/adherents-import',
-            confirmation_template: '/operator/dossiers/confirmation/{dossier}'
+            //confirmation_template: '/operator/dossiers/confirmation/{dossier}'
+            confirmation_template: '/operator/dossiers/{dossier}/adherents-import'
         },
         options: {
             autoRedirectPhase2: true,

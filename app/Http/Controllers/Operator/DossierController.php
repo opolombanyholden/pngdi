@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-
+use Carbon\Carbon;
 use App\Models\Adherent;
 
 use Exception;
@@ -1566,6 +1566,388 @@ private function getAccuseReceptionDownloadUrl(Dossier $dossier)
             ], 500);
         }
     }
+
+
+/**
+ * ========================================================================
+ * MÉTHODES À AJOUTER/METTRE À JOUR DANS DossierController
+ * Localisation: app/Http/Controllers/Operator/DossierController.php
+ * ========================================================================
+ */
+
+// AJOUTER CES MÉTHODES DANS LA CLASSE DossierController
+
+    /**
+     * Page d'import des adhérents - Phase 2
+     */
+    public function adherentsImport($dossierId)
+    {
+        try {
+            // Récupérer le dossier
+            $dossier = Dossier::with(['organisation', 'adherents'])
+                ->where('id', $dossierId)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->firstOrFail();
+            
+            $organisation = $dossier->organisation;
+            
+            // Statistiques adhérents
+            $adherents_stats = [
+                'existants' => $dossier->adherents()->count(),
+                'minimum_requis' => $this->getMinimumAdherentsRequired($organisation->type),
+                'manquants' => 0,
+                'peut_soumettre' => false
+            ];
+            
+            $adherents_stats['manquants'] = max(0, $adherents_stats['minimum_requis'] - $adherents_stats['existants']);
+            $adherents_stats['peut_soumettre'] = $adherents_stats['manquants'] <= 0;
+            
+            // Configuration upload
+            $upload_config = [
+                'max_file_size' => '10MB',
+                'chunk_size' => 100,
+                'max_adherents' => 50000,
+                'chunking_threshold' => 200
+            ];
+            
+            // URLs pour les actions
+            $urls = [
+                'store_adherents' => route('operator.dossiers.store-adherents', $dossier->id),
+                'template_download' => route('operator.templates.adherents-excel'),
+                'confirmation' => route('operator.dossiers.confirmation', $dossier->id),
+                'process_chunk' => route('chunking.process-chunk'),
+                'health_check' => route('chunking.health')
+            ];
+            
+            // Stocker les informations en session pour le chunking
+            session([
+                'current_dossier_id' => $dossier->id,
+                'current_organisation_id' => $organisation->id
+            ]);
+            
+            Log::info('📄 PAGE IMPORT ADHÉRENTS PHASE 2', [
+                'dossier_id' => $dossier->id,
+                'organisation_id' => $organisation->id,
+                'adherents_existants' => $adherents_stats['existants'],
+                'user_id' => auth()->id()
+            ]);
+            
+            return view('operator.dossiers.adherents-import', compact(
+                'dossier',
+                'organisation', 
+                'adherents_stats',
+                'upload_config',
+                'urls'
+            ));
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur page import adhérents', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id()
+            ]);
+            
+            return redirect()->route('operator.dashboard')
+                ->with('error', 'Erreur lors du chargement de la page d\'import');
+        }
+    }
+    
+    
+    /**
+     * Gérer une requête en mode chunking
+     */
+    private function handleChunkRequest($request, $dossier, $organisation)
+    {
+        // Stocker les informations en session pour le ChunkProcessorController
+        session([
+            'current_dossier_id' => $dossier->id,
+            'current_organisation_id' => $organisation->id
+        ]);
+        
+        // Rediriger vers le ChunkProcessorController
+        $chunkController = new \App\Http\Controllers\Api\ChunkProcessorController();
+        return $chunkController->processChunk($request);
+    }
+    
+    /**
+     * Gérer un upload classique (sans chunking)
+     */
+    private function handleClassicUpload($request, $dossier, $organisation)
+    {
+        // Validation du fichier ou des données
+        if ($request->hasFile('adherents_file')) {
+            return $this->processFileUpload($request, $dossier, $organisation);
+        } elseif ($request->has('adherents_data')) {
+            return $this->processJsonData($request, $dossier, $organisation);
+        } else {
+            throw new \Exception('Aucune donnée d\'adhérents fournie');
+        }
+    }
+    
+    /**
+     * Traiter l'upload d'un fichier
+     */
+    private function processFileUpload($request, $dossier, $organisation)
+    {
+        $file = $request->file('adherents_file');
+        
+        // Valider le fichier
+        $request->validate([
+            'adherents_file' => 'required|file|mimes:xlsx,csv|max:10240' // 10MB max
+        ]);
+        
+        // Traiter le fichier selon son type
+        if ($file->getClientOriginalExtension() === 'csv') {
+            $adherentsData = $this->parseCsvFile($file);
+        } else {
+            $adherentsData = $this->parseExcelFile($file);
+        }
+        
+        // Traiter les données
+        return $this->processAdherentsData($adherentsData, $dossier, $organisation);
+    }
+    
+    /**
+     * Traiter des données JSON
+     */
+    private function processJsonData($request, $dossier, $organisation)
+    {
+        $adherentsJson = $request->input('adherents_data');
+        $adherentsData = json_decode($adherentsJson, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \Exception('Données JSON invalides');
+        }
+        
+        return $this->processAdherentsData($adherentsData, $dossier, $organisation);
+    }
+    
+    /**
+     * Traiter les données d'adhérents avec validation et insertion
+     */
+    private function processAdherentsData($adherentsData, $dossier, $organisation)
+    {
+        $successCount = 0;
+        $errorCount = 0;
+        $anomaliesCount = 0;
+        $errors = [];
+        
+        DB::beginTransaction();
+        
+        try {
+            foreach ($adherentsData as $index => $adherentData) {
+                try {
+                    // Validation et nettoyage
+                    $cleanedData = $this->validateAndCleanAdherentData($adherentData);
+                    
+                    // Vérifier doublon
+                    $existingAdherent = Adherent::where('nip', $cleanedData['nip'])
+                        ->where('organisation_id', $organisation->id)
+                        ->first();
+                    
+                    if ($existingAdherent) {
+                        $anomaliesCount++;
+                        Log::warning('Doublon détecté', [
+                            'nip' => $cleanedData['nip'],
+                            'nom' => $cleanedData['nom']
+                        ]);
+                        continue;
+                    }
+                    
+                    // Créer l'adhérent
+                    Adherent::create([
+                        'organisation_id' => $organisation->id,
+                        'dossier_id' => $dossier->id,
+                        'nip' => $cleanedData['nip'],
+                        'civilite' => $cleanedData['civilite'],
+                        'nom' => $cleanedData['nom'],
+                        'prenom' => $cleanedData['prenom'],
+                        'telephone' => $cleanedData['telephone'],
+                        'profession' => $cleanedData['profession'],
+                        'adresse' => $cleanedData['adresse'],
+                        'date_naissance' => $cleanedData['date_naissance'],
+                        'age' => $cleanedData['age'],
+                        'date_adhesion' => now(),
+                        'is_active' => true,
+                        'created_by' => auth()->id()
+                    ]);
+                    
+                    $successCount++;
+                    
+                } catch (\Exception $e) {
+                    $errorCount++;
+                    $errors[] = [
+                        'index' => $index,
+                        'nip' => $adherentData['nip'] ?? 'N/A',
+                        'nom' => $adherentData['nom'] ?? 'N/A',
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+            
+            DB::commit();
+            
+            Log::info('✅ IMPORT TERMINÉ', [
+                'dossier_id' => $dossier->id,
+                'total_processed' => count($adherentsData),
+                'success_count' => $successCount,
+                'error_count' => $errorCount,
+                'anomalies_count' => $anomaliesCount
+            ]);
+            
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Import terminé : {$successCount} adhérents créés",
+                    'data' => [
+                        'total_processed' => count($adherentsData),
+                        'success_count' => $successCount,
+                        'error_count' => $errorCount,
+                        'anomalies_count' => $anomaliesCount,
+                        'errors' => $errors
+                    ]
+                ]);
+            }
+            
+            return redirect()->route('operator.dossiers.confirmation', $dossier->id)
+                ->with('success', "Import réussi : {$successCount} adhérents ajoutés");
+            
+        } catch (\Exception $e) {
+            DB::rollback();
+            throw $e;
+        }
+    }
+    
+    /**
+     * Valider et nettoyer les données d'un adhérent
+     */
+    private function validateAndCleanAdherentData($data)
+    {
+        // Validation NIP
+        $nip = $data['nip'] ?? '';
+        if (!preg_match('/^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/', $nip)) {
+            throw new \Exception("Format NIP invalide: {$nip}");
+        }
+        
+        // Validation champs obligatoires
+        $requiredFields = ['nom', 'prenom', 'civilite'];
+        foreach ($requiredFields as $field) {
+            if (empty($data[$field])) {
+                throw new \Exception("Champ obligatoire manquant: {$field}");
+            }
+        }
+        
+        return [
+            'nip' => strtoupper(trim($nip)),
+            'civilite' => trim($data['civilite']),
+            'nom' => strtoupper(trim($data['nom'])),
+            'prenom' => ucwords(strtolower(trim($data['prenom']))),
+            'telephone' => $this->cleanPhoneNumber($data['telephone'] ?? ''),
+            'profession' => trim($data['profession'] ?? ''),
+            'adresse' => trim($data['adresse'] ?? ''),
+            'date_naissance' => $this->extractDateFromNip($nip),
+            'age' => $this->calculateAgeFromNip($nip)
+        ];
+    }
+    
+    /**
+     * Nettoyer numéro de téléphone
+     */
+    private function cleanPhoneNumber($phone)
+    {
+        if (empty($phone)) return null;
+        
+        $cleaned = preg_replace('/[^0-9]/', '', $phone);
+        
+        if (strlen($cleaned) === 8 && !str_starts_with($cleaned, '241')) {
+            $cleaned = '241' . $cleaned;
+        }
+        
+        return $cleaned;
+    }
+    
+    /**
+     * Extraire date de naissance du NIP
+     */
+    private function extractDateFromNip($nip)
+    {
+        if (preg_match('/^[A-Z0-9]{2}-[0-9]{4}-([0-9]{8})$/', $nip, $matches)) {
+            $dateStr = $matches[1];
+            $year = substr($dateStr, 0, 4);
+            $month = substr($dateStr, 4, 2);
+            $day = substr($dateStr, 6, 2);
+            
+            try {
+                return \Carbon\Carbon::createFromFormat('Y-m-d', "{$year}-{$month}-{$day}");
+            } catch (\Exception $e) {
+                return null;
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Calculer âge depuis le NIP
+     */
+    private function calculateAgeFromNip($nip)
+    {
+        $birthDate = $this->extractDateFromNip($nip);
+        return $birthDate ? $birthDate->age : null;
+    }
+    
+    /**
+     * Obtenir le minimum d'adhérents requis selon le type d'organisation
+     */
+    private function getMinimumAdherentsRequired($type)
+    {
+        $minimums = [
+            'association' => 10,
+            'ong' => 15,
+            'parti_politique' => 50,
+            'confession_religieuse' => 10
+        ];
+        
+        return $minimums[$type] ?? 10;
+    }
+    
+    /**
+     * Parser un fichier CSV
+     */
+    private function parseCsvFile($file)
+    {
+        $data = [];
+        $handle = fopen($file->getRealPath(), 'r');
+        
+        if ($handle) {
+            $headers = fgetcsv($handle);
+            
+            while (($row = fgetcsv($handle)) !== false) {
+                if (count($row) >= count($headers)) {
+                    $data[] = array_combine($headers, $row);
+                }
+            }
+            
+            fclose($handle);
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * Parser un fichier Excel (nécessite PhpSpreadsheet)
+     */
+    private function parseExcelFile($file)
+    {
+        // Implémentation basique - à adapter selon vos besoins
+        // Nécessite l'installation de PhpSpreadsheet via Composer
+        
+        throw new \Exception('Support Excel en cours d\'implémentation');
+    }
+
+// FIN DES MÉTHODES À AJOUTER
 
 
 }

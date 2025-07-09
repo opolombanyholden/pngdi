@@ -15,18 +15,18 @@ class Dossier extends Model
 
     protected $fillable = [
         'organisation_id',
-        'type_operation',
-        'numero_dossier',
-        'statut',
-        'date_soumission',        
-        'submitted_at',           
-        'date_traitement',
-        'validated_at',           
-        'motif_rejet',
-        'current_step_id',
-        'is_active',
-        'metadata',
-        'donnees_supplementaires'
+    'type_operation',
+    'numero_dossier',
+    'statut',
+    'date_soumission',        // Ajouter cette ligne si manquante
+    'submitted_at',           // Colonne utilisée dans le contrôleur
+    'date_traitement',
+    'validated_at',           // Colonne utilisée dans le contrôleur
+    'motif_rejet',
+    'current_step_id',
+    'is_active',
+    'metadata',
+    'donnees_supplementaires' // Colonne utilisée pour QR Code
     ];
 
     protected $casts = [
@@ -66,50 +66,50 @@ class Dossier extends Model
         });
     }
 
-    /**
-     * Générer un numéro de dossier unique
-     */
-    public static function generateNumeroDossier($typeOperation): string
-    {
-        // Version compatible PHP 7.4
-        switch($typeOperation) {
-            case self::TYPE_CREATION:
-                $prefix = 'CRE';
-                break;
-            case self::TYPE_MODIFICATION:
-                $prefix = 'MOD';
-                break;
-            case self::TYPE_CESSATION:
-                $prefix = 'CES';
-                break;
-            case self::TYPE_DECLARATION:
-                $prefix = 'DEC';
-                break;
-            case self::TYPE_FUSION:
-                $prefix = 'FUS';
-                break;
-            case self::TYPE_ABSORPTION:
-                $prefix = 'ABS';
-                break;
-            default:
-                $prefix = 'DOS';
-                break;
-        }
-
-        $year = date('Y');
-        $lastDossier = self::where('numero_dossier', 'like', $prefix . '-' . $year . '-%')
-            ->orderBy('numero_dossier', 'desc')
-            ->first();
-
-        if ($lastDossier) {
-            $lastNumber = intval(substr($lastDossier->numero_dossier, -6));
-            $newNumber = $lastNumber + 1;
-        } else {
-            $newNumber = 1;
-        }
-
-        return sprintf('%s-%s-%06d', $prefix, $year, $newNumber);
+/**
+ * Générer un numéro de dossier unique
+ */
+public static function generateNumeroDossier($typeOperation): string
+{
+    // Version compatible PHP 7.4
+    switch($typeOperation) {
+        case self::TYPE_CREATION:
+            $prefix = 'CRE';
+            break;
+        case self::TYPE_MODIFICATION:
+            $prefix = 'MOD';
+            break;
+        case self::TYPE_CESSATION:
+            $prefix = 'CES';
+            break;
+        case self::TYPE_DECLARATION:
+            $prefix = 'DEC';
+            break;
+        case self::TYPE_FUSION:
+            $prefix = 'FUS';
+            break;
+        case self::TYPE_ABSORPTION:
+            $prefix = 'ABS';
+            break;
+        default:
+            $prefix = 'DOS';
+            break;
     }
+
+    $year = date('Y');
+    $lastDossier = self::where('numero_dossier', 'like', $prefix . '-' . $year . '-%')
+        ->orderBy('numero_dossier', 'desc')
+        ->first();
+
+    if ($lastDossier) {
+        $lastNumber = intval(substr($lastDossier->numero_dossier, -6));
+        $newNumber = $lastNumber + 1;
+    } else {
+        $newNumber = 1;
+    }
+
+    return sprintf('%s-%s-%06d', $prefix, $year, $newNumber);
+}
 
     /**
      * Relations
@@ -150,83 +150,13 @@ class Dossier extends Model
     }
 
     /**
-     * ✅ CORRECTION PRINCIPALE - Relation avec les adhérents via organisation
-     * 
-     * LOGIQUE : Un dossier appartient à une organisation, 
-     * et les adhérents appartiennent également à cette organisation.
-     * Donc on accède aux adhérents VIA l'organisation.
-     */
+    * Relation avec les adhérents du dossier
+    */
     public function adherents()
     {
-        return $this->hasManyThrough(
-            Adherent::class,           // Modèle final (Adherent)
-            Organisation::class,       // Modèle intermédiaire (Organisation)
-            'id',                      // Clé étrangère sur table organisations (pour relation dossiers->organisations)
-            'organisation_id',         // Clé étrangère sur table adherents (pour relation organisations->adherents)  
-            'organisation_id',         // Clé locale sur table dossiers
-            'id'                       // Clé locale sur table organisations
-        );
+        return $this->hasMany(Adherent::class, 'dossier_id');
     }
 
-    /**
-     * ✅ MÉTHODE ALTERNATIVE - Accès direct aux adhérents de l'organisation
-     * 
-     * Plus simple et plus claire que hasManyThrough
-     */
-    public function getAdherentsAttribute()
-    {
-        return $this->organisation ? $this->organisation->adherents : collect();
-    }
-
-    /**
-     * ✅ MÉTHODE UTILITAIRE - Obtenir les adhérents avec filtres
-     */
-    public function getAdherentsWithFilters($actifs = null, $withAnomalies = null)
-    {
-        if (!$this->organisation) {
-            return collect();
-        }
-
-        $query = $this->organisation->adherents();
-
-        if ($actifs !== null) {
-            $query->where('is_active', $actifs);
-        }
-
-        if ($withAnomalies !== null) {
-            $query->where('has_anomalies', $withAnomalies);
-        }
-
-        return $query->get();
-    }
-
-    /**
-     * ✅ MÉTHODE STATISTIQUES - Compteurs adhérents
-     */
-    public function getAdherentsStats(): array
-    {
-        if (!$this->organisation) {
-            return [
-                'total' => 0,
-                'actifs' => 0,
-                'inactifs' => 0,
-                'fondateurs' => 0,
-                'avec_anomalies' => 0,
-                'sans_anomalies' => 0
-            ];
-        }
-
-        $adherents = $this->organisation->adherents();
-        
-        return [
-            'total' => $adherents->count(),
-            'actifs' => $adherents->where('is_active', true)->count(),
-            'inactifs' => $adherents->where('is_active', false)->count(),
-            'fondateurs' => $adherents->where('is_fondateur', true)->count(),
-            'avec_anomalies' => $adherents->where('has_anomalies', true)->count(),
-            'sans_anomalies' => $adherents->where('has_anomalies', false)->count()
-        ];
-    }
 
     /**
      * Scopes
@@ -269,10 +199,12 @@ class Dossier extends Model
      */
     public function isLockedBy($userId): bool
     {
+        
+        
         return $this->lock()
-            ->where('is_active', true)
-            ->where('locked_by', $userId)
-            ->exists();
+        ->where('is_active', true)
+        ->where('locked_by', $userId)  // Corrigé: utiliser 'locked_by' au lieu de 'user_id'
+        ->exists();
     }
 
     /**
