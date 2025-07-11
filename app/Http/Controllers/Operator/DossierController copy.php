@@ -2199,87 +2199,34 @@ public function storeAdherentsPhase2(Request $request, $dossierId)
             Log::warning('⚠️ Adhérents enregistrés malgré erreur mise à jour dossier');
         }
 
-        // ✅ ÉTAPE 7: PRÉPARATION DONNÉES DE CONFIRMATION
-        $confirmationData = [
-            'organisation' => $organisation,
-            'dossier' => $dossier,
-            'numero_recepisse' => $organisation->numero_recepisse ?? 'En cours d\'attribution',
-            'numero_dossier' => $dossier->numero_dossier ?? 'Non attribué',
-            'adherents_stats' => $statsDetaillees,
-            'anomalies' => $anomaliesDetaillees,
-            'phase' => 2,
-            'message_confirmation' => 'Phase 2 complétée : Adhérents importés avec succès',
-            'delai_traitement' => '72 heures ouvrées',
-            'conservation_totale' => true,
-            'taux_reussite' => $statsDetaillees['total'] > 0 
-                ? round(($statsDetaillees['enregistres'] / $statsDetaillees['total']) * 100, 1) . '%'
-                : '0%'
-        ];
-
+        // ✅ ÉTAPE 7: RÉPONSE DE SUCCÈS
         Log::info('🎉 PHASE 2 TERMINÉE AVEC SUCCÈS', [
             'dossier_id' => $dossierId,
             'organisation_id' => $organisation->id,
             'adherents_stats' => $statsDetaillees
         ]);
 
-        // ✅ ÉTAPE 8: CORRECTION - DÉTECTION STRICTE DES REQUÊTES AJAX
-        $isRealAjaxRequest = $request->ajax() && 
-                             $request->header('X-Requested-With') === 'XMLHttpRequest' &&
-                             $request->wantsJson() &&
-                             !$request->hasFile('adherents_file') &&
-                             ($request->header('Content-Type') === 'application/json' || 
-                              strpos($request->header('Content-Type'), 'application/json') !== false);
-
-        Log::info('🎯 DÉCISION DE RÉPONSE PHASE 2', [
-            'dossier_id' => $dossierId,
-            'is_real_ajax' => $isRealAjaxRequest,
-            'will_redirect' => !$isRealAjaxRequest,
-            'redirect_url' => route('operator.dossiers.confirmation', $dossier->id),
-            'request_method' => $request->method(),
-            'content_type' => $request->header('Content-Type'),
-            'has_xhr_header' => $request->header('X-Requested-With') === 'XMLHttpRequest',
-            'wants_json' => $request->wantsJson(),
-            'expects_json' => $request->expectsJson()
-        ]);
-
-        if ($isRealAjaxRequest) {
-            // RÉPONSE JSON POUR LES VRAIES REQUÊTES AJAX SEULEMENT
-            Log::info('📤 RÉPONSE JSON POUR AJAX', ['dossier_id' => $dossierId]);
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Phase 2 complétée avec succès : Adhérents importés',
-                'phase' => 2,
-                'conservation_totale' => true,
-                'data' => [
-                    'organisation_id' => $organisation->id,
-                    'dossier_id' => $dossier->id,
-                    'adherents_processed' => $statsDetaillees['enregistres'],
-                    'confirmation_url' => route('operator.dossiers.confirmation', $dossier->id),
-                    'stats' => $statsDetaillees
-                ],
+        return response()->json([
+            'success' => true,
+            'message' => 'Import terminé avec succès - Conservation totale appliquée',
+            'phase' => 2,
+            'conservation_totale' => true,
+            'data' => [
+                'stats' => $statsDetaillees,
                 'anomalies' => [
                     'total' => count($anomaliesDetaillees),
                     'details' => $anomaliesDetaillees
                 ],
-                'next_action' => 'REDIRECT_TO_CONFIRMATION',
-                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
-            ]);
-        } else {
-            // ✅ REDIRECTION FORCÉE VERS CONFIRMATION POUR TOUS LES AUTRES CAS
-            Log::info('🔄 REDIRECTION FORCÉE VERS CONFIRMATION', [
-                'dossier_id' => $dossier->id,
-                'organisation_id' => $organisation->id,
-                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id),
-                'method' => $request->method(),
-                'user_agent' => substr($request->header('User-Agent'), 0, 100)
-            ]);
-            
-            return redirect()->route('operator.dossiers.confirmation', $dossier->id)
-                ->with('success_data', $confirmationData)
-                ->with('success', 'Phase 2 complétée : Adhérents importés avec succès')
-                ->with('conservation_totale', true);
-        }
+                'erreurs_systeme' => [
+                    'total' => count($erreursSysteme),
+                    'details' => $erreursSysteme
+                ]
+            ],
+            'summary' => [
+                'message' => "✅ {$statsDetaillees['enregistres']}/{$statsDetaillees['total']} adhérents enregistrés",
+                'conservation' => 'Tous les adhérents sont conservés, anomalies classifiées'
+            ]
+        ]);
 
     } catch (\Exception $e) {
         DB::rollback();

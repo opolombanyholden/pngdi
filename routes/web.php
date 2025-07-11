@@ -24,6 +24,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
+use App\Http\Controllers\Api\ChunkProcessorController;
+
 /*
 |--------------------------------------------------------------------------
 | Routes Web Publiques
@@ -287,8 +289,8 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
             ->name('download-accuse')
             ->middleware(['throttle:30,1']); // Protection contre abus
             
-        // ✅ ROUTE STORE-ADHERENTS (Phase 2 workflow)
-        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherents'])
+        // ✅ ROUTE STORE-ADHERENTS (Phase 2 workflow) - CORRIGÉE
+        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
             ->name('store-adherents')
             ->middleware(['throttle:10,1']);
     });
@@ -322,20 +324,6 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
             ->name('performance');
     });
 
-
-// ✅ NOUVELLES ROUTES CHUNKING - À AJOUTER ICI
-    Route::prefix('chunking')->name('chunking.')->group(function() {
-        Route::post('/get-session-data', [\App\Http\Controllers\Operator\ChunkingController::class, 'getSessionData'])
-             ->name('get-session-data');
-        Route::post('/process-chunk', [\App\Http\Controllers\Operator\ChunkingController::class, 'processChunk'])
-             ->name('process-chunk');
-        Route::post('/cleanup-session', [\App\Http\Controllers\Operator\ChunkingController::class, 'cleanupSession'])
-             ->name('cleanup-session');
-        Route::get('/health', [\App\Http\Controllers\Operator\ChunkingController::class, 'healthCheck'])
-             ->name('health');
-        Route::get('/csrf-refresh', [\App\Http\Controllers\Operator\ChunkingController::class, 'refreshCSRF'])
-             ->name('csrf-refresh');
-    });
 
     // Dashboard principal
     Route::get('/', function () {
@@ -424,10 +412,10 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         ->middleware(['throttle:60,1']); // Protection contre les abus
 
         // ✅ NOUVELLES ROUTES WORKFLOW 2 PHASES - PHASE 2
-        Route::get('/{dossier}/adherents-import', [OrganisationController::class, 'adherentsImportPage'])
+        Route::get('/{dossier}/adherents-import', [DossierController::class, 'adherentsImportPage'])
         ->name('adherents-import');
         
-        Route::post('/{dossier}/store-adherents', [OrganisationController::class, 'storeAdherentsPhase2'])
+        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
         ->name('store-adherents');
         
         Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
@@ -1720,54 +1708,85 @@ Route::any('/test-simple', function() {
 // ========================================
 // ROUTES CHUNKING - À AJOUTER À LA FIN DE routes/web.php
 // ========================================
-
-use App\Http\Controllers\Api\ChunkProcessorController;
+// ========================================
+// ROUTES CHUNKING CORRIGÉES - ChunkProcessorController
+// ========================================
 
 // Routes chunking avec middleware auth + verified
 Route::middleware(['auth', 'verified'])->group(function () {
     
-    // Routes chunking Phase 2 - Priority WEB selon solution Discussion 39
-    Route::prefix('chunking')->group(function () {
+    // ✅ Routes chunking API - ChunkProcessorController
+    Route::prefix('chunking')->name('chunking.')->group(function () {
         
         // Route principale de traitement des chunks
         Route::post('/process-chunk', [ChunkProcessorController::class, 'processChunk'])
-            ->name('chunking.process-chunk');
+            ->name('process-chunk');
         
         // Route de refresh CSRF
         Route::get('/csrf-refresh', [ChunkProcessorController::class, 'refreshCSRF'])
-            ->name('chunking.csrf-refresh');
+            ->name('csrf-refresh');
         
-        // Route de health check
+        // ✅ ROUTE HEALTH CHECK CRITIQUE - Manquait
         Route::get('/health', [ChunkProcessorController::class, 'healthCheck'])
-            ->name('chunking.health');
+            ->name('health');
         
         // Route de test authentification
         Route::get('/auth-test', [ChunkProcessorController::class, 'authTest'])
-            ->name('chunking.auth-test');
+            ->name('auth-test');
         
         // Route statistiques performance
         Route::get('/performance', [ChunkProcessorController::class, 'getPerformanceStats'])
-            ->name('chunking.performance');
+            ->name('performance');
     });
     
-    // Routes Phase 2 - Import adhérents
-    Route::prefix('operator/dossiers')->group(function () {
+    // ✅ Routes Phase 2 - Import adhérents CORRIGÉES
+    Route::prefix('operator/dossiers')->name('operator.dossiers.')->group(function () {
         
         // Page import adhérents Phase 2
-        Route::get('/{dossier}/adherents-import', [App\Http\Controllers\Operator\DossierController::class, 'adherentsImport'])
-            ->name('operator.dossiers.adherents-import');
+        Route::get('/{dossier}/adherents-import', [DossierController::class, 'adherentsImport'])
+            ->name('adherents-import')
+            ->where('dossier', '[0-9]+');
         
-        // Traitement upload adhérents
-        Route::post('/{dossier}/store-adherents', [App\Http\Controllers\Operator\DossierController::class, 'storeAdherents'])
-            ->name('operator.dossiers.store-adherents');
+        // ✅ ROUTE STORE ADHERENTS PHASE 2 - CORRECTION CRITIQUE
+        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
+            ->name('store-adherents')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:10,1']);
         
-        // Session management pour Phase 2
-        Route::post('/save-session-adherents', [App\Http\Controllers\Operator\DossierController::class, 'saveSessionAdherents'])
-            ->name('operator.dossiers.save-session-adherents');
+        // Routes session management pour Phase 2
+        Route::post('/save-session-adherents', [DossierController::class, 'saveSessionAdherents'])
+            ->name('save-session-adherents');
         
-        Route::get('/get-session-adherents', [App\Http\Controllers\Operator\DossierController::class, 'getSessionAdherents'])
-            ->name('operator.dossiers.get-session-adherents');
+        Route::get('/get-session-adherents/{dossier}', [DossierController::class, 'getSessionAdherents'])
+            ->name('get-session-adherents')
+            ->where('dossier', '[0-9]+');
     });
+});
+
+// ========================================
+// ROUTES CHUNKING PUBLIQUES (sans auth)
+// ========================================
+
+Route::prefix('chunking/public')->name('chunking.public.')->group(function () {
+    
+    // Health check public pour monitoring
+    Route::get('/status', function () {
+        return response()->json([
+            'status' => 'operational',
+            'timestamp' => now()->toISOString(),
+            'service' => 'SGLP Chunking Service v1.0',
+            'healthy' => true
+        ]);
+    })->name('status');
+    
+    // Endpoint de diagnostic simple
+    Route::get('/ping', function () {
+        return response()->json([
+            'success' => true,
+            'message' => 'pong',
+            'timestamp' => now()->toISOString()
+        ]);
+    })->name('ping');
 });
 
 // Routes chunking publiques (sans auth) pour certains endpoints

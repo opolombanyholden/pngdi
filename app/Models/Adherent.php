@@ -12,7 +12,7 @@ class Adherent extends Model
 {
     use HasFactory;
 
-    /**
+      /**
      * ✅ FILLABLE - Mis à jour avec toutes les nouvelles colonnes
      */
     protected $fillable = [
@@ -72,18 +72,21 @@ class Adherent extends Model
         'historique'
     ];
 
-    /**
-     * ✅ CASTS - Mis à jour
+
+     /**
+     * ✅ CASTS CORRIGÉS
      */
     protected $casts = [
         'date_naissance' => 'date',
-        'date_adhesion' => 'date',
+        'date_adhesion' => 'date', 
         'date_exclusion' => 'date',
         'is_fondateur' => 'boolean',
         'is_active' => 'boolean',
         'has_anomalies' => 'boolean',
-        'historique' => 'array',
         'anomalies_data' => 'array',
+        'historique' => 'array',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
     /**
@@ -133,8 +136,12 @@ class Adherent extends Model
     // ✅ PROPRIÉTÉ STATIQUE POUR TRACKER LES DOUBLONS DANS LE BATCH
     protected static $nipBatchTracker = [];
 
+// ========================================
+// DÉLIMITEUR DÉBUT : MÉTHODE BOOT() CORRIGÉE
+// ========================================
+
     /**
-     * ✅ BOOT - NOUVELLE LOGIQUE AVEC GESTION COMPLÈTE DES ANOMALIES NIP
+     * ✅ BOOT - LOGIQUE CORRIGÉE AVEC GESTION CIVILITE ET ANOMALIES
      */
     protected static function boot()
     {
@@ -146,6 +153,11 @@ class Adherent extends Model
                 $adherent->fonction = self::FONCTION_MEMBRE;
             }
             
+            // ✅ NOUVEAU : Définir civilité par défaut si manquante
+            if (empty($adherent->civilite)) {
+                $adherent->civilite = 'M';
+            }
+            
             // Initialiser l'historique si vide
             if (empty($adherent->historique)) {
                 $adherent->historique = [
@@ -155,8 +167,8 @@ class Adherent extends Model
                 ];
             }
 
-            // ✅ NOUVELLE LOGIQUE : Détecter et gérer TOUTES les anomalies SANS bloquer
-            $adherent->detectAndManageAllAnomalies();
+            // ✅ CORRIGÉ : Appeler la méthode de détection des anomalies
+            $adherent->detectAndClassifyAnomalies();
         });
 
         static::created(function ($adherent) {
@@ -167,9 +179,9 @@ class Adherent extends Model
                     'organisation_id' => $adherent->organisation_id,
                     'profession' => $adherent->profession,
                     'fonction' => $adherent->fonction,
+                    'civilite' => $adherent->civilite,
                     'has_anomalies' => $adherent->has_anomalies,
-                    'anomalies_severity' => $adherent->anomalies_severity,
-                    'nip_status' => $adherent->getNipStatus()
+                    'anomalies_severity' => $adherent->anomalies_severity
                 ]);
 
                 // Logger si des anomalies ont été détectées
@@ -205,6 +217,10 @@ class Adherent extends Model
             }
         });
     }
+
+// ========================================
+// DÉLIMITEUR FIN : MÉTHODE BOOT() CORRIGÉE
+// ========================================
 
     /**
      * ✅ MÉTHODE PRINCIPALE MISE À JOUR - Détecter TOUTES les anomalies
@@ -813,7 +829,8 @@ class Adherent extends Model
      */
     public static function resetBatchTracker()
     {
-        self::$nipBatchTracker = [];
+         // Réinitialiser le tracker interne pour éviter les faux doublons
+        static::$batchTracker = [];
     }
 
     /**
@@ -1231,4 +1248,398 @@ class Adherent extends Model
             ]
         ];
     }
+
+/**
+ * ✅ AJOUT MÉTHODES ADHERENT.PHP - DÉLIMITEURS TEXTUELS EXPLICITES
+ * 
+ * FICHIER : app/Models/Adherent.php
+ * ACTION : AJOUTER À LA FIN DE LA CLASSE (avant l'accolade fermante finale)
+ */
+
+// ========================================
+// DÉLIMITEUR DÉBUT : NOUVELLES MÉTHODES À AJOUTER
+// ========================================
+// CHERCHER LA FIN DE LA CLASSE Adherent (avant la dernière accolade })
+// AJOUTER TOUT CE CODE AVANT L'ACCOLADE FERMANTE :
+    /**
+     * ✅ MÉTHODE CENTRALE : Détection automatique des anomalies
+     */
+    public function detectAndClassifyAnomalies()
+    {
+        $anomalies = [];
+        $maxSeverity = null;
+
+        // 1. Vérification du NIP
+        $nipAnomaly = $this->checkNipAnomaly();
+        if ($nipAnomaly) {
+            $anomalies[] = $nipAnomaly;
+            $maxSeverity = $this->updateMaxSeverity($maxSeverity, $nipAnomaly['type']);
+        }
+
+        // 2. Vérification des doublons
+        $doublonAnomaly = $this->checkDoublonAnomaly();
+        if ($doublonAnomaly) {
+            $anomalies[] = $doublonAnomaly;
+            $maxSeverity = $this->updateMaxSeverity($maxSeverity, $doublonAnomaly['type']);
+        }
+
+        // 3. Vérification âge/mineur
+        $ageAnomaly = $this->checkAgeAnomaly();
+        if ($ageAnomaly) {
+            $anomalies[] = $ageAnomaly;
+            $maxSeverity = $this->updateMaxSeverity($maxSeverity, $ageAnomaly['type']);
+        }
+
+        // 4. Vérification téléphone
+        $phoneAnomaly = $this->checkPhoneAnomaly();
+        if ($phoneAnomaly) {
+            $anomalies[] = $phoneAnomaly;
+            $maxSeverity = $this->updateMaxSeverity($maxSeverity, $phoneAnomaly['type']);
+        }
+
+        // 5. Vérification profession exclue
+        $professionAnomaly = $this->checkProfessionAnomaly();
+        if ($professionAnomaly) {
+            $anomalies[] = $professionAnomaly;
+            $maxSeverity = $this->updateMaxSeverity($maxSeverity, $professionAnomaly['type']);
+        }
+
+        // 6. Vérification double appartenance parti
+        $doubleAppartenanceAnomaly = $this->checkDoubleAppartenanceAnomaly();
+        if ($doubleAppartenanceAnomaly) {
+            $anomalies[] = $doubleAppartenanceAnomaly;
+            $maxSeverity = $this->updateMaxSeverity($maxSeverity, $doubleAppartenanceAnomaly['type']);
+        }
+
+        // Mettre à jour les attributs d'anomalies
+        $this->has_anomalies = !empty($anomalies);
+        $this->anomalies_data = $anomalies;
+        $this->anomalies_severity = $maxSeverity;
+
+        // Ajouter à l'historique
+        if (!empty($anomalies)) {
+            $this->addToHistory([
+                'type' => 'anomalies_detected',
+                'date' => now()->toISOString(),
+                'data' => [
+                    'total_anomalies' => count($anomalies),
+                    'severity' => $maxSeverity,
+                    'anomalies_summary' => array_column($anomalies, 'code'),
+                    'enregistrement_force' => 'limite_minimale_respectee'
+                ],
+                'user_id' => auth()->id()
+            ]);
+
+            \Log::error('❌ Erreur système enregistrement', [
+                'index' => $this->getKey(),
+                'error' => "Anomalies détectées : " . implode(', ', array_column($anomalies, 'code'))
+            ]);
+        }
+    }
+
+    /**
+     * ✅ HELPER : Mise à jour de la sévérité maximale
+     */
+    private function updateMaxSeverity($current, $new)
+    {
+        $hierarchy = ['mineure' => 1, 'majeure' => 2, 'critique' => 3];
+        
+        if (!$current) return $new;
+        
+        $currentLevel = $hierarchy[$current] ?? 0;
+        $newLevel = $hierarchy[$new] ?? 0;
+        
+        return $newLevel > $currentLevel ? $new : $current;
+    }
+
+    /**
+     * ✅ HELPER : Ajouter un événement à l'historique
+     */
+    private function addToHistory(array $event)
+    {
+        $historique = $this->historique ?? [];
+        
+        if (!isset($historique['events'])) {
+            $historique['events'] = [];
+        }
+        
+        $historique['events'][] = $event;
+        $this->historique = $historique;
+    }
+
+    /**
+     * ✅ VÉRIFICATION NIP
+     */
+    private function checkNipAnomaly()
+    {
+        if (empty($this->nip)) {
+            return [
+                'code' => 'nip_manquant',
+                'type' => 'critique',
+                'message' => 'NIP manquant',
+                'details' => ['nip_fourni' => $this->nip],
+                'date_detection' => now()->toISOString(),
+                'action_requise' => 'Génération automatique d\'un NIP temporaire'
+            ];
+        }
+
+        // Vérifier format NIP
+        if (!preg_match('/^[A-Z]\d-\d{4}-\d{8}$/', $this->nip)) {
+            return [
+                'code' => 'nip_invalide',
+                'type' => 'majeure',
+                'message' => 'Format NIP incorrect - Attendu: XX-QQQQ-YYYYMMDD (ex: A1-2345-19901225)',
+                'details' => [
+                    'nip_fourni' => $this->nip,
+                    'longueur' => strlen($this->nip),
+                    'format_detecte' => $this->detectNipFormat($this->nip),
+                    'format_attendu' => 'XX-QQQQ-YYYYMMDD',
+                    'exemple_valide' => 'A1-2345-19901225',
+                    'details_analyse' => $this->analyzeNipStructure($this->nip)
+                ],
+                'date_detection' => now()->toISOString(),
+                'action_requise' => 'Correction du format NIP vers le nouveau standard'
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * ✅ VÉRIFICATION DOUBLONS
+     */
+    private function checkDoublonAnomaly()
+    {
+        $existing = static::where('nip', $this->nip)
+            ->where('id', '!=', $this->id ?? 0)
+            ->first();
+
+        if ($existing) {
+            return [
+                'code' => 'nip_doublon_organisation',
+                'type' => 'critique',
+                'message' => "NIP '{$this->nip}' déjà enregistré dans une autre organisation",
+                'details' => [
+                    'nip' => $this->nip,
+                    'organisation_existante_id' => $existing->organisation_id,
+                    'organisation_existante_nom' => $existing->organisation->nom ?? 'Nom non disponible',
+                    'organisation_existante_type' => $existing->organisation->type ?? 'Type non disponible',
+                    'adherent_existant' => [
+                        'id' => $existing->id,
+                        'nom' => $existing->nom,
+                        'prenom' => $existing->prenom,
+                        'is_active' => $existing->is_active,
+                        'date_adhesion' => $existing->date_adhesion
+                    ]
+                ],
+                'date_detection' => now()->toISOString(),
+                'action_requise' => 'Vérification et résolution du conflit'
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * ✅ VÉRIFICATION ÂGE
+     */
+    private function checkAgeAnomaly()
+    {
+        if (!$this->nip) return null;
+
+        $age = $this->calculateAgeFromNip();
+        if ($age !== null && $age < 18) {
+            return [
+                'code' => 'age_mineur',
+                'type' => 'critique',
+                'message' => "Personne mineure détectée (âge: {$age} ans)",
+                'details' => [
+                    'age_calcule' => $age,
+                    'nip' => $this->nip,
+                    'date_naissance_extraite' => $this->extractBirthdateFromNip(),
+                    'regle' => 'Seuls les majeurs (18+ ans) sont autorisés'
+                ],
+                'date_detection' => now()->toISOString(),
+                'action_requise' => 'Vérification de l\'âge - Exclusion si confirmé mineur'
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * ✅ VÉRIFICATION TÉLÉPHONE
+     */
+    private function checkPhoneAnomaly()
+    {
+        if (empty($this->telephone)) return null;
+
+        if (!preg_match('/^(\+241|241|0)?[1-7]\d{7}$/', $this->telephone)) {
+            return [
+                'code' => 'telephone_invalide',
+                'type' => 'majeure',
+                'message' => 'Format de téléphone incorrect',
+                'details' => ['telephone_fourni' => $this->telephone],
+                'date_detection' => now()->toISOString(),
+                'action_requise' => 'Correction du numéro de téléphone'
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * ✅ VÉRIFICATION PROFESSION EXCLUE
+     */
+    private function checkProfessionAnomaly()
+    {
+        if (empty($this->profession)) return null;
+
+        $professionsExcluesParti = ['Magistrat', 'Juge', 'Procureur', 'Militaire actif', 'Policier actif'];
+        
+        if ($this->organisation && $this->organisation->type === 'parti_politique') {
+            foreach ($professionsExcluesParti as $professionExclue) {
+                if (stripos($this->profession, $professionExclue) !== false) {
+                    return [
+                        'code' => 'profession_exclue_parti',
+                        'type' => 'critique',
+                        'message' => "Profession '{$this->profession}' exclue pour parti politique",
+                        'details' => ['profession' => $this->profession],
+                        'date_detection' => now()->toISOString(),
+                        'action_requise' => 'Changement de profession ou refus d\'adhésion'
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * ✅ VÉRIFICATION DOUBLE APPARTENANCE PARTI
+     */
+    private function checkDoubleAppartenanceAnomaly()
+    {
+        if (!$this->organisation || $this->organisation->type !== 'parti_politique') {
+            return null;
+        }
+
+        $autreParti = static::whereHas('organisation', function($query) {
+            $query->where('type', 'parti_politique')
+                  ->where('id', '!=', $this->organisation_id);
+        })
+        ->where('nip', $this->nip)
+        ->where('is_active', true)
+        ->first();
+
+        if ($autreParti) {
+            return [
+                'code' => 'double_appartenance_parti',
+                'type' => 'critique',
+                'message' => "Membre actif du parti politique '{$autreParti->organisation->nom}'",
+                'details' => [
+                    'parti_id' => $autreParti->organisation_id,
+                    'parti_nom' => $autreParti->organisation->nom,
+                    'date_adhesion_existante' => $autreParti->date_adhesion,
+                    'fonction_existante' => $autreParti->fonction
+                ],
+                'date_detection' => now()->toISOString(),
+                'action_requise' => 'Exclusion formelle du parti actuel avant validation définitive'
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * ✅ HELPER : Calculer âge depuis NIP
+     */
+    private function calculateAgeFromNip()
+    {
+        if (!preg_match('/^[A-Z]\d-\d{4}-(\d{8})$/', $this->nip, $matches)) {
+            return null;
+        }
+
+        $dateStr = $matches[1];
+        if (strlen($dateStr) !== 8) return null;
+
+        $year = substr($dateStr, 0, 4);
+        $month = substr($dateStr, 4, 2);
+        $day = substr($dateStr, 6, 2);
+
+        try {
+            $birthdate = \Carbon\Carbon::createFromDate($year, $month, $day);
+            return $birthdate->age;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * ✅ HELPER : Extraire date de naissance du NIP
+     */
+    private function extractBirthdateFromNip()
+    {
+        if (!preg_match('/^[A-Z]\d-\d{4}-(\d{8})$/', $this->nip, $matches)) {
+            return null;
+        }
+
+        $dateStr = $matches[1];
+        if (strlen($dateStr) !== 8) return null;
+
+        $year = substr($dateStr, 0, 4);
+        $month = substr($dateStr, 4, 2);
+        $day = substr($dateStr, 6, 2);
+
+        return "$day/$month/$year";
+    }
+
+    /**
+     * ✅ HELPER : Détecter format NIP
+     */
+    private function detectNipFormat($nip)
+    {
+        if (preg_match('/^\d{13}$/', $nip)) {
+            return 'ancien_13_chiffres';
+        }
+        
+        if (preg_match('/^[A-Z]\d-\d{4}-\d{8}$/', $nip)) {
+            return 'nouveau_valide';
+        }
+        
+        if (preg_match('/^[A-Z]\d-\d{4}-.+$/', $nip)) {
+            return 'nouveau_invalide';
+        }
+        
+        if (strpos($nip, '-') !== false) {
+            return 'avec_tirets_invalide';
+        }
+        
+        return 'inconnu';
+    }
+
+    /**
+     * ✅ HELPER : Analyser structure NIP
+     */
+    private function analyzeNipStructure($nip)
+    {
+        return [
+            'format' => $this->detectNipFormat($nip),
+            'longueur' => strlen($nip),
+            'contient_tirets' => strpos($nip, '-') !== false,
+            'est_numerique' => is_numeric(str_replace('-', '', $nip)),
+            'structure' => preg_match('/^([A-Z]\d)-(\d{4})-(\d{8})$/', $nip, $matches) ? [
+                'prefix' => $matches[1] ?? null,
+                'sequence' => $matches[2] ?? null,
+                'date' => $matches[3] ?? null
+            ] : []
+        ];
+    }
+
+// ========================================
+// DÉLIMITEUR FIN : NOUVELLES MÉTHODES À AJOUTER
+// ========================================
+
+
+
 }

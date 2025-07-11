@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -552,4 +553,146 @@ class ChunkProcessorController extends Controller
         
         return round($bytes, 2) . ' ' . $units[$i];
     }
+
+    /**
+ * ✅ MÉTHODES À AJOUTER dans app/Http/Controllers/Api/ChunkProcessorController.php
+ * 
+ * INSTRUCTION : Ajouter ces méthodes À LA FIN de la classe ChunkProcessorController
+ * AVANT l'accolade fermante finale "}"
+ */
+
+    /**
+     * ✅ MÉTHODE MANQUANTE CRITIQUE - healthCheck
+     * Vérifier l'état de santé du système de chunking
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function healthCheck(Request $request)
+    {
+        try {
+            $sessionKey = $request->input('session_key');
+            $dossierId = $request->input('dossier_id');
+            
+            $health = [
+                'healthy' => true,
+                'status' => 'ok',
+                'timestamp' => now()->toISOString(),
+                'session_exists' => false,
+                'dossier_exists' => false,
+                'user_authenticated' => auth()->check(),
+                'server_status' => 'operational'
+            ];
+            
+            // Vérifier la session
+            if ($sessionKey) {
+                $health['session_exists'] = session()->has($sessionKey);
+                if ($health['session_exists']) {
+                    $sessionData = session($sessionKey);
+                    $health['session_data_count'] = is_array($sessionData) ? count($sessionData) : 0;
+                }
+            }
+            
+            // Vérifier le dossier
+            if ($dossierId) {
+                $dossier = \App\Models\Dossier::find($dossierId);
+                $health['dossier_exists'] = !is_null($dossier);
+                if ($health['dossier_exists']) {
+                    $health['dossier_status'] = $dossier->statut;
+                    $health['organisation_id'] = $dossier->organisation_id;
+                }
+            }
+            
+            // Vérifier les ressources système
+            $health['memory_usage'] = memory_get_usage(true);
+            $health['memory_peak'] = memory_get_peak_usage(true);
+            $health['time_limit'] = ini_get('max_execution_time');
+            
+            Log::info('🏥 HEALTH CHECK CHUNKING API', $health);
+            
+            return response()->json([
+                'success' => true,
+                'health' => $health
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('❌ ERREUR HEALTH CHECK API', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'healthy' => false,
+                'message' => 'Erreur health check: ' . $e->getMessage(),
+                'error_code' => 'HEALTH_CHECK_FAILED'
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE - authTest
+     * Test d'authentification pour le système de chunking
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function authTest(Request $request)
+    {
+        try {
+            $user = auth()->user();
+            
+            $authInfo = [
+                'authenticated' => auth()->check(),
+                'user_id' => $user ? $user->id : null,
+                'user_role' => $user ? $user->role : null,
+                'session_id' => session()->getId(),
+                'timestamp' => now()->toISOString()
+            ];
+            
+            Log::info('🔐 AUTH TEST API', $authInfo);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Test authentification réussi',
+                'data' => $authInfo
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('❌ ERREUR AUTH TEST API', [
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur test auth: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE AMÉLIORÉE - getPerformanceStats
+     * Mise à jour pour retourner JSON au lieu d'array
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    
+
+    /**
+     * ✅ MÉTHODE PRIVÉE - Compter les sessions actives
+     */
+    private function countActiveSessions(): int
+    {
+        try {
+            // Compter approximativement les sessions actives de chunking
+            $sessionFiles = glob(session_save_path() . '/sess_*');
+            return count($sessionFiles);
+        } catch (\Exception $e) {
+            return 0;
+        }
+    }
+
+
+//FIN DE LA CLASS    
 }
