@@ -563,40 +563,26 @@ private function handleLargeVolumeSubmission(Request $request, array $adherentsA
             ]);
             
             // ✅ REDIRECTION VERS CONFIRMATION AVEC DONNÉES CHUNKING
-            // Vérifier le type de requête pour décider du type de réponse
-            if ($request->ajax() || $request->expectsJson()) {
-                // Pour les requêtes AJAX : retourner JSON avec instruction de redirection
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Adhérents traités avec succès par chunking',
-                    'data' => [
-                        'total_inserted' => $chunkingResult['total_inserted'],
-                        'chunks_processed' => $chunkingResult['chunks_processed'] ?? 0,
-                        'anomalies_count' => $chunkingResult['anomalies_count'] ?? 0,
-                        'errors' => $chunkingResult['errors'] ?? [],
-                        'dossier_id' => $dossier->id,
-                        'organisation_id' => $organisation->id,
-                        'numero_dossier' => $dossier->numero_dossier
-                    ],
-                    'solution' => 'INSERTION_DURING_CHUNKING',
-                    'redirect_url' => route('operator.dossiers.confirmation', $dossier->id),
-                    'should_redirect' => true,
-                    'redirect_type' => 'confirmation',
-                    'auto_redirect' => true,
-                    'redirect_delay' => 2000
-                ]);
-            } else {
-                // Pour les requêtes normales : redirection directe
-                return redirect()
-                    ->route('operator.dossiers.confirmation', $dossier->id)
-                    ->with('success', "Adhérents traités avec succès par chunking")
-                    ->with('chunking_stats', [
-                        'total_inserted' => $chunkingResult['total_inserted'],
-                        'chunks_processed' => $chunkingResult['chunks_processed'] ?? 0,
-                        'anomalies_count' => $chunkingResult['anomalies_count'] ?? 0,
-                        'processing_time' => microtime(true) - LARAVEL_START
-                    ]);
-            }
+            return response()->json([
+                'success' => true,
+                'message' => 'Organisation créée et adhérents insérés avec succès via INSERTION DURING CHUNKING',
+                'data' => [
+                    'organisation_id' => $organisation->id,
+                    'dossier_id' => $dossier->id,
+                    'numero_dossier' => $dossier->numero_dossier,
+                    'total_adherents_inserted' => $chunkingResult['total_inserted'],
+                    'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
+                ],
+                'solution' => 'INSERTION_DURING_CHUNKING',
+                'chunking_stats' => [
+                    'total_inserted' => $chunkingResult['total_inserted'],
+                    'chunks_processed' => $chunkingResult['chunks_processed'] ?? 0,
+                    'processing_time' => $chunkingResult['processing_time'] ?? 'N/A'
+                ],
+                'redirect' => route('operator.dossiers.confirmation', $dossier->id),
+                'auto_redirect' => true,
+                'redirect_delay' => 2000
+            ]);
             
         } else {
             // ✅ GESTION D'ERREUR CHUNKING
@@ -794,33 +780,17 @@ private function handleStandardSubmission(Request $request)
             'numero_recepisse' => $dossier->numero_recepisse
         ]);
 
-        // Vérifier le type de requête pour décider du type de réponse
-        if ($request->ajax() || $request->expectsJson()) {
-            // Pour les requêtes AJAX : retourner JSON avec instruction de redirection
-            return response()->json([
-                'success' => true,
-                'message' => 'Adhérents traités avec succès',
-                'data' => [
-                    'total_inserted' => $totalInserted,
-                    'errors' => [],
-                    'dossier_id' => $dossier->id
-                ],
-                'solution' => 'STANDARD',
-                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id),
-                'should_redirect' => true,
-                'redirect_type' => 'confirmation',
-                'auto_redirect' => true,
-                'redirect_delay' => 2000
-            ]);
-        } else {
-            // Pour les requêtes normales : redirection directe
-            return redirect()
-                ->route('operator.dossiers.confirmation', $dossier->id)
-                ->with('success', 'Adhérents traités avec succès')
-                ->with('stats', [
-                    'total_inserted' => $totalInserted
-                ]);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Organisation créée avec succès',
+            'data' => [
+                'organisation_id' => $organisation->id,
+                'dossier_id' => $dossier->id,
+                'numero_dossier' => $dossier->numero_dossier,
+                'numero_recepisse' => $dossier->numero_recepisse,
+                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
+            ]
+        ]);
 
     } catch (\Exception $e) {
         DB::rollBack();

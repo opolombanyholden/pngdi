@@ -118,7 +118,6 @@ class DossierController extends Controller
         return view('operator.dossiers.create', compact('type', 'fullType', 'provinces', 'guides', 'documentTypes'));
     }
 
-
     /**
      * ✅ MÉTHODE TEMPLATE EXCEL ADHÉRENTS
      * Résout: Route [operator.templates.adherents-excel] not defined
@@ -610,20 +609,6 @@ class DossierController extends Controller
                 'proceeding_to_data_construction' => true
             ]);
 
-            // ✅ CORRECTION 3: Vérification délai avec logs (temporairement désactivée)
-            if (false) { // Désactivé temporairement pour debug complet
-                if ($dossierObj->submitted_at && $dossierObj->submitted_at->diffInHours(now()) > 24) {
-                    Log::info("=== DÉLAI DÉPASSÉ ===", [
-                        'submitted_at' => $dossierObj->submitted_at->toDateTimeString(),
-                        'hours_diff' => $dossierObj->submitted_at->diffInHours(now()),
-                        'limit_hours' => 24
-                    ]);
-                    
-                    return redirect()->route('operator.dashboard')
-                        ->with('warning', 'Cette page de confirmation n\'est plus disponible (délai dépassé).');
-                }
-            }
-
             // ✅ RÉCUPÉRATION/RECONSTRUCTION DES DONNÉES
             $sessionData = session('success_data');
             
@@ -687,12 +672,6 @@ class DossierController extends Controller
                 'view_name' => 'operator.dossiers.confirmation',
                 'compact_variable' => 'confirmationData'
             ]);
-
-            $phase_data = [
-                'phase_name' => 'Phase 2 - Import Adhérents',
-                'phase_number' => 2,
-                'phase_status' => 'soumis'
-            ];
 
             // ✅ RETOUR DE LA VUE
             return view('operator.dossiers.confirmation', compact('confirmationData'));
@@ -949,9 +928,6 @@ class DossierController extends Controller
      * ✅ MÉTHODE AUXILIAIRE CORRIGÉE - Obtenir l'URL de téléchargement de l'accusé
      * CORRECTION: Meilleure recherche des documents d'accusé
      */
-    /**
- * ✅ MÉTHODE AUXILIAIRE CORRIGÉE - Obtenir l'URL de téléchargement de l'accusé
- */
 private function getAccuseReceptionDownloadUrl(Dossier $dossier)
 {
     try {
@@ -1057,6 +1033,674 @@ private function getAccuseReceptionDownloadUrl(Dossier $dossier)
         }
         
         return now()->addHours($baseHours);
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE 1: Téléchargement accusé de réception
+     * Résout: Route [operator.dossiers.download-accuse] not defined
+     */
+    public function downloadAccuse($dossier)
+    {
+        try {
+            Log::info("=== DÉBUT TÉLÉCHARGEMENT ACCUSÉ ===", [
+                'dossier_param' => $dossier,
+                'user_id' => auth()->id()
+            ]);
+
+            // Charger le dossier avec vérification d'accès
+            $dossierObj = Dossier::with(['organisation', 'documents'])
+                ->where('id', $dossier)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossierObj) {
+                Log::error("=== DOSSIER NON TROUVÉ POUR TÉLÉCHARGEMENT ===", [
+                    'dossier_id' => $dossier,
+                    'user_id' => auth()->id()
+                ]);
+                
+                return redirect()->route('operator.dashboard')
+                    ->with('error', 'Dossier non trouvé ou accès non autorisé.');
+            }
+
+            // Rechercher l'accusé de réception dans les documents
+            $accuseDocument = $dossierObj->documents()
+                ->where('nom_fichier', 'like', 'accuse_reception_%')
+                ->orWhere('nom_original', 'like', '%Accusé%')
+                ->first();
+
+            if (!$accuseDocument) {
+                Log::warning("=== ACCUSÉ NON TROUVÉ ===", [
+                    'dossier_id' => $dossier,
+                    'documents_count' => $dossierObj->documents()->count()
+                ]);
+                
+                return redirect()->back()
+                    ->with('error', 'Accusé de réception non trouvé.');
+            }
+
+            // Construire le chemin du fichier
+            $filePath = storage_path('app/public/' . $accuseDocument->chemin_fichier);
+            
+            if (!file_exists($filePath)) {
+                Log::error("=== FICHIER ACCUSÉ INTROUVABLE ===", [
+                    'file_path' => $filePath,
+                    'document_id' => $accuseDocument->id
+                ]);
+                
+                return redirect()->back()
+                    ->with('error', 'Fichier accusé de réception introuvable.');
+            }
+
+            Log::info("=== TÉLÉCHARGEMENT ACCUSÉ RÉUSSI ===", [
+                'dossier_id' => $dossier,
+                'file_name' => $accuseDocument->nom_fichier,
+                'file_size' => filesize($filePath)
+            ]);
+
+            // Télécharger le fichier
+            return response()->download($filePath, $accuseDocument->nom_original ?? $accuseDocument->nom_fichier);
+
+        } catch (\Exception $e) {
+            Log::error("=== ERREUR TÉLÉCHARGEMENT ACCUSÉ ===", [
+                'dossier_id' => $dossier,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Erreur lors du téléchargement : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * ✅ NOUVELLE MÉTHODE : Store adhérents Phase 2 avec INSERTION DURING CHUNKING
+     * CORRECTION COMPLÈTE: Toutes les variables undefined corrigées
+     */
+    public function storeAdherentsPhase2(Request $request, $dossierId)
+    {
+        try {
+            Log::info('🚀 DÉBUT storeAdherentsPhase2 - INSERTION DURING CHUNKING', [
+                'dossier_id' => $dossierId,
+                'user_id' => auth()->id(),
+                'method' => $request->method(),
+                'content_type' => $request->header('Content-Type'),
+                'has_adherents' => $request->has('adherents'),
+                'solution' => 'INSERTION_DURING_CHUNKING'
+            ]);
+
+            // Vérifier le dossier et autorisation
+            $dossier = Dossier::with('organisation')
+                ->where('id', $dossierId)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->first();
+
+            if (!$dossier) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Dossier non trouvé ou accès non autorisé'
+                ], 404);
+            }
+
+            $organisation = $dossier->organisation;
+
+            // ✅ CORRECTION 1: Récupérer les données adhérents avec parsing amélioré
+            $adherentsData = $request->input('adherents');
+
+            Log::info('🔍 DEBUG: Type données adhérents reçues', [
+                'type' => gettype($adherentsData),
+                'is_string' => is_string($adherentsData),
+                'is_array' => is_array($adherentsData),
+                'content_preview' => is_string($adherentsData) ? substr($adherentsData, 0, 200) : 'non-string'
+            ]);
+
+            if (is_string($adherentsData)) {
+                // Décoder le JSON
+                $decodedData = json_decode($adherentsData, true);
+                
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    Log::error('❌ ERREUR JSON DECODE', [
+                        'json_error' => json_last_error_msg(),
+                        'data_preview' => substr($adherentsData, 0, 500)
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Erreur de format des données adhérents: ' . json_last_error_msg()
+                    ], 422);
+                }
+                
+                // ✅ CORRECTION CRITIQUE : Vérifier la structure des données
+                if (isset($decodedData['adherents']) && is_array($decodedData['adherents'])) {
+                    // Structure : {"adherents": [...]}
+                    $adherentsArray = $decodedData['adherents'];
+                    Log::info('✅ Structure JSON détectée avec clé "adherents"', [
+                        'count' => count($adherentsArray)
+                    ]);
+                } elseif (is_array($decodedData) && isset($decodedData[0])) {
+                    // Structure : [{"nom": "...", "prenom": "..."}, ...]
+                    $adherentsArray = $decodedData;
+                    Log::info('✅ Structure JSON détectée comme array direct', [
+                        'count' => count($adherentsArray)
+                    ]);
+                } else {
+                    Log::error('❌ Structure JSON non reconnue', [
+                        'decoded_type' => gettype($decodedData),
+                        'decoded_keys' => is_array($decodedData) ? array_keys($decodedData) : 'non-array',
+                        'decoded_preview' => is_array($decodedData) ? array_slice($decodedData, 0, 2) : $decodedData
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Structure de données adhérents non reconnue'
+                    ], 422);
+                }
+            } else {
+                $adherentsArray = is_array($adherentsData) ? $adherentsData : [];
+            }
+
+            // Validation supplémentaire
+            if (!is_array($adherentsArray)) {
+                Log::error('❌ ERREUR: adherentsArray n\'est pas un array', [
+                    'type' => gettype($adherentsArray),
+                    'content' => $adherentsArray
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format de données adhérents invalide'
+                ], 422);
+            }
+
+            Log::info('✅ PARSING DONNÉES RÉUSSI', [
+                'total_adherents' => count($adherentsArray),
+                'first_item_type' => count($adherentsArray) > 0 ? gettype($adherentsArray[0]) : 'empty'
+            ]);
+
+            if (empty($adherentsArray)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aucune donnée d\'adhérents fournie'
+                ], 422);
+            }
+
+            $totalAdherents = count($adherentsArray);
+            $chunkingThreshold = 200; // Seuil pour déclenchement chunking automatique
+
+            Log::info('📊 ANALYSE DONNÉES PHASE 2', [
+                'total_adherents' => $totalAdherents,
+                'seuil_chunking' => $chunkingThreshold,
+                'method_detecte' => $totalAdherents >= $chunkingThreshold ? 'CHUNKING_AUTO' : 'STANDARD',
+                'dossier_id' => $dossierId,
+                'organisation_id' => $organisation->id
+            ]);
+
+            // ✅ DÉCISION AUTOMATIQUE : CHUNKING ou STANDARD
+            if ($totalAdherents >= $chunkingThreshold) {
+                return $this->processWithChunking($adherentsArray, $organisation, $dossier, $request);
+            } else {
+                return $this->processStandard($adherentsArray, $organisation, $dossier, $request);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('❌ ERREUR storeAdherentsPhase2', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors du traitement: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * ✅ CORRECTION COMPLÈTE: Traitement standard (petits volumes)
+     * RÉSOUT: Variables undefined dans processStandard
+     */
+    private function processStandard(array $adherentsArray, $organisation, $dossier, Request $request)
+    {
+        Log::info('📁 TRAITEMENT STANDARD PHASE 2', [
+            'total_adherents' => count($adherentsArray),
+            'organisation_id' => $organisation->id,
+            'dossier_id' => $dossier->id
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            $inserted = 0; // ✅ CORRECTION: Définir $inserted au lieu de $successCount
+            $anomaliesCount = 0;
+            $errors = [];
+
+            foreach ($adherentsArray as $index => $adherentData) {
+                try {
+                    Log::info("🔄 TRAITEMENT ADHÉRENT $index", [
+                        'type' => gettype($adherentData),
+                        'is_array' => is_array($adherentData),
+                        'content_preview' => is_array($adherentData) ? 
+                            (isset($adherentData['nom']) ? $adherentData['nom'] : 'nom_manquant') : 
+                            'non_array'
+                    ]);
+                    
+                    // Vérifier que $adherentData est bien un array
+                    if (!is_array($adherentData)) {
+                        if (is_string($adherentData)) {
+                            // Tenter de décoder si c'est une string JSON
+                            $decodedData = json_decode($adherentData, true);
+                            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedData)) {
+                                $adherentData = $decodedData;
+                            } else {
+                                throw new \Exception("Données adhérent invalides (string non-JSON): " . substr($adherentData, 0, 100));
+                            }
+                        } else {
+                            throw new \Exception("Données adhérent invalides (type: " . gettype($adherentData) . ")");
+                        }
+                    }
+                    
+                    // Validation et nettoyage
+                    $cleanData = $this->validateAdherentData($adherentData);
+
+                    // Création de l'adhérent
+                    $adherent = Adherent::create([
+                        'organisation_id' => $organisation->id,
+                        'nip' => $cleanData['nip'],
+                        'nom' => strtoupper($cleanData['nom']),
+                        'prenom' => $cleanData['prenom'],
+                        'profession' => isset($cleanData['profession']) ? $cleanData['profession'] : null,
+                        'fonction' => isset($cleanData['fonction']) ? $cleanData['fonction'] : 'Membre',
+                        'telephone' => isset($cleanData['telephone']) ? $cleanData['telephone'] : null,
+                        'email' => isset($cleanData['email']) ? $cleanData['email'] : null,
+                        'date_adhesion' => now(),
+                        'is_active' => true
+                    ]);
+
+                    $inserted++; // ✅ CORRECTION: Utiliser $inserted
+
+                } catch (\Exception $e) {
+                    $nomAdherent = isset($adherentData['nom']) ? $adherentData['nom'] : 'Inconnu';
+                    $errors[] = "Erreur adhérent {$nomAdherent}: " . $e->getMessage();
+                    Log::warning('Erreur traitement adhérent individuel Phase 2', [
+                        'adherent' => $adherentData,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            // Mettre à jour le dossier
+            $dossier->update([
+                'statut' => 'soumis',
+                'donnees_supplementaires' => json_encode([
+                    'solution' => 'STANDARD',
+                    'total_inserted' => $inserted,
+                    'errors_count' => count($errors),
+                    'processed_at' => now()->toISOString()
+                ])
+            ]);
+
+            DB::commit();
+
+            Log::info('✅ TRAITEMENT STANDARD PHASE 2 TERMINÉ', [
+                'inserted' => $inserted,
+                'errors_count' => count($errors)
+            ]);
+
+            // ✅ CORRECTION: Vérifier le type de requête pour décider de la réponse
+            if ($request->ajax() || $request->expectsJson()) {
+                // Pour les requêtes AJAX : retourner JSON avec redirection
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Adhérents traités avec succès',
+                    'data' => [
+                        'total_inserted' => $inserted, // ✅ CORRECTION: Utiliser $inserted
+                        'errors' => $errors,
+                        'dossier_id' => $dossier->id // ✅ CORRECTION: Utiliser $dossier->id
+                    ],
+                    'solution' => 'STANDARD',
+                    'redirect_url' => route('operator.dossiers.confirmation', $dossier->id), // ✅ CORRECTION
+                    'should_redirect' => true,
+                    'redirect_type' => 'confirmation',
+                    'auto_redirect' => true,
+                    'redirect_delay' => 2000
+                ]);
+            } else {
+                // Pour les requêtes normales : redirection directe
+                return redirect()
+                    ->route('operator.dossiers.confirmation', $dossier->id) // ✅ CORRECTION
+                    ->with('success', 'Adhérents traités avec succès')
+                    ->with('stats', [
+                        'total_inserted' => $inserted // ✅ CORRECTION
+                    ]);
+            }
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ CORRECTION: Traitement avec chunking - INSERTION DURING CHUNKING
+     */
+    private function processWithChunking(array $adherentsArray, $organisation, $dossier, Request $request)
+    {
+        Log::info('🔄 ACTIVATION TRAITEMENT CHUNKING - INSERTION DURING CHUNKING', [
+            'total_adherents' => count($adherentsArray),
+            'organisation_id' => $organisation->id,
+            'dossier_id' => $dossier->id,
+            'solution' => 'INSERTION_DURING_CHUNKING'
+        ]);
+
+        try {
+            // ✅ UTILISER LE ChunkingController pour INSERTION DURING CHUNKING
+            $chunkingController = app(\App\Http\Controllers\Operator\ChunkingController::class);
+
+            $chunkSize = 100;
+            $chunks = array_chunk($adherentsArray, $chunkSize);
+            $totalChunks = count($chunks);
+            
+            $totalInserted = 0;
+            $allErrors = [];
+            $anomaliesCount = 0;
+
+            DB::beginTransaction();
+
+            foreach ($chunks as $index => $chunk) {
+                $chunkData = [
+                    'dossier_id' => $dossier->id,
+                    'adherents' => $chunk,
+                    'chunk_index' => $index,
+                    'total_chunks' => $totalChunks,
+                    'is_final_chunk' => ($index === $totalChunks - 1)
+                ];
+
+                Log::info("🔄 TRAITEMENT CHUNK PHASE 2: $index/$totalChunks", [
+                    'chunk_size' => count($chunk),
+                    'dossier_id' => $dossier->id
+                ]);
+
+                // ✅ INSERTION IMMÉDIATE via ChunkingController
+                $fakeRequest = new \Illuminate\Http\Request($chunkData);
+                $fakeRequest->setUserResolver(request()->getUserResolver());
+
+                $result = $chunkingController->processChunk($fakeRequest);
+
+                if ($result->getStatusCode() === 200) {
+                    $data = json_decode($result->getContent(), true);
+                    $inserted = isset($data['inserted']) ? $data['inserted'] : 0;
+                    $totalInserted += $inserted;
+                    
+                    if (isset($data['adherents_with_anomalies'])) {
+                        $anomaliesCount += $data['adherents_with_anomalies'];
+                    }
+
+                    Log::info("✅ CHUNK PHASE 2 $index INSÉRÉ", [
+                        'inserted' => $inserted,
+                        'total_so_far' => $totalInserted
+                    ]);
+                } else {
+                    $errorData = json_decode($result->getContent(), true);
+                    $errorMessage = isset($errorData['message']) ? $errorData['message'] : 'Erreur inconnue chunk';
+                    $allErrors[] = "Chunk $index: $errorMessage";
+                    
+                    Log::error("❌ ERREUR CHUNK PHASE 2 $index", [
+                        'error' => $errorMessage
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            // ✅ MISE À JOUR STATUT DOSSIER
+            $dossier->update([
+                'statut' => 'soumis',
+                'donnees_supplementaires' => json_encode([
+                    'solution' => 'INSERTION_DURING_CHUNKING',
+                    'chunks_processed' => $totalChunks,
+                    'total_inserted' => $totalInserted,
+                    'anomalies_count' => $anomaliesCount,
+                    'processed_at' => now()->toISOString()
+                ])
+            ]);
+
+            Log::info('✅ PHASE 2 CHUNKING TERMINÉE', [
+                'total_inserted' => $totalInserted,
+                'chunks_processed' => $totalChunks,
+                'errors_count' => count($allErrors),
+                'anomalies_count' => $anomaliesCount,
+                'solution' => 'INSERTION_DURING_CHUNKING'
+            ]);
+
+            // ✅ CORRECTION: Gestion conditionnelle de la redirection pour chunking
+if (request()->ajax() || request()->expectsJson()) {
+    return response()->json([
+        'success' => true,
+        'message' => "Adhérents traités avec succès par chunking",
+        'data' => [
+            'total_inserted' => $totalInserted,
+            'chunks_processed' => $totalChunks,
+            'anomalies_count' => $anomaliesCount,
+            'errors' => $allErrors,
+            'solution' => 'INSERTION_DURING_CHUNKING'
+        ],
+        'redirect_url' => route('operator.dossiers.confirmation', $dossier->id),
+        'should_redirect' => true,
+        'redirect_type' => 'confirmation',
+        'auto_redirect' => true,
+        'redirect_delay' => 2000,
+        'chunking_complete' => true
+    ]);
+} else {
+    return redirect()
+        ->route('operator.dossiers.confirmation', $dossier->id)
+        ->with('success', "Adhérents traités avec succès par chunking ($totalInserted insérés)")
+        ->with('stats', [
+            'total_inserted' => $totalInserted,
+            'chunks_processed' => $totalChunks,
+            'solution' => 'CHUNKING'
+        ]);
+}
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            Log::error('❌ ERREUR TRAITEMENT CHUNKING PHASE 2', [
+                'error' => $e->getMessage(),
+                'dossier_id' => $dossier->id
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE UTILITAIRE : Validation données adhérent
+     */
+    private function validateAdherentData(array $data)
+    {
+        // Validation de type en entrée
+        if (!is_array($data)) {
+            Log::error('❌ validateAdherentData: Type invalide', [
+                'type' => gettype($data),
+                'content' => is_string($data) ? substr($data, 0, 200) : $data
+            ]);
+            throw new \Exception("validateAdherentData attend un array, " . gettype($data) . " fourni");
+        }
+
+        return [
+            'nip' => $this->cleanNip(isset($data['nip']) ? $data['nip'] : ''),
+            'nom' => trim(isset($data['nom']) ? $data['nom'] : ''),
+            'prenom' => trim(isset($data['prenom']) ? $data['prenom'] : ''),
+            'profession' => trim(isset($data['profession']) ? $data['profession'] : ''),
+            'fonction' => trim(isset($data['fonction']) ? $data['fonction'] : 'Membre'),
+            'telephone' => $this->cleanPhone(isset($data['telephone']) ? $data['telephone'] : ''),
+            'email' => isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL) ? $data['email'] : null
+        ];
+    }
+
+    /**
+     * Nettoyer un NIP
+     */
+    private function cleanNip($nip)
+    {
+        return strtoupper(trim($nip));
+    }
+
+    /**
+     * Nettoyer un numéro de téléphone
+     */
+    private function cleanPhone($phone)
+    {
+        return preg_replace('/[^0-9+]/', '', $phone);
+    }
+
+    /**
+     * Page d'import des adhérents - Phase 2
+     */
+    public function adherentsImportPage($dossierId)
+    {
+        try {
+            $dossier = Dossier::with(['organisation', 'adherents'])
+                ->where('id', $dossierId)
+                ->whereHas('organisation', function($query) {
+                    $query->where('user_id', auth()->id());
+                })
+                ->firstOrFail();
+
+            $organisation = $dossier->organisation;
+            $organisationType = $organisation->type ?? 'association';
+
+            $adherents_stats = [
+                'existants' => $dossier->adherents()->count(),
+                'minimum_requis' => $this->getMinimumAdherentsRequired($organisationType),
+                'manquants' => 0,
+                'peut_soumettre' => false
+            ];
+            
+            $adherents_stats['manquants'] = max(0, $adherents_stats['minimum_requis'] - $adherents_stats['existants']);
+            $adherents_stats['peut_soumettre'] = $adherents_stats['manquants'] <= 0;
+
+            $upload_config = [
+                'max_file_size' => '10MB',
+                'chunk_size' => 100,
+                'max_adherents' => 50000,
+                'chunking_threshold' => 200
+            ];
+
+            $urls = [
+                'store_adherents' => route('operator.dossiers.store-adherents', $dossier->id),
+                'template_download' => route('operator.templates.adherents-excel'),
+                'confirmation' => route('operator.dossiers.confirmation', $dossier->id),
+                'process_chunk' => route('operator.chunking.process-chunk'),
+                'health_check' => route('operator.chunking.health')
+            ];
+
+            session([
+                'current_dossier_id' => $dossier->id,
+                'current_organisation_id' => $organisation->id,
+                'current_organisation_type' => $organisationType
+            ]);
+
+            return view('operator.dossiers.adherents-import', compact(
+                'dossier', 'organisation', 'adherents_stats', 'upload_config', 'urls'
+            ));
+
+        } catch (\Exception $e) {
+            Log::error('❌ ERREUR adherentsImportPage', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return redirect()->route('operator.dashboard')
+                ->with('error', 'Erreur lors du chargement de la page d\'import');
+        }
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE - Gestion des anomalies
+     */
+    public function anomalies(Request $request)
+    {
+        $query = \App\Models\Adherent::where('has_anomalies', true)
+            ->whereHas('organisation', function($q) {
+                $q->where('user_id', auth()->id());
+            });
+
+        if ($request->has('severity')) {
+            $query->where('anomalies_severity', $request->severity);
+        }
+
+        if ($request->has('organisation_id')) {
+            $query->where('organisation_id', $request->organisation_id);
+        }
+
+        $anomalies = $query->with(['organisation'])->paginate(15);
+
+        $organisations = \App\Models\Organisation::where('user_id', auth()->id())->get();
+
+        return view('operator.dossiers.anomalies', compact('anomalies', 'organisations'));
+    }
+
+    /**
+     * ✅ MÉTHODE MANQUANTE - Résoudre une anomalie
+     */
+    public function resolveAnomalie(Request $request, $adherentId)
+    {
+        $request->validate([
+            'anomalie_code' => 'required|string',
+            'resolution_details' => 'required|string',
+            'action' => 'required|in:resolve,exclude,update'
+        ]);
+
+        try {
+            $adherent = \App\Models\Adherent::findOrFail($adherentId);
+
+            if ($adherent->organisation->user_id !== auth()->id()) {
+                abort(403);
+            }
+
+            $result = $adherent->resolveAnomalie(
+                $request->anomalie_code,
+                [
+                    'action' => $request->action,
+                    'details' => $request->resolution_details,
+                    'resolved_by' => auth()->id()
+                ]
+            );
+
+            if ($result) {
+                return redirect()->back()->with('success', 'Anomalie résolue avec succès');
+            } else {
+                return redirect()->back()->with('error', 'Impossible de résoudre cette anomalie');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Erreur résolution anomalie: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Erreur lors de la résolution de l\'anomalie');
+        }
+    }
+
+    /**
+     * Obtenir le minimum d'adhérents requis selon le type d'organisation
+     */
+    private function getMinimumAdherentsRequired($organisationType)
+    {
+        $minimums = [
+            'association' => 10,
+            'ong' => 15,
+            'parti_politique' => 500,
+            'confession_religieuse' => 20
+        ];
+        
+        return $minimums[$organisationType] ?? 10;
     }
     
     /**
@@ -1308,1492 +1952,6 @@ private function getAccuseReceptionDownloadUrl(Dossier $dossier)
             'rejetes' => 0
         ]);
     }
-
-    /**
-     * ✅ MÉTHODE MANQUANTE - Gestion des anomalies
-     */
-    public function anomalies(Request $request)
-    {
-        $query = \App\Models\Adherent::where('has_anomalies', true)
-            ->whereHas('organisation', function($q) {
-                $q->where('user_id', auth()->id());
-            });
-
-        if ($request->has('severity')) {
-            $query->where('anomalies_severity', $request->severity);
-        }
-
-        if ($request->has('organisation_id')) {
-            $query->where('organisation_id', $request->organisation_id);
-        }
-
-        $anomalies = $query->with(['organisation'])->paginate(15);
-
-        $organisations = \App\Models\Organisation::where('user_id', auth()->id())->get();
-
-        return view('operator.dossiers.anomalies', compact('anomalies', 'organisations'));
-    }
-
-    /**
-     * ✅ MÉTHODE MANQUANTE - Résoudre une anomalie
-     */
-    public function resolveAnomalie(Request $request, $adherentId)
-    {
-        $request->validate([
-            'anomalie_code' => 'required|string',
-            'resolution_details' => 'required|string',
-            'action' => 'required|in:resolve,exclude,update'
-        ]);
-
-        try {
-            $adherent = \App\Models\Adherent::findOrFail($adherentId);
-
-            if ($adherent->organisation->user_id !== auth()->id()) {
-                abort(403);
-            }
-
-            $result = $adherent->resolveAnomalie(
-                $request->anomalie_code,
-                [
-                    'action' => $request->action,
-                    'details' => $request->resolution_details,
-                    'resolved_by' => auth()->id()
-                ]
-            );
-
-            if ($result) {
-                return redirect()->back()->with('success', 'Anomalie résolue avec succès');
-            } else {
-                return redirect()->back()->with('error', 'Impossible de résoudre cette anomalie');
-            }
-
-        } catch (\Exception $e) {
-            Log::error('Erreur résolution anomalie: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Erreur lors de la résolution de l\'anomalie');
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE MANQUANTE 1: Téléchargement accusé de réception
-     * Résout: Route [operator.dossiers.download-accuse] not defined
-     */
-    public function downloadAccuse($dossier)
-    {
-        try {
-            Log::info("=== DÉBUT TÉLÉCHARGEMENT ACCUSÉ ===", [
-                'dossier_param' => $dossier,
-                'user_id' => auth()->id()
-            ]);
-
-            // Charger le dossier avec vérification d'accès
-            $dossierObj = Dossier::with(['organisation', 'documents'])
-                ->where('id', $dossier)
-                ->whereHas('organisation', function($query) {
-                    $query->where('user_id', auth()->id());
-                })
-                ->first();
-
-            if (!$dossierObj) {
-                Log::error("=== DOSSIER NON TROUVÉ POUR TÉLÉCHARGEMENT ===", [
-                    'dossier_id' => $dossier,
-                    'user_id' => auth()->id()
-                ]);
-                
-                return redirect()->route('operator.dashboard')
-                    ->with('error', 'Dossier non trouvé ou accès non autorisé.');
-            }
-
-            // Rechercher l'accusé de réception dans les documents
-            $accuseDocument = $dossierObj->documents()
-                ->where('nom_fichier', 'like', 'accuse_reception_%')
-                ->orWhere('nom_original', 'like', '%Accusé%')
-                ->first();
-
-            if (!$accuseDocument) {
-                Log::warning("=== ACCUSÉ NON TROUVÉ ===", [
-                    'dossier_id' => $dossier,
-                    'documents_count' => $dossierObj->documents()->count()
-                ]);
-                
-                return redirect()->back()
-                    ->with('error', 'Accusé de réception non trouvé.');
-            }
-
-            // Construire le chemin du fichier
-            $filePath = storage_path('app/public/' . $accuseDocument->chemin_fichier);
-            
-            if (!file_exists($filePath)) {
-                Log::error("=== FICHIER ACCUSÉ INTROUVABLE ===", [
-                    'file_path' => $filePath,
-                    'document_id' => $accuseDocument->id
-                ]);
-                
-                return redirect()->back()
-                    ->with('error', 'Fichier accusé de réception introuvable.');
-            }
-
-            Log::info("=== TÉLÉCHARGEMENT ACCUSÉ RÉUSSI ===", [
-                'dossier_id' => $dossier,
-                'file_name' => $accuseDocument->nom_fichier,
-                'file_size' => filesize($filePath)
-            ]);
-
-            // Télécharger le fichier
-            return response()->download($filePath, $accuseDocument->nom_original ?? $accuseDocument->nom_fichier);
-
-        } catch (\Exception $e) {
-            Log::error("=== ERREUR TÉLÉCHARGEMENT ACCUSÉ ===", [
-                'dossier_id' => $dossier,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
-
-            return redirect()->back()
-                ->with('error', 'Erreur lors du téléchargement : ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * ✅ MÉTHODE MANQUANTE 2: Import adhérents Phase 2
-     * Résout le workflow 2 phases
-     */
-    public function storeAdherents(Request $request, $dossier)
-    {
-        try {
-            Log::info("=== DÉBUT STORE ADHERENTS PHASE 2 ===", [
-                'dossier_param' => $dossier,
-                'user_id' => auth()->id(),
-                'request_data_keys' => array_keys($request->all())
-            ]);
-
-            // Charger le dossier avec vérification d'accès
-            $dossierObj = Dossier::with(['organisation'])
-                ->where('id', $dossier)
-                ->whereHas('organisation', function($query) {
-                    $query->where('user_id', auth()->id());
-                })
-                ->first();
-
-            if (!$dossierObj) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Dossier non trouvé ou accès non autorisé.'
-                ], 403);
-            }
-
-            // Valider les données d'entrée
-            $validated = $request->validate([
-                'adherents' => 'required|array|min:1',
-                'adherents.*.nip' => 'required|string|size:13',
-                'adherents.*.nom' => 'required|string|max:100',
-                'adherents.*.prenom' => 'required|string|max:100',
-                'adherents.*.telephone' => 'nullable|string|max:20',
-                'adherents.*.profession' => 'nullable|string|max:100',
-                'adherents.*.adresse' => 'nullable|string|max:255'
-            ]);
-
-            $adherentsData = $validAdherents;
-            $successCount = 0;
-            $errorCount = 0;
-            $errors = [];
-
-            DB::beginTransaction();
-
-            foreach ($adherentsData as $index => $adherentData) {
-                try {
-                    // Créer l'adhérent
-                    $adherent = new \App\Models\Adherent();
-                    $adherent->organisation_id = $dossierObj->organisation->id;
-                    $adherent->nip = $adherentData['nip'];
-                    $adherent->nom = $adherentData['nom'];
-                    $adherent->prenom = $adherentData['prenom'];
-                    $adherent->telephone = $adherentData['telephone'] ?? null;
-                    $adherent->profession = $adherentData['profession'] ?? null;
-                    $adherent->adresse = $adherentData['adresse'] ?? null;
-                    $adherent->date_adhesion = now();
-                    $adherent->is_active = true;
-                    $adherent->save();
-
-                    $successCount++;
-
-                } catch (\Exception $e) {
-                    $errorCount++;
-                    $errors[] = [
-                        'index' => $index,
-                        'nip' => $adherentData['nip'] ?? 'N/A',
-                        'nom' => $adherentData['nom'] ?? 'N/A',
-                        'error' => $e->getMessage()
-                    ];
-
-                    Log::warning("=== ERREUR CRÉATION ADHÉRENT ===", [
-                        'index' => $index,
-                        'adherent_data' => $adherentData,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-
-            DB::commit();
-
-            Log::info("=== STORE ADHERENTS TERMINÉ ===", [
-                'dossier_id' => $dossier,
-                'total_processed' => count($adherentsData),
-                'success_count' => $successCount,
-                'error_count' => $errorCount
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => "Import terminé : {$successCount} adhérents créés, {$errorCount} erreurs",
-                'data' => [
-                    'total_processed' => count($adherentsData),
-                    'success_count' => $successCount,
-                    'error_count' => $errorCount,
-                    'errors' => $errors
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollback();
-
-            Log::error("=== ERREUR CRITIQUE STORE ADHERENTS ===", [
-                'dossier_id' => $dossier,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l\'import : ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-
-/**
- * ========================================================================
- * MÉTHODES À AJOUTER/METTRE À JOUR DANS DossierController
- * Localisation: app/Http/Controllers/Operator/DossierController.php
- * ========================================================================
- */
-
-// AJOUTER CES MÉTHODES DANS LA CLASSE DossierController
-
-    /**
-     * Page d'import des adhérents - Phase 2
-     */
-    public function adherentsImport($dossierId)
-    {
-        try {
-            // Récupérer le dossier
-            $dossier = Dossier::with(['organisation', 'adherents'])
-                ->where('id', $dossierId)
-                ->whereHas('organisation', function($query) {
-                    $query->where('user_id', auth()->id());
-                })
-                ->firstOrFail();
-            
-            $organisation = $dossier->organisation;
-            
-            // Statistiques adhérents
-            $organisationType = $organisation->type ?? 'association'; // ✅ CORRECTION
-            $adherents_stats = [
-                'existants' => $dossier->adherents()->count(),
-                'minimum_requis' => $this->getMinimumAdherentsRequired($organisationType),
-                'manquants' => 0,
-                'peut_soumettre' => false
-            ];
-            
-            $adherents_stats['manquants'] = max(0, $adherents_stats['minimum_requis'] - $adherents_stats['existants']);
-            $adherents_stats['peut_soumettre'] = $adherents_stats['manquants'] <= 0;
-            
-            // Configuration upload
-            $upload_config = [
-                'max_file_size' => '10MB',
-                'chunk_size' => 100,
-                'max_adherents' => 50000,
-                'chunking_threshold' => 200
-            ];
-            
-            // URLs pour les actions
-            $urls = [
-                'store_adherents' => route('operator.dossiers.store-adherents', $dossier->id),
-                'template_download' => route('operator.templates.adherents-excel'),
-                'confirmation' => route('operator.dossiers.confirmation', $dossier->id),
-                'process_chunk' => route('chunking.process-chunk'),
-                'health_check' => route('chunking.health')
-            ];
-            
-            // Stocker les informations en session pour le chunking
-            session([
-                'current_dossier_id' => $dossier->id,
-                'current_organisation_id' => $organisation->id
-            ]);
-            
-            Log::info('📄 PAGE IMPORT ADHÉRENTS PHASE 2', [
-                'dossier_id' => $dossier->id,
-                'organisation_id' => $organisation->id,
-                'adherents_existants' => $adherents_stats['existants'],
-                'user_id' => auth()->id()
-            ]);
-            
-            return view('operator.dossiers.adherents-import', compact(
-                'dossier',
-                'organisation', 
-                'adherents_stats',
-                'upload_config',
-                'urls'
-            ));
-            
-        } catch (\Exception $e) {
-            Log::error('❌ Erreur page import adhérents', [
-                'dossier_id' => $dossierId,
-                'error' => $e->getMessage(),
-                'user_id' => auth()->id()
-            ]);
-            
-            return redirect()->route('operator.dashboard')
-                ->with('error', 'Erreur lors du chargement de la page d\'import');
-        }
-    }
-    
-    
-    /**
-     * Gérer une requête en mode chunking
-     */
-    private function handleChunkRequest($request, $dossier, $organisation)
-    {
-        // Stocker les informations en session pour le ChunkProcessorController
-        session([
-            'current_dossier_id' => $dossier->id,
-            'current_organisation_id' => $organisation->id
-        ]);
-        
-        // Rediriger vers le ChunkProcessorController
-        $chunkController = new \App\Http\Controllers\Api\ChunkProcessorController();
-        return $chunkController->processChunk($request);
-    }
-    
-    /**
-     * Gérer un upload classique (sans chunking)
-     */
-    private function handleClassicUpload($request, $dossier, $organisation)
-    {
-        // Validation du fichier ou des données
-        if ($request->hasFile('adherents_file')) {
-            return $this->processFileUpload($request, $dossier, $organisation);
-        } elseif ($request->has('adherents_data')) {
-            return $this->processJsonData($request, $dossier, $organisation);
-        } else {
-            throw new \Exception('Aucune donnée d\'adhérents fournie');
-        }
-    }
-    
-    /**
-     * Traiter l'upload d'un fichier
-     */
-    private function processFileUpload($request, $dossier, $organisation)
-    {
-        $file = $request->file('adherents_file');
-        
-        // Valider le fichier
-        $request->validate([
-            'adherents_file' => 'required|file|mimes:xlsx,csv|max:10240' // 10MB max
-        ]);
-        
-        // Traiter le fichier selon son type
-        if ($file->getClientOriginalExtension() === 'csv') {
-            $adherentsData = $this->parseCsvFile($file);
-        } else {
-            $adherentsData = $this->parseExcelFile($file);
-        }
-        
-        // Traiter les données
-        return $this->processAdherentsData($adherentsData, $dossier, $organisation);
-    }
-    
-    /**
-     * Traiter des données JSON
-     */
-    private function processJsonData($request, $dossier, $organisation)
-    {
-        $adherentsJson = $request->input('adherents_data');
-        $adherentsData = json_decode($adherentsJson, true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \Exception('Données JSON invalides');
-        }
-        
-        return $this->processAdherentsData($adherentsData, $dossier, $organisation);
-    }
-    
-    /**
-     * Traiter les données d'adhérents avec validation et insertion
-     */
-    private function processAdherentsData($adherentsData, $dossier, $organisation)
-    {
-        $successCount = 0;
-        $errorCount = 0;
-        $anomaliesCount = 0;
-        $errors = [];
-        
-        DB::beginTransaction();
-        
-        try {
-            foreach ($adherentsData as $index => $adherentData) {
-                try {
-                    // Validation et nettoyage
-                    $cleanedData = $this->validateAndCleanAdherentData($adherentData);
-                    
-                    // Vérifier doublon
-                    $existingAdherent = Adherent::where('nip', $cleanedData['nip'])
-                        ->where('organisation_id', $organisation->id)
-                        ->first();
-                    
-                    if ($existingAdherent) {
-                        $anomaliesCount++;
-                        Log::warning('Doublon détecté', [
-                            'nip' => $cleanedData['nip'],
-                            'nom' => $cleanedData['nom']
-                        ]);
-                        continue;
-                    }
-                    
-                    // Créer l'adhérent
-                    Adherent::create([
-                        'organisation_id' => $organisation->id,
-                        'dossier_id' => $dossier->id,
-                        'nip' => $cleanedData['nip'],
-                        'civilite' => $cleanedData['civilite'],
-                        'nom' => $cleanedData['nom'],
-                        'prenom' => $cleanedData['prenom'],
-                        'telephone' => $cleanedData['telephone'],
-                        'profession' => $cleanedData['profession'],
-                        'adresse' => $cleanedData['adresse'],
-                        'date_naissance' => $cleanedData['date_naissance'],
-                        'age' => $cleanedData['age'],
-                        'date_adhesion' => now(),
-                        'is_active' => true,
-                        'created_by' => auth()->id()
-                    ]);
-                    
-                    $successCount++;
-                    
-                } catch (\Exception $e) {
-                    $errorCount++;
-                    $errors[] = [
-                        'index' => $index,
-                        'nip' => $adherentData['nip'] ?? 'N/A',
-                        'nom' => $adherentData['nom'] ?? 'N/A',
-                        'error' => $e->getMessage()
-                    ];
-                }
-            }
-            
-            DB::commit();
-            
-            Log::info('✅ IMPORT TERMINÉ', [
-                'dossier_id' => $dossier->id,
-                'total_processed' => count($adherentsData),
-                'success_count' => $successCount,
-                'error_count' => $errorCount,
-                'anomalies_count' => $anomaliesCount
-            ]);
-            
-            if (request()->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => "Import terminé : {$successCount} adhérents créés",
-                    'data' => [
-                        'total_processed' => count($adherentsData),
-                        'success_count' => $successCount,
-                        'error_count' => $errorCount,
-                        'anomalies_count' => $anomaliesCount,
-                        'errors' => $errors
-                    ]
-                ]);
-            }
-            
-            return redirect()->route('operator.dossiers.confirmation', $dossier->id)
-                ->with('success', "Import réussi : {$successCount} adhérents ajoutés");
-            
-        } catch (\Exception $e) {
-            DB::rollback();
-            throw $e;
-        }
-    }
-    
-    /**
-     * Valider et nettoyer les données d'un adhérent
-     */
-    private function validateAndCleanAdherentData($data)
-    {
-        // Validation NIP
-        $nip = $data['nip'] ?? '';
-        if (!preg_match('/^[A-Z0-9]{2}-[0-9]{4}-[0-9]{8}$/', $nip)) {
-            throw new \Exception("Format NIP invalide: {$nip}");
-        }
-        
-        // Validation champs obligatoires
-        $requiredFields = ['nom', 'prenom', 'civilite'];
-        foreach ($requiredFields as $field) {
-            if (empty($data[$field])) {
-                throw new \Exception("Champ obligatoire manquant: {$field}");
-            }
-        }
-        
-        return [
-            'nip' => strtoupper(trim($nip)),
-            'civilite' => trim($data['civilite']),
-            'nom' => strtoupper(trim($data['nom'])),
-            'prenom' => ucwords(strtolower(trim($data['prenom']))),
-            'telephone' => $this->cleanPhoneNumber($data['telephone'] ?? ''),
-            'profession' => trim($data['profession'] ?? ''),
-            'adresse' => trim($data['adresse'] ?? ''),
-            'date_naissance' => $this->extractDateFromNip($nip),
-            'age' => $this->calculateAgeFromNip($nip)
-        ];
-    }
-    
-    /**
-     * Nettoyer numéro de téléphone
-     */
-    private function cleanPhoneNumber($phone)
-    {
-        if (empty($phone)) return null;
-        
-        $cleaned = preg_replace('/[^0-9]/', '', $phone);
-        
-        if (strlen($cleaned) === 8 && !str_starts_with($cleaned, '241')) {
-            $cleaned = '241' . $cleaned;
-        }
-        
-        return $cleaned;
-    }
-    
-    /**
-     * Extraire date de naissance du NIP
-     */
-    private function extractDateFromNip($nip)
-    {
-        if (preg_match('/^[A-Z0-9]{2}-[0-9]{4}-([0-9]{8})$/', $nip, $matches)) {
-            $dateStr = $matches[1];
-            $year = substr($dateStr, 0, 4);
-            $month = substr($dateStr, 4, 2);
-            $day = substr($dateStr, 6, 2);
-            
-            try {
-                return \Carbon\Carbon::createFromFormat('Y-m-d', "{$year}-{$month}-{$day}");
-            } catch (\Exception $e) {
-                return null;
-            }
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Calculer âge depuis le NIP
-     */
-    private function calculateAgeFromNip($nip)
-    {
-        $birthDate = $this->extractDateFromNip($nip);
-        return $birthDate ? $birthDate->age : null;
-    }
-    
-    /**
-     * Parser un fichier CSV
-     */
-    private function parseCsvFile($file)
-    {
-        $data = [];
-        $handle = fopen($file->getRealPath(), 'r');
-        
-        if ($handle) {
-            $headers = fgetcsv($handle);
-            
-            while (($row = fgetcsv($handle)) !== false) {
-                if (count($row) >= count($headers)) {
-                    $data[] = array_combine($headers, $row);
-                }
-            }
-            
-            fclose($handle);
-        }
-        
-        return $data;
-    }
-    
-    /**
-     * Parser un fichier Excel (nécessite PhpSpreadsheet)
-     */
-    private function parseExcelFile($file)
-    {
-        // Implémentation basique - à adapter selon vos besoins
-        // Nécessite l'installation de PhpSpreadsheet via Composer
-        
-        throw new \Exception('Support Excel en cours d\'implémentation');
-    }
-
-
-
- /**
-     * ✅ NOUVELLE MÉTHODE : Store adhérents Phase 2 avec INSERTION DURING CHUNKING
-     * Compatible avec la solution recommandée dans discussions 27.x
-     */
-    public function storeAdherentsPhase2(Request $request, $dossierId)
-    {
-        try {
-            Log::info('🚀 DÉBUT storeAdherentsPhase2 - INSERTION DURING CHUNKING', [
-                'dossier_id' => $dossierId,
-                'user_id' => auth()->id(),
-                'method' => $request->method(),
-                'content_type' => $request->header('Content-Type'),
-                'has_adherents' => $request->has('adherents'),
-                'solution' => 'INSERTION_DURING_CHUNKING'
-            ]);
-
-            // Vérifier le dossier et autorisation
-            $dossier = Dossier::with('organisation')
-                ->where('id', $dossierId)
-                ->whereHas('organisation', function($query) {
-                    $query->where('user_id', auth()->id());
-                })
-                ->first();
-
-            if (!$dossier) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Dossier non trouvé ou accès non autorisé'
-                ], 404);
-            }
-
-            $organisation = $dossier->organisation;
-
-            // Récupérer les données adhérents
-            // Récupérer les données adhérents avec parsing amélioré
-$adherentsData = $request->input('adherents');
-
-Log::info('🔍 DEBUG: Type données adhérents reçues', [
-    'type' => gettype($adherentsData),
-    'is_string' => is_string($adherentsData),
-    'is_array' => is_array($adherentsData),
-    'content_preview' => is_string($adherentsData) ? substr($adherentsData, 0, 200) : 'non-string'
-]);
-
-if (is_string($adherentsData)) {
-    // Décoder le JSON
-    $decodedData = json_decode($adherentsData, true);
-    
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        Log::error('❌ ERREUR JSON DECODE', [
-            'json_error' => json_last_error_msg(),
-            'data_preview' => substr($adherentsData, 0, 500)
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Erreur de format des données adhérents: ' . json_last_error_msg()
-        ], 422);
-    }
-    
-    // ✅ CORRECTION CRITIQUE : Vérifier la structure des données
-    if (isset($decodedData['adherents']) && is_array($decodedData['adherents'])) {
-        // Structure : {"adherents": [...]}
-        $adherentsArray = $decodedData['adherents'];
-        Log::info('✅ Structure JSON détectée avec clé "adherents"', [
-            'count' => count($adherentsArray)
-        ]);
-    } elseif (is_array($decodedData) && isset($decodedData[0])) {
-        // Structure : [{"nom": "...", "prenom": "..."}, ...]
-        $adherentsArray = $decodedData;
-        Log::info('✅ Structure JSON détectée comme array direct', [
-            'count' => count($adherentsArray)
-        ]);
-    } else {
-        Log::error('❌ Structure JSON non reconnue', [
-            'decoded_type' => gettype($decodedData),
-            'decoded_keys' => is_array($decodedData) ? array_keys($decodedData) : 'non-array',
-            'decoded_preview' => is_array($decodedData) ? array_slice($decodedData, 0, 2) : $decodedData
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Structure de données adhérents non reconnue'
-        ], 422);
-    }
-    
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        Log::error('❌ ERREUR JSON DECODE', [
-            'json_error' => json_last_error_msg(),
-            'data_preview' => substr($adherentsData, 0, 500)
-        ]);
-        
-        return response()->json([
-            'success' => false,
-            'message' => 'Erreur de format des données adhérents: ' . json_last_error_msg()
-        ], 422);
-    }
-} else {
-    $adherentsArray = is_array($adherentsData) ? $adherentsData : [];
-}
-
-// Validation supplémentaire
-if (!is_array($adherentsArray)) {
-    Log::error('❌ ERREUR: adherentsArray n\'est pas un array', [
-        'type' => gettype($adherentsArray),
-        'content' => $adherentsArray
-    ]);
-    
-    return response()->json([
-        'success' => false,
-        'message' => 'Format de données adhérents invalide'
-    ], 422);
-}
-
-Log::info('✅ PARSING DONNÉES RÉUSSI', [
-    'total_adherents' => count($adherentsArray),
-    'first_item_type' => count($adherentsArray) > 0 ? gettype($adherentsArray[0]) : 'empty'
-]);
-
-            if (empty($adherentsArray)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Aucune donnée d\'adhérents fournie'
-                ], 422);
-            }
-
-            $totalAdherents = count($adherentsArray);
-            $chunkingThreshold = 200; // Seuil pour déclenchement chunking automatique
-
-            Log::info('📊 ANALYSE DONNÉES PHASE 2', [
-                'total_adherents' => $totalAdherents,
-                'seuil_chunking' => $chunkingThreshold,
-                'method_detecte' => $totalAdherents >= $chunkingThreshold ? 'CHUNKING_AUTO' : 'STANDARD',
-                'dossier_id' => $dossierId,
-                'organisation_id' => $organisation->id
-            ]);
-
-            // ✅ DÉCISION AUTOMATIQUE : CHUNKING ou STANDARD
-            if ($totalAdherents >= $chunkingThreshold) {
-                return $this->processWithChunking($adherentsArray, $organisation, $dossier);
-            } else {
-                return $this->processStandard($adherentsArray, $organisation, $dossier);
-            }
-
-        } catch (\Exception $e) {
-            Log::error('❌ ERREUR storeAdherentsPhase2', [
-                'dossier_id' => $dossierId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'user_id' => auth()->id()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors du traitement: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-
-    /**
-     * ✅ MÉTHODE PRIVÉE - Préparer les données adhérent pour Phase 2
-     */
-    private function prepareAdherentDataForPhase2(array $rawData): array
-    {
-        return [
-            'nip' => $this->cleanNipPhase2($rawData['nip'] ?? ''),
-            'nom' => trim(strtoupper($rawData['nom'] ?? '')),
-            'prenom' => trim(ucwords(strtolower($rawData['prenom'] ?? ''))),
-            'profession' => trim($rawData['profession'] ?? ''),
-            'telephone' => $this->cleanTelephonePhase2($rawData['telephone'] ?? ''),
-            'email' => trim(strtolower($rawData['email'] ?? '')),
-            'fonction' => $rawData['fonction'] ?? 'Membre',
-            'civilite' => $rawData['civilite'] ?? 'M',
-            'is_active' => true,
-            'is_fondateur' => false
-        ];
-    }
-
-    /**
-     * ✅ MÉTHODE PRIVÉE - Nettoyer le NIP pour Phase 2
-     */
-    private function cleanNipPhase2(string $nip): string
-    {
-        $cleaned = strtoupper(trim($nip));
-        $cleaned = preg_replace('/[^A-Z0-9\-]/', '', $cleaned);
-        return $cleaned;
-    }
-
-    /**
-     * ✅ MÉTHODE PRIVÉE - Nettoyer le téléphone pour Phase 2
-     */
-    private function cleanTelephonePhase2(string $telephone): string
-    {
-        $cleaned = preg_replace('/[^0-9]/', '', $telephone);
-        
-        // Ajouter le préfixe 0 si manquant et que le numéro fait 8 chiffres
-        if (strlen($cleaned) === 8 && !str_starts_with($cleaned, '0')) {
-            $cleaned = '0' . $cleaned;
-        }
-        
-        return $cleaned;
-    }
-
-
-/**
-     * ✅ MÉTHODE HARMONISÉE - Extraire les vrais adhérents depuis structure complexe
-     * Résout les problèmes de variables non définies lors de l'extraction
-     */
-    private function extractRealAdherents(array $data): array
-    {
-        $realAdherents = [];
-        
-        Log::info('🔍 Début extraction adhérents', [
-            'input_keys' => array_keys($data),
-            'input_count' => count($data)
-        ]);
-        
-        // CAS 1: Les adhérents sont dans la clé 'adherents' (structure détectée dans les logs)
-        if (isset($data['adherents']) && is_array($data['adherents'])) {
-            Log::info('🔍 Structure détectée: adherents dans sous-clé', [
-                'count' => count($data['adherents'])
-            ]);
-            return $data['adherents'];
-        }
-        
-        // CAS 2: Les adhérents sont dans une clé 'data'
-        if (isset($data['data']) && is_array($data['data'])) {
-            Log::info('🔍 Structure détectée: adherents dans data', [
-                'count' => count($data['data'])
-            ]);
-            return $data['data'];
-        }
-        
-        // CAS 3: Structure directe - tableau d'adhérents
-        foreach ($data as $key => $item) {
-            // Ignorer les métadonnées connues
-            $metadataKeys = [
-                'stats', 'anomalies', 'processingMethod', 'duration', 'phase', 
-                'version', 'import_stats', 'summary', 'errors', 'validation',
-                'chunk_id', 'chunk_total', 'processing_info'
-            ];
-            
-            if (in_array($key, $metadataKeys)) {
-                Log::debug("🔍 Ignoré métadonnée: {$key}");
-                continue;
-            }
-            
-            // Vérifier que c'est un vrai adhérent
-            if (is_array($item) && $this->isValidAdherentData($item)) {
-                $realAdherents[] = $item;
-            } else {
-                Log::debug("🔍 Item ignoré (pas un adhérent valide): " . json_encode($item));
-            }
-        }
-        
-        Log::info('🔍 Extraction terminée', [
-            'method' => 'structure_directe',
-            'count' => count($realAdherents)
-        ]);
-        
-        return $realAdherents;
-    }
-
-    /**
-     * ✅ MÉTHODE HARMONISÉE - Vérifier si un item est un adhérent valide
-     */
-    private function isValidAdherentData(array $item): bool
-    {
-        // Vérifications basiques
-        if (!isset($item['nip']) || empty(trim($item['nip']))) {
-            return false;
-        }
-        
-        if (!isset($item['nom']) || empty(trim($item['nom']))) {
-            return false;
-        }
-        
-        if (!isset($item['prenom']) || empty(trim($item['prenom']))) {
-            return false;
-        }
-        
-        return true;
-    }
-
-    /**
-     * ✅ MÉTHODE HARMONISÉE - Préparer les données adhérent pour conservation totale
-     * Résout les erreurs de variables non définies dans le traitement des données
-     */
-    private function prepareAdherentDataConservation(array $rawData, int $index): array
-    {
-        // ✅ NETTOYAGE BASIQUE SANS VALIDATION BLOQUANTE
-        $preparedData = [
-            'nip' => $this->cleanNipConservation($rawData['nip'] ?? '', $index),
-            'nom' => $this->cleanNomConservation($rawData['nom'] ?? '', $index),
-            'prenom' => $this->cleanPrenomConservation($rawData['prenom'] ?? '', $index),
-            'civilite' => $this->cleanCiviliteConservation($rawData['civilite'] ?? ''),
-            'profession' => $this->cleanProfessionConservation($rawData['profession'] ?? ''),
-            'telephone' => $this->cleanTelephoneConservation($rawData['telephone'] ?? ''),
-            'email' => $this->cleanEmailConservation($rawData['email'] ?? ''),
-            'fonction' => $this->cleanFonctionConservation($rawData['fonction'] ?? '')
-        ];
-        
-        Log::debug("✅ Données préparées pour index {$index}", [
-            'nip' => $preparedData['nip'],
-            'nom' => $preparedData['nom'],
-            'prenom' => $preparedData['prenom']
-        ]);
-        
-        return $preparedData;
-    }
-
-    /**
-     * ✅ MÉTHODES DE NETTOYAGE INDIVIDUELLES - Conservation totale
-     */
-    private function cleanNipConservation(string $nip, int $index): string
-    {
-        if (empty(trim($nip))) {
-            return "MISSING_NIP_{$index}_" . time();
-        }
-        
-        // Nettoyage basique sans validation bloquante
-        $cleaned = strtoupper(trim($nip));
-        $cleaned = preg_replace('/[^A-Z0-9\-]/', '', $cleaned);
-        
-        return $cleaned ?: "INVALID_NIP_{$index}_" . time();
-    }
-
-    private function cleanNomConservation(string $nom, int $index): string
-    {
-        if (empty(trim($nom))) {
-            return "MISSING_NOM_{$index}";
-        }
-        
-        return strtoupper(trim($nom));
-    }
-
-    private function cleanPrenomConservation(string $prenom, int $index): string
-    {
-        if (empty(trim($prenom))) {
-            return "MISSING_PRENOM_{$index}";
-        }
-        
-        return ucwords(strtolower(trim($prenom)));
-    }
-
-    private function cleanCiviliteConservation(string $civilite): string
-    {
-        $civiliteClean = strtoupper(trim($civilite));
-        $validCivilites = ['M', 'MME', 'MLLE', 'DR', 'PROF'];
-        
-        return in_array($civiliteClean, $validCivilites) ? $civiliteClean : 'M';
-    }
-
-    private function cleanProfessionConservation(string $profession): ?string
-    {
-        $cleaned = trim($profession);
-        return empty($cleaned) ? null : $cleaned;
-    }
-
-    private function cleanTelephoneConservation(string $telephone): ?string
-    {
-        if (empty(trim($telephone))) {
-            return null;
-        }
-        
-        // Nettoyage basique - garder seulement les chiffres
-        $cleaned = preg_replace('/[^0-9]/', '', $telephone);
-        
-        // Ajouter le préfixe 0 si manquant et que le numéro fait 8 chiffres
-        if (strlen($cleaned) === 8 && !str_starts_with($cleaned, '0')) {
-            $cleaned = '0' . $cleaned;
-        }
-        
-        return empty($cleaned) ? null : $cleaned;
-    }
-
-    private function cleanEmailConservation(string $email): ?string
-    {
-        $cleaned = strtolower(trim($email));
-        
-        // Validation basique email
-        if (empty($cleaned) || !filter_var($cleaned, FILTER_VALIDATE_EMAIL)) {
-            return null;
-        }
-        
-        return $cleaned;
-    }
-
-    private function cleanFonctionConservation(string $fonction): string
-    {
-        $cleaned = trim($fonction);
-        return empty($cleaned) ? 'Membre' : $cleaned;
-    }
-
-    /**
-     * ✅ MÉTHODE HARMONISÉE - Calculer statistiques adhérents avec gestion d'erreurs
-     * Résout les problèmes de variables non définies dans le calcul des stats
-     */
-    private function calculateAdherentsStatsHarmonized(Dossier $dossier): array
-    {
-        try {
-            $organisation = $dossier->organisation;
-            
-            if (!$organisation) {
-                Log::warning('Organisation non trouvée pour dossier', ['dossier_id' => $dossier->id]);
-                return $this->getDefaultAdherentsStats();
-            }
-            
-            $totalAdherents = $organisation->adherents()->count();
-            $adherentsValides = $organisation->adherents()
-                ->where('is_active', true)
-                ->count();
-            
-            // ✅ CORRECTION: Décoder les données JSON de manière plus sécurisée
-            $donneesSupplementaires = $this->extractDonneesSupplementaires($dossier);
-            $anomalies = $donneesSupplementaires['adherents_anomalies'] ?? [];
-            
-            // Compter les anomalies par niveau
-            $anomaliesCritiques = 0;
-            $anomaliesMajeures = 0;
-            $anomaliesMineures = 0;
-            
-            if (is_array($anomalies)) {
-                foreach ($anomalies as $anomalie) {
-                    if (isset($anomalie['anomalies']) && is_array($anomalie['anomalies'])) {
-                        $anomaliesAdherent = $anomalie['anomalies'];
-                        
-                        if (!empty($anomaliesAdherent['critiques'])) {
-                            $anomaliesCritiques++;
-                        }
-                        if (!empty($anomaliesAdherent['majeures'])) {
-                            $anomaliesMajeures++;
-                        }
-                        if (!empty($anomaliesAdherent['mineures'])) {
-                            $anomaliesMineures++;
-                        }
-                    }
-                }
-            }
-            
-            return [
-                'total' => $totalAdherents,
-                'valides' => $adherentsValides,
-                'anomalies_critiques' => $anomaliesCritiques,
-                'anomalies_majeures' => $anomaliesMajeures,
-                'anomalies_mineures' => $anomaliesMineures
-            ];
-            
-        } catch (\Exception $e) {
-            Log::error('=== ERREUR CALCUL STATS ADHÉRENTS HARMONISÉ ===', [
-                'dossier_id' => $dossier->id,
-                'error' => $e->getMessage(),
-                'line' => $e->getLine()
-            ]);
-            
-            return $this->getDefaultAdherentsStats();
-        }
-    }
-
-    /**
-     * ✅ MÉTHODE HARMONISÉE - Extraire données supplémentaires de manière sécurisée
-     */
-    private function extractDonneesSupplementaires(Dossier $dossier): array
-    {
-        $donneesSupplementaires = [];
-        
-        try {
-            if (!empty($dossier->donnees_supplementaires)) {
-                if (is_string($dossier->donnees_supplementaires)) {
-                    $decoded = json_decode($dossier->donnees_supplementaires, true);
-                    $donneesSupplementaires = $decoded && is_array($decoded) ? $decoded : [];
-                } elseif (is_array($dossier->donnees_supplementaires)) {
-                    $donneesSupplementaires = $dossier->donnees_supplementaires;
-                }
-            }
-        } catch (\Exception $e) {
-            Log::warning('Erreur extraction données supplémentaires', [
-                'dossier_id' => $dossier->id,
-                'error' => $e->getMessage()
-            ]);
-        }
-        
-        return $donneesSupplementaires;
-    }
-
-    /**
-     * ✅ MÉTHODE HARMONISÉE - Statistiques par défaut en cas d'erreur
-     */
-    private function getDefaultAdherentsStats(): array
-    {
-        return [
-            'total' => 0,
-            'valides' => 0,
-            'anomalies_critiques' => 0,
-            'anomalies_majeures' => 0,
-            'anomalies_mineures' => 0
-        ];
-    }
-
-    /**
-     * ✅ MÉTHODE HARMONISÉE - Gestion des anomalies avec variables bien définies
-     */
-    private function getAnomaliesFromDossierHarmonized(Dossier $dossier): array
-    {
-        try {
-            $donneesSupplementaires = $this->extractDonneesSupplementaires($dossier);
-            return $donneesSupplementaires['adherents_anomalies'] ?? [];
-        } catch (\Exception $e) {
-            Log::error('Erreur récupération anomalies', [
-                'dossier_id' => $dossier->id,
-                'error' => $e->getMessage()
-            ]);
-            return [];
-        }
-    }
-
-        /**
-     * ✅ MÉTHODE : Traitement avec chunking - INSERTION DURING CHUNKING
-     */
-    private function processWithChunking(array $adherentsArray, $organisation, $dossier)
-    {
-        Log::info('🔄 ACTIVATION TRAITEMENT CHUNKING - INSERTION DURING CHUNKING', [
-            'total_adherents' => count($adherentsArray),
-            'organisation_id' => $organisation->id,
-            'dossier_id' => $dossier->id,
-            'solution' => 'INSERTION_DURING_CHUNKING'
-        ]);
-
-        try {
-            // ✅ UTILISER LE ChunkingController pour INSERTION DURING CHUNKING
-            $chunkingController = app(\App\Http\Controllers\Operator\ChunkingController::class);
-
-            $chunkSize = 100;
-            $chunks = array_chunk($adherentsArray, $chunkSize);
-            $totalChunks = count($chunks);
-            
-            $totalInserted = 0;
-            $allErrors = [];
-            $anomaliesCount = 0;
-
-            DB::beginTransaction();
-
-            foreach ($chunks as $index => $chunk) {
-                $chunkData = [
-                    'dossier_id' => $dossier->id,
-                    'adherents' => $chunk,
-                    'chunk_index' => $index,
-                    'total_chunks' => $totalChunks,
-                    'is_final_chunk' => ($index === $totalChunks - 1)
-                ];
-
-                Log::info("🔄 TRAITEMENT CHUNK PHASE 2: $index/$totalChunks", [
-                    'chunk_size' => count($chunk),
-                    'dossier_id' => $dossier->id
-                ]);
-
-                // ✅ INSERTION IMMÉDIATE via ChunkingController
-                $fakeRequest = new \Illuminate\Http\Request($chunkData);
-                $fakeRequest->setUserResolver(request()->getUserResolver());
-
-                $result = $chunkingController->processChunk($fakeRequest);
-
-                if ($result->getStatusCode() === 200) {
-                    $data = json_decode($result->getContent(), true);
-                    $inserted = isset($data['inserted']) ? $data['inserted'] : 0;
-                    $totalInserted += $inserted;
-                    
-                    if (isset($data['adherents_with_anomalies'])) {
-                        $anomaliesCount += $data['adherents_with_anomalies'];
-                    }
-
-                    Log::info("✅ CHUNK PHASE 2 $index INSÉRÉ", [
-                        'inserted' => $inserted,
-                        'total_so_far' => $totalInserted
-                    ]);
-                } else {
-                    $errorData = json_decode($result->getContent(), true);
-                    $errorMessage = isset($errorData['message']) ? $errorData['message'] : 'Erreur inconnue chunk';
-                    $allErrors[] = "Chunk $index: $errorMessage";
-                    
-                    Log::error("❌ ERREUR CHUNK PHASE 2 $index", [
-                        'error' => $errorMessage
-                    ]);
-                }
-            }
-
-            DB::commit();
-
-            // ✅ MISE À JOUR STATUT DOSSIER
-            $dossier->update([
-                'statut' => 'soumis',
-                'donnees_supplementaires' => json_encode([
-                    'solution' => 'INSERTION_DURING_CHUNKING',
-                    'chunks_processed' => $totalChunks,
-                    'total_inserted' => $totalInserted,
-                    'anomalies_count' => $anomaliesCount,
-                    'processed_at' => now()->toISOString()
-                ])
-            ]);
-
-            Log::info('✅ PHASE 2 CHUNKING TERMINÉE', [
-                'total_inserted' => $totalInserted,
-                'chunks_processed' => $totalChunks,
-                'errors_count' => count($allErrors),
-                'anomalies_count' => $anomaliesCount,
-                'solution' => 'INSERTION_DURING_CHUNKING'
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => "Adhérents traités avec succès par chunking",
-                'data' => [
-                    'total_inserted' => $totalInserted,
-                    'chunks_processed' => $totalChunks,
-                    'anomalies_count' => $anomaliesCount,
-                    'errors' => $allErrors,
-                    'solution' => 'INSERTION_DURING_CHUNKING',
-                    'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            
-            Log::error('❌ ERREUR TRAITEMENT CHUNKING PHASE 2', [
-                'error' => $e->getMessage(),
-                'dossier_id' => $dossier->id
-            ]);
-
-            throw $e;
-        }
-    }
-    
-
-        /**
-     * ✅ MÉTHODE : Traitement standard (petits volumes)
-     */
-    private function processStandard(array $adherentsArray, $organisation, $dossier)
-    {
-        Log::info('📁 TRAITEMENT STANDARD PHASE 2', [
-            'total_adherents' => count($adherentsArray),
-            'organisation_id' => $organisation->id,
-            'dossier_id' => $dossier->id
-        ]);
-
-        DB::beginTransaction();
-
-        try {
-            $inserted = 0;
-            $anomaliesCount = 0;
-            $errors = [];
-
-            foreach ($adherentsArray as $index => $adherentData) {
-    try {
-        Log::info("🔄 TRAITEMENT ADHÉRENT $index", [
-            'type' => gettype($adherentData),
-            'is_array' => is_array($adherentData),
-            'content_preview' => is_array($adherentData) ? 
-                (isset($adherentData['nom']) ? $adherentData['nom'] : 'nom_manquant') : 
-                'non_array'
-        ]);
-        
-        // Vérifier que $adherentData est bien un array
-        if (!is_array($adherentData)) {
-            if (is_string($adherentData)) {
-                // Tenter de décoder si c'est une string JSON
-                $decodedData = json_decode($adherentData, true);
-                if (json_last_error() === JSON_ERROR_NONE && is_array($decodedData)) {
-                    $adherentData = $decodedData;
-                } else {
-                    throw new \Exception("Données adhérent invalides (string non-JSON): " . substr($adherentData, 0, 100));
-                }
-            } else {
-                throw new \Exception("Données adhérent invalides (type: " . gettype($adherentData) . ")");
-            }
-        }
-        
-        // Validation et nettoyage
-        $cleanData = $this->validateAdherentData($adherentData);
-
-                    // Création de l'adhérent
-                    $adherent = Adherent::create([
-                        'organisation_id' => $organisation->id,
-                        'nip' => $cleanData['nip'],
-                        'nom' => strtoupper($cleanData['nom']),
-                        'prenom' => $cleanData['prenom'],
-                        'profession' => isset($cleanData['profession']) ? $cleanData['profession'] : null,
-                        'fonction' => isset($cleanData['fonction']) ? $cleanData['fonction'] : 'Membre',
-                        'telephone' => isset($cleanData['telephone']) ? $cleanData['telephone'] : null,
-                        'email' => isset($cleanData['email']) ? $cleanData['email'] : null,
-                        'date_adhesion' => now(),
-                        'is_active' => true
-                    ]);
-
-                    $inserted++;
-
-                } catch (\Exception $e) {
-                    $nomAdherent = isset($adherentData['nom']) ? $adherentData['nom'] : 'Inconnu';
-                    $errors[] = "Erreur adhérent {$nomAdherent}: " . $e->getMessage();
-                    Log::warning('Erreur traitement adhérent individuel Phase 2', [
-                        'adherent' => $adherentData,
-                        'error' => $e->getMessage()
-                    ]);
-                }
-            }
-
-            // Mettre à jour le dossier
-            $dossier->update([
-                'statut' => 'soumis',
-                'donnees_supplementaires' => json_encode([
-                    'solution' => 'STANDARD',
-                    'total_inserted' => $inserted,
-                    'errors_count' => count($errors),
-                    'processed_at' => now()->toISOString()
-                ])
-            ]);
-
-            DB::commit();
-
-            Log::info('✅ TRAITEMENT STANDARD PHASE 2 TERMINÉ', [
-                'inserted' => $inserted,
-                'errors_count' => count($errors)
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => "Adhérents traités avec succès",
-                'data' => [
-                    'total_inserted' => $inserted,
-                    'errors' => $errors,
-                    'solution' => 'STANDARD',
-                    'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            throw $e;
-        }
-    }
-
-    /**
-     * ✅ MÉTHODE UTILITAIRE : Validation données adhérent
-     */
-    private function validateAdherentData(array $data)
-    {
-        // Validation de type en entrée
-        if (!is_array($data)) {
-            Log::error('❌ validateAdherentData: Type invalide', [
-                'type' => gettype($data),
-                'content' => is_string($data) ? substr($data, 0, 200) : $data
-            ]);
-            throw new \Exception("validateAdherentData attend un array, " . gettype($data) . " fourni");
-        }
-
-        return [
-            'nip' => $this->cleanNip(isset($data['nip']) ? $data['nip'] : ''),
-            'nom' => trim(isset($data['nom']) ? $data['nom'] : ''),
-            'prenom' => trim(isset($data['prenom']) ? $data['prenom'] : ''),
-            'profession' => trim(isset($data['profession']) ? $data['profession'] : ''),
-            'fonction' => trim(isset($data['fonction']) ? $data['fonction'] : 'Membre'),
-            'telephone' => $this->cleanPhone(isset($data['telephone']) ? $data['telephone'] : ''),
-            'email' => isset($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL) ? $data['email'] : null
-        ];
-    }
-
-    /**
-     * Nettoyer un NIP
-     */
-    private function cleanNip($nip)
-    {
-        return strtoupper(trim($nip));
-    }
-
-    /**
-     * Nettoyer un numéro de téléphone
-     */
-    private function cleanPhone($phone)
-    {
-        return preg_replace('/[^0-9+]/', '', $phone);
-    }
-
-    public function adherentsImportPage($dossierId)
-{
-    try {
-        $dossier = Dossier::with(['organisation', 'adherents'])
-            ->where('id', $dossierId)
-            ->whereHas('organisation', function($query) {
-                $query->where('user_id', auth()->id());
-            })
-            ->firstOrFail();
-
-        $organisation = $dossier->organisation;
-        $organisationType = $organisation->type ?? 'association';
-
-        $adherents_stats = [
-            'existants' => $dossier->adherents()->count(),
-            'minimum_requis' => $this->getMinimumAdherentsRequired($organisationType),
-            'manquants' => 0,
-            'peut_soumettre' => false
-        ];
-        
-        $adherents_stats['manquants'] = max(0, $adherents_stats['minimum_requis'] - $adherents_stats['existants']);
-        $adherents_stats['peut_soumettre'] = $adherents_stats['manquants'] <= 0;
-
-        $upload_config = [
-            'max_file_size' => '10MB',
-            'chunk_size' => 100,
-            'max_adherents' => 50000,
-            'chunking_threshold' => 200
-        ];
-
-        $urls = [
-            'store_adherents' => route('operator.dossiers.store-adherents', $dossier->id),
-            'template_download' => route('operator.templates.adherents-excel'),
-            'confirmation' => route('operator.dossiers.confirmation', $dossier->id),
-            'process_chunk' => route('operator.chunking.process-chunk'),
-            'health_check' => route('operator.chunking.health')
-        ];
-
-        session([
-            'current_dossier_id' => $dossier->id,
-            'current_organisation_id' => $organisation->id,
-            'current_organisation_type' => $organisationType
-        ]);
-
-        return view('operator.dossiers.adherents-import', compact(
-            'dossier', 'organisation', 'adherents_stats', 'upload_config', 'urls'
-        ));
-
-    } catch (\Exception $e) {
-        Log::error('❌ ERREUR adherentsImportPage', [
-            'dossier_id' => $dossierId,
-            'error' => $e->getMessage()
-        ]);
-        
-        return redirect()->route('operator.dashboard')
-            ->with('error', 'Erreur lors du chargement de la page d\'import');
-    }
-}
-
-private function getMinimumAdherentsRequired($organisationType)
-{
-    $minimums = [
-        'association' => 10,
-        'ong' => 15,
-        'parti_politique' => 500,
-        'confession_religieuse' => 20
-    ];
-    
-    return $minimums[$organisationType] ?? 10;
-}
-    
 
     // FIN DE LA CLASSE
 }

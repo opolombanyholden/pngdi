@@ -6089,7 +6089,7 @@ console.log('✅ Fonction submitForm remplacée par la version avec gestion CSRF
  * ✅ CORRECTION FONCTION submitFormWithChunking()
  * À remplacer dans organisation-create.js ligne ~2900
  */
-
+/*
 async function submitFormWithChunking() {
     try {
         showGlobalLoader(true);
@@ -6209,44 +6209,7 @@ async function submitFormWithChunking() {
         const finalResult = allResults[allResults.length - 1]; // Dernier chunk contient la réponse finale
         
         if (finalResult.success) {
-            console.log('🎉 Chunking terminé avec succès:', finalResult);
-            
-            // ✅ GESTION REDIRECTION AUTOMATIQUE
-            if (finalResult.should_redirect && finalResult.redirect_url) {
-                console.log('🔄 Redirection automatique détectée vers:', finalResult.redirect_url);
-                
-                // Afficher message de succès temporaire
-                let successMsg = finalResult.message || 'Adhérents traités avec succès par chunking';
-                if (finalResult.data) {
-                    successMsg += `\n📊 ${finalResult.data.total_inserted || 0} adhérents insérés`;
-                    if (finalResult.data.chunks_processed) {
-                        successMsg += ` en ${finalResult.data.chunks_processed} chunks`;
-                    }
-                    if (finalResult.data.anomalies_count > 0) {
-                        successMsg += `\n⚠️ ${finalResult.data.anomalies_count} anomalies détectées`;
-                    }
-                }
-                
-                showNotification(successMsg, 'success', 5000);
-                
-                // Nettoyer les données temporaires
-                localStorage.removeItem('pngdi_organisation_draft');
-                if (typeof OrganisationApp !== 'undefined') {
-                    OrganisationApp.adherents = [];
-                }
-                
-                // Redirection avec délai
-                const redirectDelay = finalResult.redirect_delay || 3000;
-                console.log(`🚀 Redirection dans ${redirectDelay}ms vers:`, finalResult.redirect_url);
-                
-                setTimeout(() => {
-                    window.location.href = finalResult.redirect_url;
-                }, redirectDelay);
-                
-                return; // Sortir de la fonction
-            }
-            
-            // ✅ FALLBACK : Construction manuelle de l'URL de redirection
+            // ✅ CORRECTION REDIRECTION : Utiliser dossier_id
             let redirectUrl = null;
             
             if (finalResult.data && finalResult.data.redirect_url) {
@@ -6268,8 +6231,6 @@ async function submitFormWithChunking() {
             if (OrganisationApp.rapportAnomalies.enabled) {
                 successMsg += '\n📋 Le rapport d\'anomalies a été transmis automatiquement.';
             }
-            const totalAdherents = OrganisationApp.adherents.length;
-            const totalChunks = Math.ceil(totalAdherents / 500);
             successMsg += `\n📊 ${totalAdherents} adhérents traités en ${totalChunks} lots.`;
             
             showNotification(successMsg, 'success', 10000);
@@ -6311,7 +6272,7 @@ async function submitFormWithChunking() {
     } finally {
         showGlobalLoader(false);
     }
-}
+}*/
 
 /**
  * Diagnostic CSRF avant soumission
