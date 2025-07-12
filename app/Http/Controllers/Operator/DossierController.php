@@ -1240,6 +1240,35 @@ private function getAccuseReceptionDownloadUrl(Dossier $dossier)
                 'organisation_id' => $organisation->id
             ]);
 
+
+            // ✅ VÉRIFICATION SIMPLE : Si adhérents déjà existants, ne pas réinsérer
+$adherentsExistants = Adherent::where('organisation_id', $organisation->id)->count();
+
+if ($adherentsExistants > 0) {
+    Log::info('⚠️ ADHÉRENTS DÉJÀ EXISTANTS - SKIP INSERTION', [
+        'organisation_id' => $organisation->id,
+        'count' => $adherentsExistants,
+        'action' => 'SKIP_REINSERTION'
+    ]);
+    
+    // Juste mettre à jour le statut, pas d'insertion
+    $dossier->update(['statut' => 'soumis']);
+    
+    if ($request->ajax() || $request->expectsJson()) {
+        return response()->json([
+            'success' => true,
+            'message' => 'Dossier soumis avec succès',
+            'data' => ['total_existing' => $adherentsExistants],
+            'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
+        ]);
+    } else {
+        return redirect()->route('operator.dossiers.confirmation', $dossier->id)
+            ->with('success', 'Dossier soumis avec succès');
+    }
+}
+
+
+
             // ✅ DÉCISION AUTOMATIQUE : CHUNKING ou STANDARD
             if ($totalAdherents >= $chunkingThreshold) {
                 return $this->processWithChunking($adherentsArray, $organisation, $dossier, $request);

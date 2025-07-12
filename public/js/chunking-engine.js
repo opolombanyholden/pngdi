@@ -19,10 +19,10 @@ window.ChunkingEngine = window.ChunkingEngine || {};
  */
 window.ChunkingEngine.config = {
     // Paramètres de base
-    chunkSize: 100,
+    chunkSize: 500,
     maxRetries: 3,
     retryDelay: 1000,
-    pauseBetweenChunks: 500,
+    pauseBetweenChunks: 2000,
     
     // Seuils et limites
     maxConcurrentChunks: 1,

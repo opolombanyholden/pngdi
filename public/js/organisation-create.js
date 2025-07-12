@@ -162,25 +162,25 @@ window.OrganisationApp = {
         // Exigences par type d'organisation
         orgRequirements: {
             'association': {
-                minFondateurs: 3,
+                minFondateurs: 1,
                 minAdherents: 10,
                 label: 'Association',
                 documents: ['statuts', 'pv_ag', 'liste_fondateurs', 'justif_siege']
             },
             'ong': {
-                minFondateurs: 5,
+                minFondateurs: 1,
                 minAdherents: 15,
                 label: 'ONG',
                 documents: ['statuts', 'pv_ag', 'liste_fondateurs', 'justif_siege', 'projet_social', 'budget_previsionnel']
             },
             'parti_politique': {
-                minFondateurs: 3,
+                minFondateurs: 1,
                 minAdherents: 50,
                 label: 'Parti Politique',
                 documents: ['statuts', 'pv_ag', 'liste_fondateurs', 'justif_siege', 'programme_politique', 'liste_50_adherents']
             },
             'confession_religieuse': {
-                minFondateurs: 3,
+                minFondateurs: 1,
                 minAdherents: 10,
                 label: 'Confession Religieuse',
                 documents: ['statuts', 'pv_ag', 'liste_fondateurs', 'justif_siege', 'expose_doctrine', 'justif_lieu_culte']

@@ -26,11 +26,13 @@ class ChunkProcessorController extends Controller
 {
     /**
      * Configuration du traitement par chunks
+     * 
+     * ******* la bonne config ****
      */
     private $chunkConfig = [
         'max_chunk_size' => 100,
         'max_execution_time' => 25,  // 25 secondes (inférieur à 30s)
-        'memory_limit' => '256M',
+        'memory_limit' => '128',
         'batch_insert_size' => 50,   // Insertion par lots de 50
     ];
 

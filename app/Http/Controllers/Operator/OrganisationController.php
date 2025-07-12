@@ -4224,7 +4224,7 @@ private function processWithInsertionDuringChunking(array $adherentsArray, $orga
     $startTime = microtime(true);
     
     // Préparer les chunks pour insertion immédiate
-    $chunkSize = 100;
+    $chunkSize = 500;
     $chunks = array_chunk($adherentsArray, $chunkSize);
     $totalChunks = count($chunks);
     
