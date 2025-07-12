@@ -9,7 +9,6 @@ use App\Http\Controllers\Operator\OrganisationController;
 use App\Http\Controllers\Operator\AdherentController;
 use App\Http\Controllers\Operator\DocumentController;
 use App\Http\Controllers\Operator\GuideController;
-use App\Http\Controllers\Operator\ChunkingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -74,12 +73,7 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::get('/adherents-csv', [AdherentController::class, 'downloadTemplate'])->name('adherents-csv');
         });
 
-        # Vérifier dans routes/operator.php la section :
-        Route::prefix('chunking')->name('chunking.')->group(function() {
-        Route::post('/process-chunk', [ChunkingController::class, 'processChunk']);
-        Route::get('/health', [ChunkingController::class, 'healthCheck']);
-        // ... autres routes
-        });
+        
 
     });
     

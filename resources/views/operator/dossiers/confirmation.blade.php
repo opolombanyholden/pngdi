@@ -1,497 +1,350 @@
 {{--
 ============================================================================
-CONFIRMATION.BLADE.PHP - VUE MODERNISÉE IMPORT ADHÉRENTS
-Transformation complète en interface d'import avec architecture modulaire
-Version: 2.0 - SGLP avec détection automatique gros volumes
+CONFIRMATION.BLADE.PHP - REFONTE DESIGN COMPLÈTE STYLE SGLP
+Version: 3.0 - Design moderne inspiré de confirmation_design.blade.php
+Refonte complète de l'interface utilisateur avec animations et couleurs gabonaises
 ============================================================================
 --}}
 
 @extends('layouts.operator')
 
-@section('title', 'Import des Adhérents - Finalisation Dossier')
+@section('title', 'Confirmation Finale - Dossier Soumis avec Succès')
 
-@section('page-title', 'Import Adhérents & Finalisation')
-
-{{-- Styles CSS externalisés --}}
-@push('styles')
-<link rel="stylesheet" href="{{ asset('css/gabon-charte.css') }}">
-<link rel="stylesheet" href="{{ asset('css/confirmation-import.css') }}">
-<link rel="stylesheet" href="{{ asset('css/adherents-manager.css') }}">
-<link rel="stylesheet" href="{{ asset('css/chunking-interface.css') }}">
-@endpush
+@section('page-title', 'Confirmation Finale du Dossier')
 
 @section('content')
 <div class="container-fluid">
-    {{-- Variables PHP pour les données --}}
+    {{-- ✅ Variables PHP corrigées pour la nouvelle interface --}}
     @php
-    // Configuration de base depuis le contrôleur
-    $dossier = $dossier ?? (object)[
-        'id' => 1,
-        'numero_dossier' => 'DOS-2025-001',
-        'numero_recepisse' => 'REC-2025-001'
+    // ✅ Extraction des données depuis confirmationData
+    $confirmationData = $confirmationData ?? [];
+
+    // Dossier et organisation depuis confirmationData
+    $dossier = $confirmationData['dossier'] ?? (object)[
+        'id' => 0,
+        'numero_dossier' => 'N/A',
+        'numero_recepisse' => 'En attente'
     ];
 
-    $organisation = $organisation ?? (object)[
-        'id' => 1,
-        'nom' => 'Organisation Test',
+    $organisation = $confirmationData['organisation'] ?? (object)[
+        'id' => 0,
+        'nom' => 'Organisation non définie',
         'type' => 'association',
-        'sigle' => 'OT'
+        'sigle' => ''
     ];
 
-    // Statistiques adhérents
-    $adherents_stats = $adherents_stats ?? [
-        'existants' => 5,
-        'minimum_requis' => 15,
-        'manquants' => 10,
-        'peut_soumettre' => false
+   // Statistiques simplifiées sans chargement adhérents
+$adherents_stats = [
+    'total' => $organisation->adherents()->count(),
+    'actifs' => $organisation->adherents()->where('is_active', true)->count(),
+    'sans_anomalies' => $organisation->adherents()->whereNull('anomalies')->count(),
+    'avec_anomalies' => $organisation->adherents()->whereNotNull('anomalies')->count(),
+    'taux_validite' => 100
+];
+
+if ($adherents_stats['total'] > 0) {
+    $adherents_stats['taux_validite'] = round(($adherents_stats['sans_anomalies'] / $adherents_stats['total']) * 100, 1);
+}
+    
+
+    // Nouvelles variables pour le design
+    $phase_name = $confirmationData['phase_name'] ?? 'Phase 2 Terminée avec Succès';
+    $phase2_completed_at = now(); // Date de finalisation
+    $qr_code = $confirmationData['qr_code'] ?? null;
+    
+    
+    // Prochaines étapes depuis confirmationData ou par défaut
+    $prochaines_etapes = $confirmationData['prochaines_etapes'] ?? [
+        [
+            'numero' => 1,
+            'titre' => 'Assignation d\'un agent',
+            'description' => 'Un agent sera assigné à votre dossier sous 48h ouvrées',
+            'delai' => '48h ouvrées'
+        ],
+        [
+            'numero' => 2,
+            'titre' => 'Examen du dossier',
+            'description' => 'Votre dossier sera examiné selon l\'ordre d\'arrivée (système FIFO)',
+            'delai' => '72h ouvrées'
+        ],
+        [
+            'numero' => 3,
+            'titre' => 'Notification du résultat',
+            'description' => 'Vous recevrez une notification par email de l\'évolution',
+            'delai' => 'Variable'
+        ],
+        [
+            'numero' => 4,
+            'titre' => 'Dépôt physique requis',
+            'description' => 'Déposer le dossier physique en 3 exemplaires à la DGELP',
+            'delai' => 'Dans les 7 jours'
+        ]
     ];
 
-    // Configuration upload
-    $upload_config = $upload_config ?? [
-        'max_file_size' => '10MB',
-        'chunk_size' => 100,
-        'max_adherents' => 50000,
-        'chunking_threshold' => 200
+    // Contact support
+    $contact_support = $confirmationData['contact_support'] ?? [
+        'email' => 'support@pngdi.ga',
+        'telephone' => '+241 01 23 45 67',
+        'horaires' => 'Lundi - Vendredi: 08h00 - 17h00'
     ];
 
-    // URLs dynamiques
-    $urls = $urls ?? [
-        'store_adherents' => route('operator.dossiers.store-adherents', $dossier->id),
-        'template_download' => route('operator.templates.adherents-excel'),
-        'process_chunk' => route('api.organisations.process-chunk'),
-        'confirmation' => route('operator.dossiers.confirmation', $dossier->id),
-        'health_check' => '/api/chunking/health'
-    ];
+    // Message légal
+    $message_legal = $confirmationData['message_legal'] ?? 'Votre dossier numérique a été soumis avec succès. Conformément aux dispositions légales en vigueur, vous devez déposer votre dossier physique en 3 exemplaires auprès de la Direction Générale des Élections et des Libertés Publiques.';
+
+    // URLs pour téléchargements
+    $accuse_reception_url = $confirmationData['accuse_reception_url'] ?? null;
     @endphp
 
-    {{--
-    ============================================================================
-    SECTION 1: HEADER PRINCIPAL AVEC PROGRESSION
-    ============================================================================
-    --}}
-    <div class="confirmation-header">
-        <div class="header-content">
-            <!-- Indicateur de phase -->
-            <div class="phase-indicator">
-                <i class="fas fa-users me-2"></i>
-                Finalisation: Import des Adhérents
+    {{-- Header Principal - Succès Phase 2 --}}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-lg" style="background: linear-gradient(135deg, #009e3f 0%, #006d2c 100%);">
+                <div class="card-body text-white text-center py-5 position-relative">
+                    {{-- Animation de succès --}}
+                    <div class="success-animation mb-4">
+                        <div class="checkmark-container">
+                            <i class="fas fa-check-circle fa-6x text-white opacity-90 pulse-animation"></i>
+                        </div>
+                    </div>
+                    
+                    <h1 class="mb-3 display-6">🎉 Dossier soumis avec Succès !</h1>
+                    <h2 class="h4 mb-3">
+                        Dossier {{ $dossier->numero_dossier ?? 'N/A' }} <br/>
+                        Informations de l'organisation et liste des Adhérents enregistrées
+                    </h2>
+                    
+                    {{-- Badge de statut --}}
+                    <div class="d-flex justify-content-center mb-4">
+                        <span class="badge bg-light text-success px-4 py-2 fs-6">
+                            <i class="fas fa-star me-2"></i>
+                            {{ $phase_name }}
+                        </span>
+                    </div>
+                    
+                    {{-- Informations essentielles --}}
+                    <div class="row justify-content-center">
+                        <div class="col-md-8">
+                            <div class="alert alert-light border-0 bg-rgba-white-10">
+                                <div class="row text-center">
+                                    <div class="col-md-4">
+                                        <i class="fas fa-building fa-2x mb-2 text-white"></i>
+                                        <h6 class="fw-bold">{{ $organisation->nom ?? 'Organisation non définie' }}</h6>
+                                        <small class="opacity-90">{{ ucfirst(str_replace('_', ' ', $organisation->type ?? 'association')) }}</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <i class="fas fa-users fa-2x mb-2 text-white"></i>
+                                        <h6 class="fw-bold">{{ $adherents_stats['total'] }} Adhérents</h6>
+                                        <small class="opacity-90">{{ $adherents_stats['taux_validite'] }}% de validité</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <i class="fas fa-calendar fa-2x mb-2 text-white"></i>
+                                        <h6 class="fw-bold">{{ $phase2_completed_at->format('d/m/Y') }}</h6>
+                                        <small class="opacity-90">Date de finalisation</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
+    </div>
 
-            <!-- Breadcrumb gabonais -->
-            <nav aria-label="breadcrumb" class="breadcrumb-gabon">
-                <ol class="breadcrumb">
-                    <li class="breadcrumb-item">
-                        <a href="{{ route('operator.dashboard') }}">
-                            <i class="fas fa-home me-1"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="breadcrumb-item">
-                        <a href="{{ route('operator.organisations.index') }}">Organisations</a>
-                    </li>
-                    <li class="breadcrumb-item">
-                        <a href="{{ route('operator.organisations.show', $organisation->id ?? 1) }}">{{ $organisation->nom }}</a>
-                    </li>
-                    <li class="breadcrumb-item active">Import Adhérents</li>
-                </ol>
-            </nav>
+    {{-- Contenu Principal --}}
+    <div class="row">
+        {{-- Colonne Gauche - Statistiques et Étapes --}}
+        <div class="col-lg-8">
+            
+        {{-- Statistiques Simplifiées --}}
+<div class="card shadow-sm mb-4">
+    <div class="card-header text-white" style="background: linear-gradient(135deg, #009e3f 0%, #006d2c 100%);">
+        <h5 class="card-title mb-0 text-white">
+            <i class="fas fa-users me-2 text-white"></i>
+            Statistiques de l'Import
+        </h5>
+    </div>
+    <div class="card-body text-center">
+        <div class="row">
+            <div class="col-md-6">
+                <h2 class="text-success">{{ number_format($adherents_stats['total']) }}</h2>
+                <p class="text-muted">Adhérents Enregistrés</p>
+            </div>
+            <div class="col-md-6">
+                <h2 class="text-primary">✅</h2>
+                <p class="text-muted">Import Réussi</p>
+            </div>
+        </div>
+        <div class="alert alert-success mt-3">
+            <i class="fas fa-check-circle me-2"></i>
+            Tous les adhérents ont été enregistrés avec succès dans la base de données.
+        </div>
+    </div>
+</div>
 
-            <!-- Titre principal avec organisation -->
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    <h1 class="header-title">
-                        <i class="fas fa-flag me-3"></i>
-                        Import des Adhérents
-                    </h1>
-                    <div class="header-subtitle">
-                        <strong>{{ $organisation->nom }}</strong>
-                        @if($organisation->sigle)
-                        ({{ $organisation->sigle }})
+            {{-- Prochaines Étapes --}}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header text-dark" style="background: linear-gradient(135deg, #ffcd00 0%, #ffa500 100%);">
+                    <h5 class="card-title mb-0 text-dark">
+                        <i class="fas fa-route me-2 text-dark"></i>
+                        Prochaines Étapes
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        @foreach($prochaines_etapes as $index => $etape)
+                        <div class="timeline-item {{ $index === 0 ? 'active' : '' }}">
+                            <div class="timeline-marker">
+                                <span class="step-number">{{ $etape['numero'] }}</span>
+                            </div>
+                            <div class="timeline-content">
+                                <h6 class="mb-1">{{ $etape['titre'] }}</h6>
+                                <p class="text-muted mb-1">{{ $etape['description'] }}</p>
+                                <small class="text-info">
+                                    <i class="fas fa-clock me-1"></i>
+                                    {{ $etape['delai'] }}
+                                </small>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Colonne Droite - Actions et Informations Complémentaires --}}
+        <div class="col-lg-4">
+            {{-- QR Code et Vérification --}}
+            @if($qr_code)
+            <div class="card shadow-sm mb-4">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #003f7f 0%, #0056b3 100%);">
+                    <h5 class="card-title mb-0 text-white">
+                        <i class="fas fa-qrcode me-2 text-white"></i>
+                        Code de Vérification
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="qr-code-container mb-3">
+                        @if(isset($qr_code->svg_content))
+                            {!! $qr_code->svg_content !!}
+                        @else
+                            <div class="placeholder-qr">
+                                <i class="fas fa-qrcode fa-8x text-muted"></i>
+                                <p class="mt-2 text-muted">QR Code en génération</p>
+                            </div>
                         @endif
-                        | {{ ucfirst($organisation->type) }}
                     </div>
-                    <div class="header-meta">
-                        <span class="me-3">
-                            <i class="fas fa-file-alt me-1"></i>
-                            {{ $dossier->numero_dossier }}
-                        </span>
-                        <span class="me-3">
-                            <i class="fas fa-receipt me-1"></i>
-                            {{ $dossier->numero_recepisse }}
-                        </span>
-                        <span class="badge bg-success">
-                            <i class="fas fa-check me-1"></i>
-                            Organisation Créée
-                        </span>
-                    </div>
-                </div>
-                <div class="col-md-4 text-end">
-                    <div class="header-actions">
-                        <button class="btn btn-outline-light me-2" onclick="showHelp()">
-                            <i class="fas fa-question-circle me-2"></i>Aide
-                        </button>
-                        <button class="btn btn-warning" onclick="saveDraft()">
-                            <i class="fas fa-save me-2"></i>Sauvegarder
-                        </button>
+                    <p class="small text-muted mb-2">Code: {{ $qr_code->code ?? 'En cours' }}</p>
+                    <div class="alert alert-info border-0 text-start">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            Ce QR Code permet de vérifier l'authenticité de votre dossier.
+                        </small>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+            @endif
 
-    {{--
-    ============================================================================
-    SECTION 2: DASHBOARD STATISTIQUES TEMPS RÉEL
-    ============================================================================
-    --}}
-    <div class="stats-dashboard">
-        <div class="dashboard-header">
-            <h3 class="dashboard-title">
-                <i class="fas fa-chart-pie me-2"></i>
-                Statistiques des Adhérents
-            </h3>
-            <p class="dashboard-subtitle">Suivi en temps réel avec détection automatique des gros volumes</p>
-        </div>
-
-        <!-- Grid statistiques -->
-        <div class="stats-grid">
-            <div class="stat-card highlight" id="stat-existants">
-                <div class="stat-icon">
-                    <i class="fas fa-users"></i>
+            {{-- Actions Disponibles --}}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, #003f7f 0%, #0056b3 100%);">
+                    <h5 class="card-title mb-0 text-white">
+                        <i class="fas fa-download me-2 text-white"></i>
+                        Documents et Rapports
+                    </h5>
                 </div>
-                <div class="stat-content">
-                    <div class="stat-number">{{ $adherents_stats['existants'] }}</div>
-                    <div class="stat-label">Existants</div>
-                </div>
-            </div>
-
-            <div class="stat-card warning" id="stat-minimum">
-                <div class="stat-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-number">{{ $adherents_stats['minimum_requis'] }}</div>
-                    <div class="stat-label">Minimum Requis</div>
-                </div>
-            </div>
-
-            <div class="stat-card {{ $adherents_stats['manquants'] > 0 ? 'danger' : 'success' }}" id="stat-manquants">
-                <div class="stat-icon">
-                    <i class="fas fa-{{ $adherents_stats['manquants'] > 0 ? 'user-plus' : 'check-circle' }}"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-number">{{ $adherents_stats['manquants'] > 0 ? $adherents_stats['manquants'] : '✓' }}</div>
-                    <div class="stat-label">{{ $adherents_stats['manquants'] > 0 ? 'Manquants' : 'Complet' }}</div>
-                </div>
-            </div>
-
-            <div class="stat-card info" id="stat-importes">
-                <div class="stat-icon">
-                    <i class="fas fa-upload"></i>
-                </div>
-                <div class="stat-content">
-                    <div class="stat-number" id="import-count">0</div>
-                    <div class="stat-label">Importés</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Indicateur de capacité -->
-        <div class="capacity-indicator">
-            <div class="capacity-header">
-                <span class="capacity-label">Capacité d'import détectée</span>
-                <span class="capacity-mode" id="capacity-mode">Standard</span>
-            </div>
-            <div class="capacity-bar">
-                <div class="capacity-fill" id="capacity-fill" style="width: {{ min(100, ($adherents_stats['existants'] / $adherents_stats['minimum_requis']) * 100) }}%"></div>
-            </div>
-            <div class="capacity-info">
-                <small class="text-muted">
-                    Chunking automatique activé pour volumes > {{ $upload_config['chunking_threshold'] }} adhérents
-                </small>
-            </div>
-        </div>
-    </div>
-
-    {{--
-    ============================================================================
-    SECTION 3: INTERFACE D'IMPORT MODERNISÉE
-    ============================================================================
-    --}}
-    <div class="import-interface">
-        <div class="import-header">
-            <h4 class="import-title">
-                <i class="fas fa-cloud-upload-alt me-2"></i>
-                Interface d'Import Intelligente
-            </h4>
-            <div class="import-options">
-                <div class="btn-group" role="group">
-                    <input type="radio" class="btn-check" name="import-mode" id="mode-manuel" value="manuel" checked>
-                    <label class="btn btn-outline-primary" for="mode-manuel">
-                        <i class="fas fa-keyboard me-2"></i>Manuel
-                    </label>
-
-                    <input type="radio" class="btn-check" name="import-mode" id="mode-fichier" value="fichier">
-                    <label class="btn btn-outline-success" for="mode-fichier">
-                        <i class="fas fa-file-excel me-2"></i>Fichier
-                    </label>
-
-                    <input type="radio" class="btn-check" name="import-mode" id="mode-massif" value="massif">
-                    <label class="btn btn-outline-warning" for="mode-massif">
-                        <i class="fas fa-layer-group me-2"></i>Gros Volume
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Section import manuel -->
-        <div class="import-section" id="import-manuel">
-            @include('operator.partials.adherent-form-manual')
-        </div>
-
-        <!-- Section import fichier -->
-        <div class="import-section" id="import-fichier" style="display: none;">
-            @include('operator.partials.adherent-form-upload')
-        </div>
-
-        <!-- Section gros volumes -->
-        <div class="import-section" id="import-massif" style="display: none;">
-            @include('operator.partials.adherent-form-chunking')
-        </div>
-    </div>
-
-    {{--
-    ============================================================================
-    SECTION 4: TABLEAU ADHÉRENTS DYNAMIQUE
-    ============================================================================
-    --}}
-    <div class="adherents-manager">
-        <div class="manager-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <h4 class="manager-title">
-                    <i class="fas fa-table me-2"></i>
-                    Gestionnaire d'Adhérents
-                </h4>
-                <div class="manager-actions">
-                    <div class="btn-group" role="group">
-                        <button class="btn btn-outline-secondary btn-sm" onclick="exportAdherents('csv')">
-                            <i class="fas fa-file-csv me-1"></i>CSV
-                        </button>
-                        <button class="btn btn-outline-success btn-sm" onclick="exportAdherents('excel')">
-                            <i class="fas fa-file-excel me-1"></i>Excel
-                        </button>
-                        <button class="btn btn-outline-info btn-sm" onclick="showAdherentsStats()">
-                            <i class="fas fa-chart-bar me-1"></i>Stats
+                <div class="card-body">
+                    {{-- Téléchargement Accusé Officiel --}}
+                    @if($accuse_reception_url)
+                    <div class="d-grid gap-2 mb-3">
+                        <a href="{{ $accuse_reception_url }}" class="btn btn-lg" style="background: linear-gradient(135deg, #009e3f 0%, #006d2c 100%); color: white;" target="_blank">
+                            <i class="fas fa-certificate me-2"></i>
+                            Télécharger l'Accusé Officiel (PDF)
+                        </a>
+                    </div>
+                    <div class="alert alert-info border-0 mb-3">
+                        <small>
+                            <i class="fas fa-info-circle me-1"></i>
+                            Document officiel avec QR Code de vérification à présenter à l'administration.
+                        </small>
+                    </div>
+                    @else
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="button" class="btn btn-outline-success btn-lg" disabled>
+                            <i class="fas fa-certificate me-2"></i>
+                            Accusé en génération...
                         </button>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Filtres et recherche -->
-        <div class="manager-filters">
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="search-box">
-                        <i class="fas fa-search search-icon"></i>
-                        <input type="text" class="form-control" id="adherents-search" placeholder="Rechercher par nom, NIP...">
+                    <div class="alert alert-warning border-0 mb-3">
+                        <small>
+                            <i class="fas fa-clock me-1"></i>
+                            L'accusé de réception officiel sera disponible sous peu.
+                        </small>
                     </div>
-                </div>
-                <div class="col-md-2">
-                    <select class="form-select" id="filter-statut">
-                        <option value="">Tous statuts</option>
-                        <option value="valide">Valides</option>
-                        <option value="anomalie">Anomalies</option>
-                        <option value="doublon">Doublons</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <select class="form-select" id="filter-source">
-                        <option value="">Toutes sources</option>
-                        <option value="manuel">Saisie manuelle</option>
-                        <option value="import">Import fichier</option>
-                        <option value="chunking">Import massif</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button class="btn btn-outline-danger w-100" onclick="clearFilters()">
-                        <i class="fas fa-times me-1"></i>Effacer
-                    </button>
-                </div>
-                <div class="col-md-2">
-                    <div class="adherents-counter">
-                        <span class="counter-label">Total:</span>
-                        <span class="counter-number" id="adherents-total">0</span>
+                    @endif
+
+                    
+
+                    {{-- Imprimer cette page --}}
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="button" class="btn btn-outline-info btn-lg" id="printPageBtn">
+                            <i class="fas fa-print me-2"></i>
+                            Imprimer cette Confirmation
+                        </button>
+                    </div>
+
+                    {{-- Retour au Dashboard --}}
+                    <div class="d-grid gap-2">
+                        <a href="{{ route('operator.dashboard') }}" class="btn btn-outline-secondary btn-lg">
+                            <i class="fas fa-home me-2"></i>
+                            Retour au Dashboard
+                        </a>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Actions en lot -->
-        <div class="bulk-actions" style="display: none;">
-            <!-- Sera ajouté dynamiquement -->
-        </div>
-
-        <!-- Tableau responsive -->
-        <div class="adherents-table-container">
-            <table class="table adherents-table" id="adherents-table">
-                <thead>
-                    <tr>
-                        <th>
-                            <input type="checkbox" class="form-check-input" id="select-all">
-                        </th>
-                        <th data-sort="nip">NIP</th>
-                        <th data-sort="nom_complet">Nom Complet</th>
-                        <th data-sort="telephone">Téléphone</th>
-                        <th data-sort="profession">Profession</th>
-                        <th data-sort="source">Source</th>
-                        <th data-sort="statut">Statut</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="adherents-tbody">
-                    <!-- Sera rempli dynamiquement -->
-                </tbody>
-            </table>
-
-            <!-- État vide -->
-            <div class="empty-state" id="empty-state">
-                <div class="empty-icon">
-                    <i class="fas fa-users fa-4x"></i>
+            {{-- Informations de Support --}}
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0 text-dark">
+                        <i class="fas fa-headset me-2 text-dark"></i>
+                        Support & Contact
+                    </h5>
                 </div>
-                <h5 class="empty-title">Aucun adhérent importé</h5>
-                <p class="empty-text">Commencez par importer vos adhérents via l'interface ci-dessus</p>
+                <div class="card-body">
+                    <div class="contact-info">
+                        <div class="mb-3">
+                            <strong>Email:</strong><br>
+                            <a href="mailto:{{ $contact_support['email'] }}" class="text-decoration-none">
+                                {{ $contact_support['email'] }}
+                            </a>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Téléphone:</strong><br>
+                            <a href="tel:{{ $contact_support['telephone'] }}" class="text-decoration-none">
+                                {{ $contact_support['telephone'] }}
+                            </a>
+                        </div>
+                        <div class="mb-3">
+                            <strong>Horaires:</strong><br>
+                            <small class="text-muted">{{ $contact_support['horaires'] }}</small>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <!-- Pagination personnalisée -->
-        <div class="adherents-pagination" id="adherents-pagination">
-            <!-- Sera générée dynamiquement -->
         </div>
     </div>
 
-    {{--
-    ============================================================================
-    SECTION 5: ACTIONS FINALES
-    ============================================================================
-    --}}
-    <div class="final-actions">
-        <div class="actions-header">
-            <h4 class="actions-title">
-                <i class="fas fa-rocket me-2"></i>
-                Finalisation du Dossier
-            </h4>
-            <p class="actions-subtitle">Vérifiez vos données et soumettez votre dossier à l'administration</p>
-        </div>
-
-        <div class="actions-grid">
-            <div class="action-card" id="action-draft">
-                <div class="action-icon bg-warning">
-                    <i class="fas fa-save"></i>
-                </div>
-                <div class="action-content">
-                    <h6 class="action-title">Sauvegarder en Brouillon</h6>
-                    <p class="action-text">Conservez vos données pour finaliser plus tard</p>
-                    <button class="btn btn-warning" onclick="saveDraft()">
-                        <i class="fas fa-save me-2"></i>Sauvegarder
-                    </button>
-                </div>
-            </div>
-
-            <div class="action-card" id="action-validate">
-                <div class="action-icon bg-info">
-                    <i class="fas fa-check-double"></i>
-                </div>
-                <div class="action-content">
-                    <h6 class="action-title">Valider les Données</h6>
-                    <p class="action-text">Vérification complète avant soumission</p>
-                    <button class="btn btn-info" onclick="validateAllData()">
-                        <i class="fas fa-check-double me-2"></i>Valider
-                    </button>
-                </div>
-            </div>
-
-            <div class="action-card" id="action-submit">
-                <div class="action-icon bg-success">
-                    <i class="fas fa-paper-plane"></i>
-                </div>
-                <div class="action-content">
-                    <h6 class="action-title">Soumettre à l'Administration</h6>
-                    <p class="action-text">Envoi final pour traitement officiel</p>
-                    <button class="btn btn-success" onclick="submitToAdmin()" id="submit-final-btn" disabled>
-                        <i class="fas fa-paper-plane me-2"></i>Soumettre
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Résumé avant soumission -->
-        <div class="submission-summary" id="submission-summary" style="display: none;">
-            <div class="summary-header">
-                <h5 class="summary-title">
-                    <i class="fas fa-clipboard-check me-2"></i>
-                    Résumé de Soumission
-                </h5>
-            </div>
-            <div class="summary-content" id="summary-content">
-                <!-- Sera rempli dynamiquement -->
-            </div>
-        </div>
-    </div>
-</div>
-
-{{--
-============================================================================
-MODALS ET INTERFACES SECONDAIRES
-============================================================================
---}}
-
-<!-- Modal de progression chunking -->
-<div class="modal fade chunking-modal" id="chunkingProgressModal" tabindex="-1" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            @include('operator.partials.chunking-progress-modal')
-        </div>
-    </div>
-</div>
-
-<!-- Modal d'aide -->
-<div class="modal fade" id="helpModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-question-circle me-2"></i>Guide d'Import des Adhérents
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <h6 class="text-primary">Import Manuel</h6>
-                        <p>Saisie individuelle idéale pour petits volumes ou corrections ponctuelles.</p>
-                        <ul class="list-unstyled">
-                            <li><i class="fas fa-check text-success me-2"></i>Validation temps réel</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Formatage automatique</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Aperçu immédiat</li>
-                        </ul>
-                    </div>
-                    <div class="col-md-4">
-                        <h6 class="text-success">Import Fichier</h6>
-                        <p>Upload Excel/CSV pour volumes moyens avec validation avancée.</p>
-                        <ul class="list-unstyled">
-                            <li><i class="fas fa-check text-success me-2"></i>Drag & Drop</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Analyse automatique</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Rapport d'erreurs</li>
-                        </ul>
-                    </div>
-                    <div class="col-md-4">
-                        <h6 class="text-warning">Import Massif</h6>
-                        <p>Chunking adaptatif pour gros volumes avec monitoring temps réel.</p>
-                        <ul class="list-unstyled">
-                            <li><i class="fas fa-check text-success me-2"></i>Traitement par lots</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Pause/Reprise</li>
-                            <li><i class="fas fa-check text-success me-2"></i>Optimisé serveur</li>
-                        </ul>
+    {{-- Message Légal --}}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="alert alert-info border-0 mb-0">
+                        <h6 class="alert-heading">
+                            <i class="fas fa-gavel me-2"></i>
+                            Information Légale
+                        </h6>
+                        <p class="mb-0 small">{{ $message_legal }}</p>
                     </div>
                 </div>
             </div>
@@ -499,121 +352,522 @@ MODALS ET INTERFACES SECONDAIRES
     </div>
 </div>
 
-<!-- Modal de validation finale -->
-<div class="modal fade" id="finalValidationModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-check-double me-2"></i>Validation Finale
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="validation-results">
-                    <!-- Sera rempli dynamiquement -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-                <button type="button" class="btn btn-success" onclick="confirmFinalSubmission()">
-                    <i class="fas fa-paper-plane me-2"></i>Confirmer Soumission
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
-{{-- Formulaire de soumission caché --}}
-<form id="hidden-submission-form" method="POST" action="{{ $urls['store_adherents'] }}" style="display: none;">
-    @csrf
-    <input type="hidden" name="adherents_data" id="adherents-data-input">
-    <input type="hidden" name="submission_type" value="final">
-    <input type="hidden" name="validation_passed" id="validation-passed-input">
-</form>
+{{-- Styles CSS modernisés --}}
+<style>
+/* ============================================================================
+   STYLES CSS MODERNISÉS AVEC COULEURS GABONAISES
+   ============================================================================ */
 
-{{-- Configuration JavaScript --}}
-<script>
-// Configuration globale pour les modules JS
-window.ConfirmationConfig = {
-    dossierId: {{ $dossier->id }},
-    organisationId: {{ $organisation->id }},
-    organisationNom: '{{ $organisation->nom }}',
-    organisationType: '{{ $organisation->type }}',
-    
-    // Statistiques
-    stats: {
-        existants: {{ $adherents_stats['existants'] }},
-        minimumRequis: {{ $adherents_stats['minimum_requis'] }},
-        manquants: {{ $adherents_stats['manquants'] }},
-        peutSoumettre: {{ $adherents_stats['peut_soumettre'] ? 'true' : 'false' }}
-    },
-    
-    // Configuration upload
-    upload: {
-        maxFileSize: '{{ $upload_config['max_file_size'] }}',
-        chunkSize: {{ $upload_config['chunk_size'] }},
-        maxAdherents: {{ $upload_config['max_adherents'] }},
-        chunkingThreshold: {{ $upload_config['chunking_threshold'] }}
-    },
-    
-    // URLs API
-    urls: {!! json_encode($urls) !!},
-    
-    // CSRF
-    csrf: '{{ csrf_token() }}',
-    
-    // Configuration chunking
-    chunking: {
-        enabled: true,
-        threshold: {{ $upload_config['chunking_threshold'] }},
-        batchSize: {{ $upload_config['chunk_size'] }},
-        maxRetries: 3,
-        pauseBetweenChunks: 500
+/* Animations */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.pulse-animation {
+    animation: pulse 2s infinite;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
     }
-};
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
-// Initialiser les adhérents existants s'il y en a
-window.AdherentsData = [];
+.card {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes slideInFromLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.timeline-item {
+    animation: slideInFromLeft 0.6s ease-out;
+}
+
+/* Styles spécifiques */
+.bg-rgba-white-10 {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.stat-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
+}
+
+.stat-circle:hover {
+    transform: scale(1.05);
+}
+
+/* Timeline modernisée */
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(to bottom, #009e3f, #ffcd00, #003f7f);
+    border-radius: 2px;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 30px;
+}
+
+.timeline-item:last-child {
+    margin-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -23px;
+    top: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+}
+
+.timeline-item.completed .timeline-marker {
+    background: linear-gradient(135deg, #009e3f 0%, #006d2c 100%);
+}
+
+.timeline-item.completed .timeline-marker i {
+    font-size: 12px;
+}
+
+.timeline-item.active .timeline-marker {
+    background: linear-gradient(135deg, #ffcd00 0%, #ffa500 100%);
+    color: #000;
+    transform: scale(1.1);
+}
+
+.step-number {
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.timeline-content {
+    margin-left: 15px;
+    padding: 15px;
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: 8px;
+    border-left: 3px solid #009e3f;
+    transition: all 0.3s ease;
+}
+
+.timeline-content:hover {
+    background: rgba(248, 249, 250, 1);
+    transform: translateX(5px);
+}
+
+/* QR Code modernisé */
+.qr-code-container {
+    padding: 20px;
+    background: rgba(248, 249, 250, 0.9);
+    border-radius: 15px;
+    border: 2px dashed #009e3f;
+}
+
+.qr-code-container svg {
+    max-width: 150px;
+    height: auto;
+    border-radius: 8px;
+}
+
+.placeholder-qr {
+    padding: 30px;
+    background: rgba(248, 249, 250, 0.5);
+    border-radius: 15px;
+    border: 2px dashed #ccc;
+}
+
+/* Boutons modernisés */
+.btn {
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Cards améliorées */
+.card {
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    border-radius: 12px 12px 0 0 !important;
+    border: none;
+    padding: 20px;
+}
+
+/* Progress bar gabonaise */
+.progress {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-bar {
+    transition: width 1s ease-in-out;
+    border-radius: 10px;
+}
+
+/* Responsive amélioré */
+@media (max-width: 768px) {
+    .stat-circle {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .stat-circle .h4 {
+        font-size: 1.1rem;
+    }
+
+    .timeline-content {
+        margin-left: 10px;
+        padding: 10px;
+    }
+
+    .card-body {
+        padding: 15px;
+    }
+
+    .display-6 {
+        font-size: 2rem;
+    }
+}
+
+/* Print styles optimisés */
+@media print {
+    .btn, .modal, .timeline-marker {
+        -webkit-print-color-adjust: exact;
+        color-adjust: exact;
+    }
+    
+    .no-print {
+        display: none !important;
+    }
+
+    .card {
+        break-inside: avoid;
+        margin-bottom: 20px;
+    }
+    
+    .pulse-animation {
+        animation: none;
+    }
+}
+
+/* Alertes modernisées */
+.alert {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(13, 202, 240, 0.1), rgba(13, 202, 240, 0.2));
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, rgba(255, 205, 0, 0.1), rgba(255, 165, 0, 0.2));
+}
+
+/* Badges modernisés */
+.badge {
+    border-radius: 8px;
+    padding: 8px 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Contact info stylisé */
+.contact-info a {
+    color: #009e3f;
+    transition: color 0.3s ease;
+}
+
+.contact-info a:hover {
+    color: #006d2c;
+    text-decoration: underline !important;
+}
+</style>
+
+{{-- Scripts JavaScript modernisés --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🇬🇦 Initialisation Page Confirmation Design SGLP v3.0');
+
+    
+    // ============================================================================
+    // GESTION DE L'IMPRESSION
+    // ============================================================================
+    
+    // Bouton d'impression modernisé
+    const printPageBtn = document.getElementById('printPageBtn');
+    if (printPageBtn) {
+        printPageBtn.addEventListener('click', function() {
+            // Préparer la page pour l'impression
+            const originalTitle = document.title;
+            document.title = 'Confirmation Finale - {{ $dossier->numero_dossier ?? "Dossier" }}';
+            
+            // Cacher les éléments non imprimables
+            const nonPrintElements = document.querySelectorAll('.btn, .modal, .no-print');
+            nonPrintElements.forEach(el => el.classList.add('d-print-none'));
+            
+            // Ajouter un message d'impression
+            showInfoAlert('🖨️ Préparation de l\'impression en cours...');
+            
+            // Délai pour permettre le rendu
+            setTimeout(() => {
+                window.print();
+                
+                // Restaurer après impression
+                setTimeout(() => {
+                    document.title = originalTitle;
+                    nonPrintElements.forEach(el => el.classList.remove('d-print-none'));
+                }, 1000);
+            }, 500);
+        });
+    }
+    
+    // ============================================================================
+    // ANIMATIONS ET EFFETS VISUELS
+    // ============================================================================
+    
+    // Animation des statistiques au chargement
+    animateStatCircles();
+    
+    // Animation de la timeline
+    animateTimelineItems();
+    
+    // Animation du QR Code
+    animateQRCode();
+    
+    // ============================================================================
+    // FONCTIONS UTILITAIRES
+    // ============================================================================
+    
+    /**
+     * Animer les cercles de statistiques
+     */
+    function animateStatCircles() {
+        const statCircles = document.querySelectorAll('.stat-circle');
+        statCircles.forEach((circle, index) => {
+            setTimeout(() => {
+                circle.style.transform = 'scale(0)';
+                circle.style.transition = 'transform 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+                
+                setTimeout(() => {
+                    circle.style.transform = 'scale(1)';
+                }, 100);
+            }, index * 200);
+        });
+    }
+    
+    /**
+     * Animer les éléments de la timeline
+     */
+    function animateTimelineItems() {
+        const timelineItems = document.querySelectorAll('.timeline-item');
+        timelineItems.forEach((item, index) => {
+            setTimeout(() => {
+                item.style.opacity = '0';
+                item.style.transform = 'translateX(-50px)';
+                item.style.transition = 'all 0.6s ease';
+                
+                setTimeout(() => {
+                    item.style.opacity = '1';
+                    item.style.transform = 'translateX(0)';
+                }, 100);
+            }, index * 300);
+        });
+    }
+    
+    /**
+     * Animer le QR Code
+     */
+    function animateQRCode() {
+        const qrContainer = document.querySelector('.qr-code-container');
+        if (qrContainer) {
+            setTimeout(() => {
+                qrContainer.style.transform = 'scale(0.8) rotate(-5deg)';
+                qrContainer.style.transition = 'transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+                
+                setTimeout(() => {
+                    qrContainer.style.transform = 'scale(1) rotate(0deg)';
+                }, 100);
+            }, 1000);
+        }
+    }
+    
+    /**
+     * Afficher une alerte de succès modernisée
+     */
+    function showSuccessAlert(message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed';
+        alertDiv.style.cssText = `
+            top: 20px; 
+            right: 20px; 
+            z-index: 9999; 
+            min-width: 350px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg, #009e3f 0%, #006d2c 100%);
+            color: white;
+            border: none;
+        `;
+        alertDiv.innerHTML = `
+            <i class="fas fa-check-circle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        
+        // Animation d'entrée
+        setTimeout(() => alertDiv.classList.add('show'), 100);
+        
+        // Suppression automatique
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 300);
+            }
+        }, 5000);
+    }
+    
+    /**
+     * Afficher une alerte d'erreur modernisée
+     */
+    function showErrorAlert(message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+        alertDiv.style.cssText = `
+            top: 20px; 
+            right: 20px; 
+            z-index: 9999; 
+            min-width: 350px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            border: none;
+        `;
+        alertDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        
+        // Animation d'entrée
+        setTimeout(() => alertDiv.classList.add('show'), 100);
+        
+        // Suppression automatique
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 300);
+            }
+        }, 8000);
+    }
+    
+    /**
+     * Afficher une alerte d'information modernisée
+     */
+    function showInfoAlert(message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-info alert-dismissible fade show position-fixed';
+        alertDiv.style.cssText = `
+            top: 20px; 
+            right: 20px; 
+            z-index: 9999; 
+            min-width: 350px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            color: white;
+            border: none;
+        `;
+        alertDiv.innerHTML = `
+            <i class="fas fa-info-circle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(alertDiv);
+        
+        // Animation d'entrée
+        setTimeout(() => alertDiv.classList.add('show'), 100);
+        
+        // Suppression automatique
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.classList.remove('show');
+                setTimeout(() => alertDiv.remove(), 300);
+            }
+        }, 3000);
+    }
+    
+    // ============================================================================
+    // INITIALISATION FINALE
+    // ============================================================================
+    
+    console.log('✅ Page Confirmation Design SGLP v3.0 - Initialisée avec succès');
+    
+    // Afficher message de bienvenue
+    setTimeout(() => {
+        showSuccessAlert('🎉 Félicitations ! Votre dossier a été soumis avec succès.');
+    }, 1000);
+});
 </script>
 
 @endsection
-
-{{-- Scripts JavaScript externalisés --}}
-@push('scripts')
-{{-- Bibliothèques externes --}}
-<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-
-{{-- Modules principaux --}}
-<script src="{{ asset('js/confirmation-app.js') }}"></script>
-<script src="{{ asset('js/adherents-manager.js') }}"></script>
-<script src="{{ asset('js/chunking-engine.js') }}"></script>
-<script src="{{ asset('js/file-upload-sglp.js') }}"></script>
-<script src="{{ asset('js/validation-engine.js') }}"></script>
-
-{{-- Initialisation --}}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🇬🇦 Initialisation Interface Import Adhérents SGLP v2.0');
-    
-    // Initialiser l'application principale
-    if (window.ConfirmationApp) {
-        window.ConfirmationApp.init();
-    }
-    
-    // Initialiser le gestionnaire d'adhérents
-    if (window.AdherentsManager) {
-        window.AdherentsManager.init();
-    }
-    
-    // Initialiser le moteur de chunking
-    if (window.ChunkingEngine) {
-        window.ChunkingEngine.init();
-    }
-    
-    console.log('✅ Tous les modules initialisés avec succès');
-});
-</script>
-@endpush

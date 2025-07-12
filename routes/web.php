@@ -9,10 +9,7 @@ use App\Http\Controllers\Operator\ProfileController;
 use App\Http\Controllers\Operator\DossierController;
 use App\Http\Controllers\Operator\OrganisationController;
 use App\Http\Controllers\Operator\AdherentController;
-
-// ✅ VÉRIFIER QUE CETTE LIGNE EST PRÉSENTE, SINON L'AJOUTER:
 use App\Http\Controllers\Operator\ChunkingController;
-
 use App\Http\Controllers\Operator\DocumentController as OperatorDocumentController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\AnalyticsController;
@@ -23,8 +20,6 @@ use App\Http\Controllers\Admin\WorkflowController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-
-use App\Http\Controllers\Api\ChunkProcessorController;
 
 /*
 |--------------------------------------------------------------------------
@@ -124,213 +119,111 @@ require __DIR__.'/auth.php';
 
 /*
 |--------------------------------------------------------------------------
-| Routes protégées (authentification requise)
-|--------------------------------------------------------------------------
-*/
-
-Route::middleware(['auth', 'verified'])->group(function () {
-    // Redirection selon le rôle après connexion
-    Route::get('/dashboard', function () {
-        $user = auth()->user();
-        
-        if (in_array($user->role, ['admin', 'agent'])) {
-            return redirect()->route('admin.dashboard');
-        } elseif ($user->role === 'operator') {
-            return redirect()->route('operator.dashboard');
-        }
-        
-        return redirect()->route('home');
-    })->name('dashboard');
-});
-
-/*
-|--------------------------------------------------------------------------
 | Routes Admin - VERSION TEST MINIMALE
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
-    
-    // ========================================
-    // DASHBOARD PRINCIPAL ET APIS - FONCTIONNEL
-    // ========================================
     
     // Dashboard principal
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     
     // APIs Temps Réel pour Dashboard
     Route::prefix('api')->name('api.')->group(function () {
-        
-        // Statistiques principales
         Route::get('/stats', [DashboardController::class, 'getStatsApi'])->name('stats');
-        
-        // Feed d'activité récente
         Route::get('/activity', [DashboardController::class, 'getActivityFeed'])->name('activity');
-        
-        // Données pour graphiques
         Route::get('/chart-data', [DashboardController::class, 'getChartDataApi'])->name('chart-data');
-        
-        // APIs supplémentaires
         Route::get('/agents-status', [DashboardController::class, 'getAgentsStatus'])->name('agents-status');
         Route::get('/priority-dossiers', [DashboardController::class, 'getPriorityDossiersApi'])->name('priority-dossiers');
         Route::get('/performance-metrics', [DashboardController::class, 'getPerformanceMetricsApi'])->name('performance-metrics');
-        
-        // APIs pour interface admin
         Route::get('/search/all', function() {
             return response()->json(['results' => [], 'message' => 'Recherche globale - Étape 6 à venir']);
         })->name('search.all');
-        
-        // Notifications existantes
         Route::get('/notifications/recent', [NotificationController::class, 'recent'])->name('notifications.recent');
-        
     });
     
-    // ========================================
-    // ROUTES TEMPORAIRES (PLACEHOLDERS)
-    // ========================================
-    
-    // Analytics existant
+    // Analytics, Notifications, Profil, Paramètres
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
-    
-    // Notifications existantes
     Route::prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/', [NotificationController::class, 'index'])->name('index');
         Route::post('/mark-read/{id}', [NotificationController::class, 'markAsRead'])->name('mark-read');
         Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
     });
-    
-    // Profil admin existant
     Route::get('/profile', [AdminProfileController::class, 'index'])->name('profile');
-    
-    // Paramètres existants
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     
-    // ========================================
-    // WORKFLOW - ACTIVATION PROGRESSIVE (ÉTAPE 8)
-    // ========================================
-    
+    // Workflow
     Route::prefix('workflow')->name('workflow.')->group(function () {
-        // En Attente - PREMIÈRE ACTIVATION ✅
         Route::get('/en-attente', [WorkflowController::class, 'enAttente'])->name('en-attente');
-        
-        // En Cours - DEUXIÈME ACTIVATION (prochaine étape)
         Route::get('/en-cours', [WorkflowController::class, 'enCours'])->name('en-cours');
-        
-        // Terminés - TROISIÈME ACTIVATION (prochaine étape)
         Route::get('/termines', [WorkflowController::class, 'termines'])->name('termines');
-        
-        // Actions sur les dossiers
         Route::post('/assign/{dossier}', [WorkflowController::class, 'assign'])->name('assign');
         Route::post('/validate/{validation}', [WorkflowController::class, 'validateDossier'])->name('validate');
         Route::post('/reject/{validation}', [WorkflowController::class, 'reject'])->name('reject');
     });
     
-    // Gestion entités (temporaires)
+    // Routes temporaires (placeholders)
     Route::get('/organisations', function() {
         return response()->json(['message' => 'Gestion organisations admin - Contrôleur à créer']);
     })->name('organisations.index');
-    
     Route::get('/dossiers', function() {
         return response()->json(['message' => 'Gestion dossiers admin - Contrôleur à créer']);
     })->name('dossiers.index');
-    
     Route::get('/users', function() {
         return response()->json(['message' => 'Gestion utilisateurs admin - Contrôleur à créer']);
     })->name('users.index');
-    
-    // Rapports (temporaires)
     Route::get('/reports', function() {
         return response()->json(['message' => 'Rapports admin - Contrôleur à créer']);
     })->name('reports.index');
-    
-    // Configuration (temporaires)
     Route::get('/config', function() {
         return response()->json(['message' => 'Configuration admin - Contrôleur à créer']);
     })->name('config.index');
-    
-    // Système (temporaires)
     Route::get('/system/settings', function() {
         return response()->json(['message' => 'Paramètres système - Contrôleur à créer']);
     })->name('system.settings');
-    
     Route::get('/system/logs', function() {
         return response()->json(['message' => 'Logs système - Contrôleur à créer']);
     })->name('system.logs');
-    
     Route::get('/system/backup', function() {
         return response()->json(['message' => 'Sauvegarde système - Contrôleur à créer']);
     })->name('system.backup');
-    
 });
 
 /*
 |--------------------------------------------------------------------------
-| Routes Operator - CORRECTION APPLIQUÉE POUR MIDDLEWARE dossier.lock
+| Routes Operator - CORRIGÉES POUR CHUNKING
 |--------------------------------------------------------------------------
 */
 Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verified', 'operator'])->group(function () {
     
+    // ========================================
+    // ROUTES CHUNKING - INSERTION DURING CHUNKING (POSITION CORRIGÉE)
+    // ========================================
+    Route::prefix('chunking')->name('chunking.')->group(function () {
+        
+        Route::post('/process-chunk', [ChunkingController::class, 'processChunk'])
+            ->name('process-chunk')
+            ->middleware('throttle:30,1');
+        
+        Route::get('/csrf-refresh', [ChunkingController::class, 'refreshCSRF'])
+            ->name('csrf-refresh');
+        
+        Route::get('/health', [ChunkingController::class, 'healthCheck'])
+            ->name('health');
+        
+        Route::get('/auth-test', [ChunkingController::class, 'authTest'])
+            ->name('auth-test');
+    });
 
-        // ✅ AJOUTER CETTE SECTION COMPLÈTE AVANT les autres routes :
-    
     // Templates et modèles
     Route::prefix('templates')->name('templates.')->group(function () {
         Route::get('/adherents-excel', [AdherentController::class, 'downloadTemplate'])->name('adherents-excel');
         Route::get('/adherents-csv', [AdherentController::class, 'downloadTemplate'])->name('adherents-csv');
     });
 
-
-    // ✅ ROUTES MANQUANTES - À AJOUTER APRÈS LA SECTION templates EXISTANTE
-    
-    // Route download-accuse manquante dans dossiers
-    Route::prefix('dossiers')->name('dossiers.')->group(function () {
-        
-        // ✅ ROUTE DOWNLOAD-ACCUSE (résout l'erreur operator.dossiers.download-accuse)
-        Route::get('/{dossier}/download-accuse', [DossierController::class, 'downloadAccuse'])
-            ->name('download-accuse')
-            ->middleware(['throttle:30,1']); // Protection contre abus
-            
-        // ✅ ROUTE STORE-ADHERENTS (Phase 2 workflow) - CORRIGÉE
-        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
-            ->name('store-adherents')
-            ->middleware(['throttle:10,1']);
-    });
-
-    // Routes chunking - Import adhérents Phase 2  
-    Route::prefix('chunking')->name('chunking.')->group(function () {
-        
-        // Route principale de traitement des chunks
-        Route::post('/process-chunk', [ChunkingController::class, 'processChunk'])
-            ->name('process-chunk')
-            ->middleware('throttle:30,1');
-            
-        // Route de récupération des données de session
-        Route::post('/get-session-data', [ChunkingController::class, 'getSessionData'])
-            ->name('get-session-data');
-            
-        // Route de nettoyage de session
-        Route::post('/cleanup-session', [ChunkingController::class, 'cleanupSession'])
-            ->name('cleanup-session');
-            
-        // Route de health check
-        Route::get('/health', [ChunkingController::class, 'healthCheck'])
-            ->name('health');
-            
-        // Route de refresh CSRF
-        Route::get('/csrf-refresh', [ChunkingController::class, 'refreshCSRF'])
-            ->name('csrf-refresh');
-            
-        // Route de statistiques performance (optionnelle)
-        Route::get('/performance', [ChunkingController::class, 'getPerformanceStats'])
-            ->name('performance');
-    });
-
-
     // Dashboard principal
     Route::get('/', function () {
         return view('operator.dashboard');
     })->name('dashboard');
-
-    // ✅ AJOUTER CETTE LIGNE
     Route::get('/dashboard', function () {
         return view('operator.dashboard');
     })->name('dashboard.full');
@@ -347,120 +240,112 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::delete('/photo', [ProfileController::class, 'deleteProfilePhoto'])->name('photo.delete');
     });
     
-    // ✅ ORGANISATIONS AVEC CORRECTIONS FINALES
+    // Organisations
     Route::prefix('organisations')->name('organisations.')->middleware(['check.organisation.limit'])->group(function () {
-    Route::get('/', [OrganisationController::class, 'index'])->name('index');
-    Route::get('/create', [OrganisationController::class, 'create'])->name('create');
-    Route::post('/', [OrganisationController::class, 'store'])->name('store');
-    Route::get('/{organisation}', [OrganisationController::class, 'show'])->name('show');
-    Route::get('/{organisation}/edit', [OrganisationController::class, 'edit'])->name('edit');
-    Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
-    Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
-    
-    // ✅ WORKFLOW 2 PHASES - PHASE 1 SEULEMENT
-    Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
-    
-    // ✅ TÉLÉCHARGEMENT ACCUSÉ DE RÉCEPTION
-    Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
-    
-    // ✅ VÉRIFICATIONS AJAX EN TEMPS RÉEL
-    Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
-    Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
-    Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
+        Route::get('/', [OrganisationController::class, 'index'])->name('index');
+        Route::get('/create', [OrganisationController::class, 'create'])->name('create');
+        Route::post('/', [OrganisationController::class, 'store'])->name('store');
+        Route::get('/{organisation}', [OrganisationController::class, 'show'])->name('show');
+        Route::get('/{organisation}/edit', [OrganisationController::class, 'edit'])->name('edit');
+        Route::put('/{organisation}', [OrganisationController::class, 'update'])->name('update');
+        Route::delete('/{organisation}', [OrganisationController::class, 'destroy'])->name('destroy');
+        
+        // Workflow 2 phases
+        Route::post('/store-phase1', [OrganisationController::class, 'storePhase1'])->name('store-phase1');
+        Route::get('/download-accuse/{path}', [OrganisationController::class, 'downloadAccuse'])->name('download-accuse');
+        
+        // Vérifications AJAX
+        Route::post('/check-existing-members', [OrganisationController::class, 'checkExistingMembers'])->name('check-existing-members');
+        Route::post('/validate-organisation', [OrganisationController::class, 'validateOrganisation'])->name('validate');
+        Route::post('/submit/{organisation}', [OrganisationController::class, 'submit'])->name('submit');
 
-    // ✅ NOUVELLES ROUTES SESSION ADHÉRENTS ÉTAPE 7
-    Route::post('/save-session-adherents', [OrganisationController::class, 'saveSessionAdherents'])
-        ->name('save-session-adherents');
-    
-    Route::post('/check-session-adherents', [OrganisationController::class, 'checkSessionAdherents'])
-        ->name('check-session-adherents');
-    
-    Route::post('/clear-session-adherents', [OrganisationController::class, 'clearSessionAdherents'])
-        ->name('clear-session-adherents');
-    
-    // ✅ NOUVELLES ROUTES - LOTS SUPPLÉMENTAIRES ET SOUMISSION FINALE
-    Route::post('/{dossier}/upload-additional-batch', [OrganisationController::class, 'uploadAdditionalBatch'])
-        ->name('upload-additional-batch')
-        ->middleware(['throttle:10,1']); // Limiter à 10 uploads par minute
-    
-    Route::get('/{dossier}/adherents-statistics', [OrganisationController::class, 'getAdherentsStatisticsRealTime'])
-        ->name('adherents-statistics')
-        ->middleware(['throttle:60,1']); // Limiter à 60 requêtes par minute
-    
-    Route::post('/{dossier}/submit-to-administration', [OrganisationController::class, 'submitToAdministration'])
-        ->name('submit-to-administration')
-        ->middleware(['throttle:5,1']); // Limiter à 5 soumissions par minute (sécurité)
-    
-    Route::post('/organisations/store-phase1', [OrganisationController::class, 'storePhase1'])->name('organisations.store-phase1');
-
-});
+        // Session adhérents
+        Route::post('/save-session-adherents', [OrganisationController::class, 'saveSessionAdherents'])->name('save-session-adherents');
+        Route::post('/check-session-adherents', [OrganisationController::class, 'checkSessionAdherents'])->name('check-session-adherents');
+        Route::post('/clear-session-adherents', [OrganisationController::class, 'clearSessionAdherents'])->name('clear-session-adherents');
+        
+        // Lots supplémentaires
+        Route::post('/{dossier}/upload-additional-batch', [OrganisationController::class, 'uploadAdditionalBatch'])
+            ->name('upload-additional-batch')
+            ->middleware(['throttle:10,1']);
+        Route::get('/{dossier}/adherents-statistics', [OrganisationController::class, 'getAdherentsStatisticsRealTime'])
+            ->name('adherents-statistics')
+            ->middleware(['throttle:60,1']);
+        Route::post('/{dossier}/submit-to-administration', [OrganisationController::class, 'submitToAdministration'])
+            ->name('submit-to-administration')
+            ->middleware(['throttle:5,1']);
+    });
  
     // ========================================
-    // 🔧 CORRECTION MAJEURE : GESTION DES DOSSIERS
+    // GESTION DES DOSSIERS - CORRIGÉE
     // ========================================
     Route::prefix('dossiers')->name('dossiers.')->group(function () {
         
-        // ✅ SOLUTION 1 : ROUTE CONFIRMATION SANS MIDDLEWARE dossier.lock
-        // Cette route est accessible en LECTURE SEULE, même si le dossier est verrouillé
-        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])
-            ->name('confirmation')
-            ->middleware(['throttle:60,1']); // Protection contre les abus seulement
-        
-        // ✅ NOUVELLE ROUTE - CONFIRMATION DÉFINITIVE APRÈS SOUMISSION
-        Route::get('/final-confirmation/{dossier}', [OrganisationController::class, 'finalConfirmation'])
-        ->name('final-confirmation')
-        ->middleware(['throttle:60,1']); // Protection contre les abus
-
-        // ✅ NOUVELLES ROUTES WORKFLOW 2 PHASES - PHASE 2
+        // ✅ ROUTES PHASE 2 - IMPORT ADHÉRENTS (CORRIGÉES)
         Route::get('/{dossier}/adherents-import', [DossierController::class, 'adherentsImportPage'])
-        ->name('adherents-import');
+            ->name('adherents-import')
+            ->where('dossier', '[0-9]+');
         
         Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
-        ->name('store-adherents');
+            ->name('store-adherents')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:10,1']);
         
-        Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
-        ->name('process-session-adherents');
+        // ✅ ROUTES SANS MIDDLEWARE dossier.lock (accès lecture seule)
+        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])
+            ->name('confirmation')
+            ->middleware(['throttle:60,1']);
         
-        Route::get('/{dossier}/phase2-status', function($dossierId) {
-        $sessionKey = 'phase2_adherents_' . $dossierId;
-        $expirationKey = 'phase2_expires_' . $dossierId;
-        
-        $adherentsData = session($sessionKey, []);
-        $expirationTime = session($expirationKey);
-        
-        return response()->json([
-            'success' => true,
-            'has_session_data' => !empty($adherentsData),
-            'adherents_count' => count($adherentsData),
-            'expires_at' => $expirationTime,
-            'is_expired' => $expirationTime ? now()->isAfter($expirationTime) : false,
-            'dossier_id' => $dossierId
-        ]);
-    })->name('phase2-status');
+        Route::get('/final-confirmation/{dossier}', [OrganisationController::class, 'finalConfirmation'])
+            ->name('final-confirmation')
+            ->middleware(['throttle:60,1']);
 
+
+        Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
+            ->name('process-session-adherents')
+            ->where('dossier', '[0-9]+');
+        
+        // ✅ ROUTE DOWNLOAD-ACCUSE
+        Route::get('/{dossier}/download-accuse', [DossierController::class, 'downloadAccuse'])
+            ->name('download-accuse')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:30,1']);
+        
+        // Status Phase 2
+        Route::get('/{dossier}/phase2-status', function($dossierId) {
+            $sessionKey = 'phase2_adherents_' . $dossierId;
+            $expirationKey = 'phase2_expires_' . $dossierId;
+            
+            $adherentsData = session($sessionKey, []);
+            $expirationTime = session($expirationKey);
+            
+            return response()->json([
+                'success' => true,
+                'has_session_data' => !empty($adherentsData),
+                'adherents_count' => count($adherentsData),
+                'expires_at' => $expirationTime,
+                'is_expired' => $expirationTime ? now()->isAfter($expirationTime) : false,
+                'dossier_id' => $dossierId
+            ]);
+        })->name('phase2-status')->where('dossier', '[0-9]+');
 
         // ========================================
-        // ROUTES AVEC MIDDLEWARE dossier.lock (Routes nécessitant modification)
+        // ROUTES AVEC MIDDLEWARE dossier.lock
         // ========================================
         Route::middleware(['dossier.lock'])->group(function () {
-            
-            // ✅ ROUTES SPÉCIFIQUES AVANT LES ROUTES DYNAMIQUES
             Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
             Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
             
-            // Routes existantes
             Route::get('/', [DossierController::class, 'index'])->name('index');
             Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
             Route::post('/', [DossierController::class, 'store'])->name('store');
             
-            // ✅ ROUTES DYNAMIQUES À LA FIN
             Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
             Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
             Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
             Route::post('/{dossier}/submit', [DossierController::class, 'submit'])->name('submit');
             Route::delete('/{dossier}', [DossierController::class, 'destroy'])->name('destroy');
             
-            // Gestion des verrous (AJAX)
             Route::post('/{dossier}/extend-lock', [DossierController::class, 'extendLock'])->name('extend-lock');
             Route::post('/{dossier}/release-lock', [DossierController::class, 'releaseLock'])->name('release-lock');
         });
@@ -477,7 +362,6 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::put('/{adherent}', [AdherentController::class, 'update'])->name('update');
         Route::delete('/{adherent}', [AdherentController::class, 'destroy'])->name('destroy');
         
-        // Import/Export
         Route::get('/import/template', [AdherentController::class, 'downloadTemplate'])->name('import.template');
         Route::post('/import', [AdherentController::class, 'import'])->name('import');
         Route::get('/export/{organisation}', [AdherentController::class, 'export'])->name('export');
@@ -495,47 +379,25 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
     
     // Rapports
     Route::prefix('reports')->name('reports.')->group(function () {
-        Route::get('/', function () {
-            return view('operator.reports.index');
-        })->name('index');
-        Route::get('/organisation', function () {
-            return view('operator.reports.organisation');
-        })->name('organisation');
-        Route::get('/dossiers', function () {
-            return view('operator.reports.dossiers');
-        })->name('dossiers');
-        Route::get('/adherents', function () {
-            return view('operator.reports.adherents');
-        })->name('adherents');
+        Route::get('/', function () { return view('operator.reports.index'); })->name('index');
+        Route::get('/organisation', function () { return view('operator.reports.organisation'); })->name('organisation');
+        Route::get('/dossiers', function () { return view('operator.reports.dossiers'); })->name('dossiers');
+        Route::get('/adherents', function () { return view('operator.reports.adherents'); })->name('adherents');
     });
     
     // Subventions
     Route::prefix('grants')->name('grants.')->group(function () {
-        Route::get('/', function () {
-            return view('operator.grants.index');
-        })->name('index');
-        Route::get('/demandes', function () {
-            return view('operator.grants.demandes');
-        })->name('demandes');
-        Route::get('/historique', function () {
-            return view('operator.grants.historique');
-        })->name('historique');
+        Route::get('/', function () { return view('operator.grants.index'); })->name('index');
+        Route::get('/demandes', function () { return view('operator.grants.demandes'); })->name('demandes');
+        Route::get('/historique', function () { return view('operator.grants.historique'); })->name('historique');
     });
     
     // Aide
     Route::prefix('help')->name('help.')->group(function () {
-        Route::get('/', function () {
-            return view('operator.help.index');
-        })->name('index');
-        Route::get('/guide', function () {
-            return view('operator.help.guide');
-        })->name('guide');
-        Route::get('/faq', function () {
-            return view('operator.help.faq');
-        })->name('faq');
-        Route::get('/contact', function () {
-            return view('operator.help.contact');
-        })->name('contact');
+        Route::get('/', function () { return view('operator.help.index'); })->name('index');
+        Route::get('/guide', function () { return view('operator.help.guide'); })->name('guide');
+        Route::get('/faq', function () { return view('operator.help.faq'); })->name('faq');
+        Route::get('/contact', function () { return view('operator.help.contact'); })->name('contact');
     });
     
     // Messagerie
@@ -572,7 +434,6 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
 |--------------------------------------------------------------------------
 */
 Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
-    // Vérification des limites d'organisation
     Route::get('/check-organisation-limit/{type}', function ($type) {
         $user = auth()->user();
         $count = $user->organisations()->where('type', $type)->where('statut', 'actif')->count();
@@ -585,10 +446,9 @@ Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
         ]);
     })->name('check-organisation-limit');
     
-    // Informations sur les verrous
     Route::get('/verrous/status', function () {
         return response()->json([
-            'locks_actifs' => 0, // À adapter selon votre modèle
+            'locks_actifs' => 0,
             'dernier_nettoyage' => cache('locks_last_cleanup', 'Jamais')
         ]);
     })->name('verrous.status');
@@ -596,28 +456,18 @@ Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Routes API pour Validation en Temps Réel - NOUVELLES ROUTES COMPLÈTES
+| Routes API pour Validation en Temps Réel
 |--------------------------------------------------------------------------
 */
-
 Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->group(function () {
     
-    // ========================================
-    // VÉRIFICATIONS EN TEMPS RÉEL (EXISTANTES)
-    // ========================================
-    
-    /**
-     * Vérification NIP gabonais
-     * POST /api/v1/verify-nip
-     */
+    // Vérification NIP gabonais
     Route::post('/verify-nip', function (Request $request) {
         $request->validate([
             'nip' => 'required|string|size:13|regex:/^[0-9]{13}$/'
         ]);
         
         $nip = $request->input('nip');
-        
-        // Vérifier si le NIP existe déjà
         $exists = \App\Models\User::where('nip', $nip)->exists() ||
                  \App\Models\Adherent::where('nip', $nip)->exists() ||
                  \App\Models\Fondateur::where('nip', $nip)->exists();
@@ -629,10 +479,7 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
         ]);
     })->name('verify-nip');
     
-    /**
-     * Vérification nom organisation
-     * POST /api/v1/verify-organization-name
-     */
+    // Vérification nom organisation
     Route::post('/verify-organization-name', function (Request $request) {
         $request->validate([
             'name' => 'required|string|min:3|max:255',
@@ -644,10 +491,7 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
         $type = $request->input('type');
         $suggestAlternatives = $request->input('suggest_alternatives', false);
         
-        // Vérifier si le nom existe déjà
-        $exists = \App\Models\Organisation::where('nom', $name)
-                                        ->where('type', $type)
-                                        ->exists();
+        $exists = \App\Models\Organisation::where('nom', $name)->where('type', $type)->exists();
         
         $response = [
             'success' => true,
@@ -655,119 +499,31 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
             'message' => $exists ? 'Ce nom est déjà utilisé pour ce type d\'organisation' : 'Nom disponible'
         ];
         
-        // Générer des suggestions si demandé et si le nom existe
         if ($suggestAlternatives && $exists) {
             $suggestions = [];
-            
-            // Suggestions simples avec numéros
             for ($i = 1; $i <= 3; $i++) {
                 $suggestion = $name . ' ' . $i;
                 if (!\App\Models\Organisation::where('nom', $suggestion)->where('type', $type)->exists()) {
                     $suggestions[] = $suggestion;
                 }
             }
-            
-            // Suggestions avec variantes
-            $variants = ['Nouvelle', 'Grande', 'Moderne'];
-            foreach ($variants as $variant) {
-                $suggestion = $variant . ' ' . $name;
-                if (!\App\Models\Organisation::where('nom', $suggestion)->where('type', $type)->exists()) {
-                    $suggestions[] = $suggestion;
-                    if (count($suggestions) >= 5) break;
-                }
-            }
-            
             $response['suggestions'] = array_slice($suggestions, 0, 5);
         }
         
         return response()->json($response);
     })->name('verify-organization-name');
     
-    /**
-     * Vérification adhérents avec conflits parti
-     * POST /api/v1/verify-members
-     */
-    Route::post('/verify-members', function (Request $request) {
-        $request->validate([
-            'members' => 'required|array',
-            'members.*.nip' => 'required|string|size:13',
-            'members.*.nom' => 'required|string',
-            'members.*.prenom' => 'required|string',
-            'organization_type' => 'required|string',
-            'check_party_conflicts' => 'boolean'
-        ]);
-        
-        $members = $request->input('members');
-        $organizationType = $request->input('organization_type');
-        $checkPartyConflicts = $request->input('check_party_conflicts', false);
-        
-        $conflicts = [];
-        $duplicates = [];
-        
-        // Vérifier les doublons dans la liste soumise
-        $nipCounts = array_count_values(array_column($members, 'nip'));
-        foreach ($nipCounts as $nip => $count) {
-            if ($count > 1) {
-                $duplicates[] = $nip;
-            }
-        }
-        
-        // Vérifier les conflits avec les partis politiques existants
-        if ($checkPartyConflicts && $organizationType === 'parti_politique') {
-            foreach ($members as $member) {
-                $existingMembership = \App\Models\Adherent::where('nip', $member['nip'])
-                    ->whereHas('organisation', function ($query) {
-                        $query->where('type', 'parti_politique')
-                              ->where('statut', '!=', 'radie');
-                    })
-                    ->with('organisation')
-                    ->first();
-                
-                if ($existingMembership) {
-                    $conflicts[] = [
-                        'nip' => $member['nip'],
-                        'nom_complet' => $member['nom'] . ' ' . $member['prenom'],
-                        'parti_actuel' => $existingMembership->organisation->nom,
-                        'date_adhesion' => $existingMembership->date_adhesion->format('d/m/Y')
-                    ];
-                }
-            }
-        }
-        
-        return response()->json([
-            'success' => true,
-            'total_members' => count($members),
-            'duplicates' => $duplicates,
-            'conflicts' => $conflicts,
-            'message' => count($conflicts) > 0 
-                ? count($conflicts) . ' conflit(s) détecté(s)'
-                : 'Aucun conflit détecté'
-        ]);
-    })->name('verify-members');
-    
-    // ========================================
-    // GESTION DOCUMENTS (EXISTANTES)
-    // ========================================
-    
-    /**
-     * Upload de document
-     * POST /api/v1/upload-document
-     */
+    // Upload de document
     Route::post('/upload-document', function (Request $request) {
         $request->validate([
-            'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120', // 5MB max
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'document_type' => 'required|string',
             'organization_id' => 'nullable|exists:organisations,id'
         ]);
         
         $file = $request->file('file');
         $documentType = $request->input('document_type');
-        $organizationId = $request->input('organization_id');
-        
-        // Générer un nom unique
         $fileName = time() . '_' . $documentType . '.' . $file->getClientOriginalExtension();
-        
-        // Stocker le fichier
         $path = $file->storeAs('documents/temp', $fileName, 'public');
         
         return response()->json([
@@ -780,197 +536,12 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
         ]);
     })->name('upload-document');
     
-    /**
-     * Preview de document
-     * POST /api/v1/preview-document
-     */
-    Route::post('/preview-document', function (Request $request) {
-        $request->validate([
-            'file_path' => 'required|string',
-            'type' => 'required|string'
-        ]);
-        
-        $filePath = $request->input('file_path');
-        $type = $request->input('type');
-        
-        if (!Storage::disk('public')->exists($filePath)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Fichier non trouvé'
-            ], 404);
-        }
-        
-        $fullPath = Storage::disk('public')->path($filePath);
-        $mimeType = mime_content_type($fullPath);
-        
-        $previewUrl = Storage::disk('public')->url($filePath);
-        
-        return response()->json([
-            'success' => true,
-            'preview_url' => $previewUrl,
-            'file_type' => strpos($mimeType, 'pdf') !== false ? 'pdf' : 'image',
-            'mime_type' => $mimeType
-        ]);
-    })->name('preview-document');
+    // Validation NIP
+    Route::post('/validate-nip', [OrganisationController::class, 'validateNipApi'])->name('validate-nip');
     
-    // ========================================
-    // SYSTÈME DE BROUILLONS (EXISTANTES)
-    // ========================================
-    
-    /**
-     * Sauvegarde brouillon
-     * POST /api/v1/save-draft
-     */
-    Route::post('/save-draft', function (Request $request) {
-        $request->validate([
-            'form_data' => 'required|array',
-            'step' => 'required|integer|min:1|max:9',
-            'organization_type' => 'nullable|string'
-        ]);
-        
-        $userId = auth()->id();
-        $formData = $request->input('form_data');
-        $step = $request->input('step');
-        $organizationType = $request->input('organization_type');
-        
-        // Chercher un brouillon existant ou en créer un nouveau
-        $draft = \App\Models\OrganizationDraft::updateOrCreate([
-            'user_id' => $userId,
-            'organization_type' => $organizationType
-        ], [
-            'form_data' => $formData,
-            'current_step' => $step,
-            'last_saved_at' => now()
-        ]);
-        
-        return response()->json([
-            'success' => true,
-            'draft_id' => $draft->id,
-            'message' => 'Brouillon sauvegardé avec succès'
-        ]);
-    })->name('save-draft');
-    
-    /**
-     * Chargement brouillon
-     * GET /api/v1/load-draft/{id}
-     */
-    Route::get('/load-draft/{id}', function ($id) {
-        $userId = auth()->id();
-        
-        $draft = \App\Models\OrganizationDraft::where('id', $id)
-                                             ->where('user_id', $userId)
-                                             ->first();
-        
-        if (!$draft) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Brouillon non trouvé'
-            ], 404);
-        }
-        
-        return response()->json([
-            'success' => true,
-            'form_data' => $draft->form_data,
-            'current_step' => $draft->current_step,
-            'organization_type' => $draft->organization_type,
-            'last_saved_at' => $draft->last_saved_at->toISOString()
-        ]);
-    })->name('load-draft');
-    
-    // ========================================
-    // ANALYTICS ET SUIVI (EXISTANTES)
-    // ========================================
-    
-    /**
-     * Analytics de formulaire
-     * POST /api/v1/form-analytics
-     */
-    Route::post('/form-analytics', function (Request $request) {
-        $request->validate([
-            'session_duration' => 'required|integer',
-            'step_times' => 'required|array',
-            'interactions' => 'required|array',
-            'user_agent' => 'required|string',
-            'screen_resolution' => 'required|string',
-            'organization_type' => 'nullable|string',
-            'completion_rate' => 'required|numeric|min:0|max:100'
-        ]);
-        
-        // Enregistrer les analytics (vous pouvez créer un modèle FormAnalytics)
-        $analytics = [
-            'user_id' => auth()->id(),
-            'session_duration' => $request->input('session_duration'),
-            'step_times' => $request->input('step_times'),
-            'interactions' => $request->input('interactions'),
-            'user_agent' => $request->input('user_agent'),
-            'screen_resolution' => $request->input('screen_resolution'),
-            'organization_type' => $request->input('organization_type'),
-            'completion_rate' => $request->input('completion_rate'),
-            'created_at' => now()
-        ];
-        
-        // Log pour l'instant (vous pouvez sauvegarder en DB plus tard)
-        \Log::info('Form Analytics', $analytics);
-        
-        return response()->json([
-            'success' => true,
-            'message' => 'Analytics enregistrées'
-        ]);
-    })->name('form-analytics');
-    
-    /**
-     * Validation complète avant soumission
-     * POST /api/v1/validate-complete-form
-     */
-    Route::post('/validate-complete-form', function (Request $request) {
-        $request->validate([
-            'form_data' => 'required|array'
-        ]);
-        
-        $formData = $request->input('form_data');
-        $errors = [];
-        
-        // Validation basique - vous pouvez étendre selon vos besoins
-        if (!isset($formData['metadata']['selectedOrgType']) || empty($formData['metadata']['selectedOrgType'])) {
-            $errors[] = 'Type d\'organisation non sélectionné';
-        }
-        
-        if (!isset($formData['steps'][3]['demandeur_nip']) || empty($formData['steps'][3]['demandeur_nip'])) {
-            $errors[] = 'NIP du demandeur manquant';
-        }
-        
-        if (!isset($formData['steps'][4]['org_nom']) || empty($formData['steps'][4]['org_nom'])) {
-            $errors[] = 'Nom de l\'organisation manquant';
-        }
-        
-        return response()->json([
-            'valid' => count($errors) === 0,
-            'errors' => $errors,
-            'message' => count($errors) === 0 
-                ? 'Formulaire valide' 
-                : 'Erreurs de validation détectées'
-        ]);
-    })->name('validate-complete-form');
-
-Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->group(function () {
-    
-    // ... routes existantes ...
-    
-    /**
-     * 🔧 NOUVELLES ROUTES VALIDATION NIP
-     * Format: XX-QQQQ-YYYYMMDD
-     */
-    
-    // Validation NIP en temps réel
-    Route::post('/validate-nip', [
-        \App\Http\Controllers\Operator\OrganisationController::class, 
-        'validateNipApi'
-    ])->name('validate-nip');
-    
-    // Générer exemples de NIP valides
+    // Génération exemples NIP
     Route::get('/generate-nip-example', function () {
         try {
-            // Générer des exemples de NIP valides
             $examples = [];
             $prefixes = ['A1', 'B2', 'C3', '1A', '2B', '3C'];
             $sequences = ['0001', '1234', '5678', '9999'];
@@ -978,12 +549,9 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
             foreach (range(1, 5) as $i) {
                 $prefix = $prefixes[array_rand($prefixes)];
                 $sequence = $sequences[array_rand($sequences)];
-
-                // Date aléatoire entre 1960 et 2005
                 $year = rand(1960, 2005);
                 $month = rand(1, 12);
-                $day = rand(1, 28); // Éviter les problèmes de jours invalides
-
+                $day = rand(1, 28);
                 $dateStr = sprintf('%04d%02d%02d', $year, $month, $day);
                 $example = $prefix . '-' . $sequence . '-' . $dateStr;
 
@@ -1006,7 +574,6 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
                     'YYYYMMDD' => 'Date de naissance (ANNÉE MOIS JOUR)'
                 ]
             ]);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1015,476 +582,22 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
             ], 500);
         }
     })->name('generate-nip-example');
-    
-    // Validation de lot de NIP
-    Route::post('/validate-nip-batch', [
-        \App\Http\Controllers\Operator\OrganisationController::class, 
-        'validateNipBatch'
-    ])->name('validate-nip-batch');
-    
-    });
-
 });
 
 /*
 |--------------------------------------------------------------------------
-| Routes API pour Gestion par Étapes - NOUVELLES ROUTES COMPLÈTES
+| Routes pour gestion CSRF et diagnostics
 |--------------------------------------------------------------------------
 */
-
-Route::prefix('api/v1/organisation')->name('api.organisation.')->middleware(['auth', 'throttle:120,1'])->group(function () {
-
-    // ========================================
-    // GESTION DES ÉTAPES - NOUVELLES ROUTES
-    // ========================================
-
-    /**
-     * Sauvegarder une étape spécifique
-     * POST /api/v1/organisation/step/{step}/save
-     */
-    Route::post('/step/{step}/save', function (Request $request, $step) {
-        $stepService = app(\App\Services\OrganisationStepService::class);
-
-        $request->validate([
-            'data' => 'required|array',
-            'session_id' => 'nullable|string'
-        ]);
-
-        $result = $stepService->saveStep(
-            (int) $step,
-            $request->input('data'),
-            auth()->id(),
-            $request->input('session_id')
-        );
-
-        return response()->json($result);
-    })->name('step.save');
-
-    /**
-     * Valider une étape sans sauvegarder
-     * POST /api/v1/organisation/step/{step}/validate
-     */
-    Route::post('/step/{step}/validate', function (Request $request, $step) {
-        $stepService = app(\App\Services\OrganisationStepService::class);
-
-        $request->validate([
-            'data' => 'required|array'
-        ]);
-
-        $result = $stepService->validateStep(
-            (int) $step,
-            $request->input('data')
-        );
-
-        return response()->json([
-            'success' => $result['valid'],
-            'valid' => $result['valid'],
-            'errors' => $result['errors'],
-            'step' => (int) $step
-        ]);
-    })->name('step.validate');
-
-    /**
-     * Récupérer les données d'une étape
-     * GET /api/v1/organisation/draft/{draftId}/step/{step}
-     */
-    Route::get('/draft/{draftId}/step/{step}', function ($draftId, $step) {
-        $stepService = app(\App\Services\OrganisationStepService::class);
-
-        $result = $stepService->getStepData((int) $step, (int) $draftId);
-
-        return response()->json($result);
-    })->name('draft.step.get');
-
-    /**
-     * Vérifier si on peut accéder à une étape
-     * GET /api/v1/organisation/draft/{draftId}/step/{step}/can-access
-     */
-    Route::get('/draft/{draftId}/step/{step}/can-access', function ($draftId, $step) {
-        $stepService = app(\App\Services\OrganisationStepService::class);
-
-        $canAccess = $stepService->canProceedToStep((int) $step, (int) $draftId);
-
-        return response()->json([
-            'success' => true,
-            'can_access' => $canAccess,
-            'step' => (int) $step,
-            'draft_id' => (int) $draftId
-        ]);
-    })->name('draft.step.can-access');
-
-    /**
-     * Marquer une étape comme complétée
-     * POST /api/v1/organisation/step/{step}/complete
-     */
-    Route::post('/step/{step}/complete', function (Request $request, $step) {
-        $stepService = app(\App\Services\OrganisationStepService::class);
-
-        $request->validate([
-            'draft_id' => 'required|integer|exists:organization_drafts,id',
-            'data' => 'required|array'
-        ]);
-
-        // Sauvegarder et marquer comme complétée
-        $result = $stepService->saveStep(
-            (int) $step,
-            $request->input('data'),
-            auth()->id()
-        );
-
-        if ($result['success']) {
-            // Générer accusé si possible
-            $draft = \App\Models\OrganizationDraft::find($request->input('draft_id'));
-
-            if ($draft) {
-                $stepService->generateStepAccuse((int) $step, $draft);
-            }
-        }
-
-        return response()->json($result);
-    })->name('step.complete');
-
-    // ========================================
-    // GESTION DES BROUILLONS
-    // ========================================
-
-    /**
-     * Créer un nouveau brouillon
-     * POST /api/v1/organisation/draft/create
-     */
-    Route::post('/draft/create', function (Request $request) {
-        $request->validate([
-            'organization_type' => 'nullable|in:association,ong,parti_politique,confession_religieuse',
-            'session_id' => 'nullable|string'
-        ]);
-
-        $draft = \App\Models\OrganizationDraft::create([
-            'user_id' => auth()->id(),
-            'organization_type' => $request->input('organization_type'),
-            'session_id' => $request->input('session_id'),
-            'form_data' => [],
-            'current_step' => 1,
-            'completion_percentage' => 0,
-            'last_saved_at' => now(),
-            'expires_at' => now()->addDays(7)
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Brouillon créé avec succès',
-            'draft' => $draft,
-            'draft_id' => $draft->id
-        ]);
-    })->name('draft.create');
-
-    /**
-     * Récupérer un brouillon
-     * GET /api/v1/organisation/draft/{draftId}
-     */
-    Route::get('/draft/{draftId}', function ($draftId) {
-        $draft = \App\Models\OrganizationDraft::where('id', $draftId)
-            ->where('user_id', auth()->id())
-            ->first();
-
-        if (!$draft) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Brouillon non trouvé'
-            ], 404);
-        }
-
-        return response()->json([
-            'success' => true,
-            'draft' => $draft,
-            'statistics' => $draft->getStatistics(),
-            'steps_summary' => $draft->getStepsSummary(),
-            'next_step' => $draft->getNextStep()
-        ]);
-    })->name('draft.get');
-
-    /**
-     * Lister les brouillons de l'utilisateur
-     * GET /api/v1/organisation/drafts
-     */
-    Route::get('/drafts', function (Request $request) {
-        $query = \App\Models\OrganizationDraft::where('user_id', auth()->id());
-
-        // Filtres
-        if ($request->has('type')) {
-            $query->byType($request->input('type'));
-        }
-
-        if ($request->boolean('active_only')) {
-            $query->active();
-        }
-
-        if ($request->boolean('recent_only')) {
-            $query->recent();
-        }
-
-        $drafts = $query->orderBy('last_saved_at', 'desc')
-            ->limit(20)
-            ->get();
-
-        $draftsWithStats = $drafts->map(function ($draft) {
-            return [
-                'id' => $draft->id,
-                'organization_type' => $draft->organization_type,
-                'current_step' => $draft->current_step,
-                'completion_percentage' => $draft->completion_percentage,
-                'last_saved_at' => $draft->last_saved_at,
-                'expires_at' => $draft->expires_at,
-                'is_expired' => $draft->isExpired(),
-                'statistics' => $draft->getStatistics()
-            ];
-        });
-
-        return response()->json([
-            'success' => true,
-            'drafts' => $draftsWithStats,
-            'count' => $drafts->count()
-        ]);
-    })->name('drafts.list');
-
-    /**
-     * Supprimer un brouillon
-     * DELETE /api/v1/organisation/draft/{draftId}
-     */
-    Route::delete('/draft/{draftId}', function ($draftId) {
-        $draft = \App\Models\OrganizationDraft::where('id', $draftId)
-            ->where('user_id', auth()->id())
-            ->first();
-
-        if (!$draft) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Brouillon non trouvé'
-            ], 404);
-        }
-
-        $draft->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Brouillon supprimé avec succès'
-        ]);
-    })->name('draft.delete');
-
-    /**
-     * Finaliser et créer l'organisation
-     * POST /api/v1/organisation/draft/{draftId}/finalize
-     */
-    Route::post('/draft/{draftId}/finalize', function ($draftId) {
-        $stepService = app(\App\Services\OrganisationStepService::class);
-
-        $result = $stepService->finalizeOrganisation((int) $draftId);
-
-        return response()->json($result);
-    })->name('draft.finalize');
-
-    // ========================================
-    // UTILITAIRES ET STATISTIQUES
-    // ========================================
-
-    /**
-     * Obtenir les statistiques globales de l'utilisateur
-     * GET /api/v1/organisation/user-stats
-     */
-    Route::get('/user-stats', function () {
-        $userId = auth()->id();
-
-        $stats = [
-            'total_drafts' => \App\Models\OrganizationDraft::where('user_id', $userId)->count(),
-            'active_drafts' => \App\Models\OrganizationDraft::where('user_id', $userId)->active()->count(),
-            'expired_drafts' => \App\Models\OrganizationDraft::where('user_id', $userId)->expired()->count(),
-            'completed_organisations' => \App\Models\Organisation::where('user_id', $userId)->count(),
-            'drafts_by_type' => \App\Models\OrganizationDraft::where('user_id', $userId)
-                ->select('organization_type', \DB::raw('count(*) as count'))
-                ->groupBy('organization_type')
-                ->pluck('count', 'organization_type'),
-            'average_completion' => \App\Models\OrganizationDraft::where('user_id', $userId)
-                ->avg('completion_percentage') ?? 0
-        ];
-
-        return response()->json([
-            'success' => true,
-            'statistics' => $stats
-        ]);
-    })->name('user.stats');
-
-    /**
-     * Nettoyer les brouillons expirés
-     * POST /api/v1/organisation/cleanup-expired-drafts
-     */
-    Route::post('/cleanup-expired-drafts', function () {
-        $deleted = \App\Models\OrganizationDraft::where('user_id', auth()->id())
-            ->expired()
-            ->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => "{$deleted} brouillon(s) expiré(s) supprimé(s)",
-            'deleted_count' => $deleted
-        ]);
-    })->name('cleanup.expired');
-
-    /**
-     * Étendre l'expiration d'un brouillon
-     * POST /api/v1/organisation/draft/{draftId}/extend
-     */
-    Route::post('/draft/{draftId}/extend', function (Request $request, $draftId) {
-        $request->validate([
-            'days' => 'nullable|integer|min:1|max:30'
-        ]);
-
-        $draft = \App\Models\OrganizationDraft::where('id', $draftId)
-            ->where('user_id', auth()->id())
-            ->first();
-
-        if (!$draft) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Brouillon non trouvé'
-            ], 404);
-        }
-
-        $days = $request->input('days', 7);
-        $draft->extendExpiration($days);
-
-        return response()->json([
-            'success' => true,
-            'message' => "Expiration étendue de {$days} jour(s)",
-            'new_expiration' => $draft->expires_at
-        ]);
-    })->name('draft.extend');
-
-});
-
-/*
-|--------------------------------------------------------------------------
-| Routes pour accusés de réception par étapes
-|--------------------------------------------------------------------------
-*/
-
-Route::prefix('api/v1/accuses')->name('api.accuses.')->middleware(['auth'])->group(function () {
-
-    /**
-     * Générer un accusé pour une étape
-     * POST /api/v1/accuses/step/{step}/generate
-     */
-    Route::post('/step/{step}/generate', function (Request $request, $step) {
-        $request->validate([
-            'draft_id' => 'required|integer|exists:organization_drafts,id'
-        ]);
-
-        $draft = \App\Models\OrganizationDraft::find($request->input('draft_id'));
-
-        // Vérifier l'ownership
-        if ($draft->user_id !== auth()->id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Accès non autorisé'
-            ], 403);
-        }
-
-        $stepService = app(\App\Services\OrganisationStepService::class);
-        $accuseGenerated = $stepService->generateStepAccuse((int) $step, $draft);
-
-        return response()->json([
-            'success' => $accuseGenerated,
-            'message' => $accuseGenerated ?
-                "Accusé généré pour l'étape {$step}" :
-                "Impossible de générer l'accusé pour l'étape {$step}",
-            'step' => (int) $step,
-            'draft_id' => $draft->id
-        ]);
-    })->name('step.generate');
-
-    /**
-     * Lister les accusés d'un brouillon
-     * GET /api/v1/accuses/draft/{draftId}
-     */
-    Route::get('/draft/{draftId}', function ($draftId) {
-        $draft = \App\Models\OrganizationDraft::where('id', $draftId)
-            ->where('user_id', auth()->id())
-            ->first();
-
-        if (!$draft) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Brouillon non trouvé'
-            ], 404);
-        }
-
-        // Ici on listerait les accusés depuis la table draft_accuses
-        // Pour l'instant, retourner un placeholder
-        return response()->json([
-            'success' => true,
-            'accuses' => [],
-            'count' => 0,
-            'message' => 'Système d\'accusés en cours de développement'
-        ]);
-    })->name('draft.list');
-
-});
-
-/*
-|--------------------------------------------------------------------------
-| Routes de test (développement uniquement) - TEMPORAIRES 🧪
-|--------------------------------------------------------------------------
-*/
+Route::get('/csrf-token', function () {
+    return response()->json([
+        'csrf_token' => csrf_token(),
+        'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString()
+    ]);
+})->middleware('auth');
+
+// Routes de test (développement uniquement)
 if (config('app.debug')) {
-    
-    // ========================================
-    // 🚀 ROUTE DE TEST POUR VALIDATION DE LA CORRECTION
-    // ========================================
-    Route::get('/test-correction-middleware', function() {
-        echo "<style>
-            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-            h2 { color: #28a745; border-bottom: 2px solid #28a745; padding-bottom: 10px; }
-            h3 { color: #FFA500; margin-top: 25px; }
-            .success { color: #28a745; font-weight: bold; }
-            .error { color: #dc3545; font-weight: bold; }
-            .warning { color: #ffc107; font-weight: bold; }
-            .info { color: #17a2b8; }
-            .test-link { background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 5px; }
-            .test-link:hover { background: #218838; color: white; }
-        </style>";
-        
-        echo "<h2>🎉 TEST DE VALIDATION - CORRECTION MIDDLEWARE APPLIQUÉE</h2>";
-        echo "<p><strong>Solution 1 implémentée :</strong> Route confirmation exclue du middleware dossier.lock</p>";
-        
-        echo "<h3>✅ Tests à effectuer :</h3>";
-        
-        echo "<p><strong>Test 1 :</strong> Accès direct à la page de confirmation (sans middleware bloquant)</p>";
-        echo "<a href='/operator/dossiers/confirmation/19' class='test-link' target='_blank'>➤ Tester la page de confirmation</a>";
-        echo "<p><em>Devrait maintenant fonctionner et afficher la page !</em></p>";
-        
-        echo "<p><strong>Test 2 :</strong> Simulation de redirection (pour confirmer le fix)</p>";
-        echo "<a href='/test-redirect-simulation' class='test-link'>➤ Tester la redirection</a>";
-        echo "<p><em>La redirection devrait maintenant aboutir sur la bonne page</em></p>";
-        
-        echo "<h3>🔍 Changements apportés :</h3>";
-        echo "<ul>";
-        echo "<li>✅ Route <code>/confirmation/{dossier}</code> sortie du groupe <code>middleware(['dossier.lock'])</code></li>";
-        echo "<li>✅ Ajout du middleware <code>throttle:60,1</code> pour protection anti-abus</li>";
-        echo "<li>✅ Les autres routes restent protégées par le middleware dossier.lock</li>";
-        echo "<li>✅ La page de confirmation est maintenant accessible en lecture seule</li>";
-        echo "</ul>";
-        
-        echo "<h3>📋 Résultats attendus :</h3>";
-        echo "<ul>";
-        echo "<li><strong>✅ Page de confirmation accessible</strong> même si le dossier est verrouillé</li>";
-        echo "<li><strong>✅ Logs générés</strong> dans laravel.log lors de l'accès</li>";
-        echo "<li><strong>✅ Redirection fonctionnelle</strong> depuis OrganisationController::store()</li>";
-        echo "<li><strong>✅ Sécurité maintenue</strong> pour les autres opérations sur les dossiers</li>";
-        echo "</ul>";
-        
-        return "";
-        
-    })->middleware(['auth'])->name('test.correction.middleware');
-    
-    // Routes de test existantes
     Route::get('/test', function () {
         return [
             'laravel_version' => app()->version(),
@@ -1492,42 +605,10 @@ if (config('app.debug')) {
             'environment' => config('app.env'),
             'database_connected' => DB::connection()->getPdo() ? 'Yes' : 'No',
             'current_user' => auth()->check() ? auth()->user()->email : 'Non connecté',
-            'middleware_loaded' => [
-                'check.organisation.limit' => class_exists(\App\Http\Middleware\CheckOrganisationLimit::class),
-                'dossier.lock' => class_exists(\App\Http\Middleware\DossierLock::class),
-                'operator' => class_exists(\App\Http\Middleware\VerifyOperatorRole::class),
-            ]
         ];
     })->name('test');
     
-    // Créer des utilisateurs de test
     Route::get('/create-test-users', function () {
-        \App\Models\User::firstOrCreate(
-            ['email' => 'admin@pngdi.ga'],
-            [
-                'name' => 'Admin PNGDI',
-                'password' => bcrypt('admin123'),
-                'role' => 'admin',
-                'phone' => '+24101234567',
-                'city' => 'Libreville',
-                'is_active' => true,
-                'email_verified_at' => now(),
-            ]
-        );
-
-        \App\Models\User::firstOrCreate(
-            ['email' => 'agent@pngdi.ga'],
-            [
-                'name' => 'Agent PNGDI',
-                'password' => bcrypt('agent123'),
-                'role' => 'agent',
-                'phone' => '+24101234568',
-                'city' => 'Libreville',
-                'is_active' => true,
-                'email_verified_at' => now(),
-            ]
-        );
-
         \App\Models\User::firstOrCreate(
             ['email' => 'operator@pngdi.ga'],
             [
@@ -1541,263 +622,14 @@ if (config('app.debug')) {
             ]
         );
 
-        return 'Utilisateurs de test créés !<br>' .
-               '<strong>Admin :</strong> admin@pngdi.ga / admin123<br>' .
-               '<strong>Agent :</strong> agent@pngdi.ga / agent123<br>' .
-               '<strong>Opérateur :</strong> operator@pngdi.ga / operator123<br>' .
-               '<a href="/login">Se connecter</a>';
+        return 'Utilisateur de test créé !<br><strong>Opérateur :</strong> operator@pngdi.ga / operator123<br><a href="/login">Se connecter</a>';
     })->name('create-test-users');
-    
-    // Route de test pour la création d'organisation
-    Route::post('/test-organisation-debug', function(Request $request) {
-        return response()->json([
-            'success' => true, 
-            'message' => 'Route de test fonctionnelle',
-            'data' => $request->all()
-        ]);
-    })->name('test-organisation-debug');
-    
-    // Routes de debug existantes (conservées pour compatibilité)
-    Route::get('/debug-route-test', function() {
-        echo "<h2>Test diagnostic des routes</h2>";
-        echo "<h3>⚠️ ROUTE DÉPRÉCIÉE</h3>";
-        echo "<p>Utilisez plutôt <a href='/test-correction-middleware'>la nouvelle route de test</a></p>";
-        return "";
-    })->middleware(['auth'])->name('debug.route.test');
-
-    Route::get('/quick-debug', function() {
-        $dossier = \App\Models\Dossier::with('organisation')->find(19);
-        $user = auth()->user();
-        
-        return response()->json([
-            'dossier_exists' => $dossier ? true : false,
-            'dossier_user_id' => $dossier ? $dossier->organisation->user_id : null,
-            'dossier_user_id_type' => $dossier ? gettype($dossier->organisation->user_id) : null,
-            'auth_user_id' => $user ? $user->id : null,
-            'auth_user_id_type' => $user ? gettype($user->id) : null,
-            'comparison_result' => $dossier && $user ? ((int)$dossier->organisation->user_id === (int)$user->id) : false,
-            'raw_comparison' => $dossier && $user ? ($dossier->organisation->user_id === $user->id) : false
-        ]);
-    })->middleware(['auth']);
-    
-    // ========================================
-    // 🔄 SIMULATION DE REDIRECTION - CORRIGÉE
-    // ========================================
-    Route::get('/test-redirect-simulation', function() {
-        try {
-            \Log::info('=== TEST REDIRECTION SIMULATION ===', [
-                'user_id' => auth()->id(),
-                'timestamp' => now()
-            ]);
-            
-            // Simuler la redirection exacte depuis OrganisationController::store()
-            return redirect()->route('operator.dossiers.confirmation', 19)
-                ->with('success', 'Test de redirection depuis simulation - Correction appliquée');
-            
-        } catch (\Exception $e) {
-            \Log::error('=== ERREUR SIMULATION REDIRECTION ===', [
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine()
-            ]);
-            
-            return response()->json([
-                'error' => 'Erreur simulation redirection',
-                'message' => $e->getMessage(),
-                'file' => basename($e->getFile()),
-                'line' => $e->getLine()
-            ]);
-        }
-    })->middleware(['auth'])->name('test.redirect.simulation');
 }
 
-// Inclure les routes admin supplémentaires
+// Inclure les routes supplémentaires
 if (file_exists(__DIR__.'/admin.php')) {
     require __DIR__.'/admin.php';
 }
-
-// Inclure les routes operator supplémentaires  
 if (file_exists(__DIR__.'/operator.php')) {
     require __DIR__.'/operator.php';
 }
-
-// Routes pour gestion CSRF longue durée
-Route::get('/csrf-token', function () {
-    return response()->json([
-        'csrf_token' => csrf_token(),
-        'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString()
-    ]);
-})->middleware('auth');
-
-Route::post('/diagnostic-form-data', function(\Illuminate\Http\Request $request) {
-    \Log::info('🔍 DIAGNOSTIC ROUTE ATTEINTE', [
-        'method' => $request->method(),
-        'ip' => $request->ip(),
-        'session_id' => session()->getId()
-    ]);
-    
-    $csrfDiagnostic = [
-        'meta_token' => $request->header('X-CSRF-TOKEN'),
-        'input_token' => $request->input('_token'),
-        'session_token' => session()->token(),
-        'tokens_match' => session()->token() === $request->input('_token')
-    ];
-    
-    return response()->json([
-        'success' => true,
-        'message' => 'Diagnostic sans CSRF réussi',
-        'csrf_diagnostic' => $csrfDiagnostic,
-        'form_data' => $request->all()
-    ]);
-}); // ✅ AUCUN MIDDLEWARE
-
-Route::post('/diagnostic-with-csrf', function(\Illuminate\Http\Request $request) {
-    \Log::info('🔐 DIAGNOSTIC AVEC CSRF ATTEINTE !', [
-        'method' => $request->method(),
-        'session_id' => session()->getId(),
-        'csrf_input' => $request->input('_token'),
-        'csrf_session' => session()->token(),
-        'csrf_match' => session()->token() === $request->input('_token')
-    ]);
-    
-    return response()->json([
-        'success' => true,
-        'message' => 'Route avec CSRF réussie !',
-        'csrf_diagnostic' => [
-            'tokens_match' => session()->token() === $request->input('_token')
-        ]
-    ]);
-})->middleware(['web']); // ← AVEC middleware CSRF
-
-
-Route::post('/debug-validation-data', function(\Illuminate\Http\Request $request) {
-    \Log::info('🔍 DEBUG VALIDATION', [
-        'total_fields' => count($request->all()),
-        'all_data' => $request->all()
-    ]);
-    
-    // Test validation simple
-    $rules = [
-        'type' => 'required|string',
-        'type_organisation' => 'required|string',
-        'nom_organisation' => 'required|string|min:3',
-        'fondateurs' => 'required|array|min:1',
-    ];
-    
-    try {
-        $validated = $request->validate($rules);
-        return response()->json([
-            'success' => true,
-            'message' => 'Validation réussie !',
-            'validated_fields' => array_keys($validated)
-        ]);
-        
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json([
-            'success' => false,
-            'errors' => $e->errors(),
-            'received_fields' => array_keys($request->all())
-        ], 422);
-    }
-});
-
-Route::any('/test-simple', function() {
-    return response()->json(['success' => true, 'message' => 'Route simple OK']);
-});
-
-// ========================================
-// ROUTES CHUNKING - À AJOUTER À LA FIN DE routes/web.php
-// ========================================
-// ========================================
-// ROUTES CHUNKING CORRIGÉES - ChunkProcessorController
-// ========================================
-
-// Routes chunking avec middleware auth + verified
-Route::middleware(['auth', 'verified'])->group(function () {
-    
-    // ✅ Routes chunking API - ChunkProcessorController
-    Route::prefix('chunking')->name('chunking.')->group(function () {
-        
-        // Route principale de traitement des chunks
-        Route::post('/process-chunk', [ChunkProcessorController::class, 'processChunk'])
-            ->name('process-chunk');
-        
-        // Route de refresh CSRF
-        Route::get('/csrf-refresh', [ChunkProcessorController::class, 'refreshCSRF'])
-            ->name('csrf-refresh');
-        
-        // ✅ ROUTE HEALTH CHECK CRITIQUE - Manquait
-        Route::get('/health', [ChunkProcessorController::class, 'healthCheck'])
-            ->name('health');
-        
-        // Route de test authentification
-        Route::get('/auth-test', [ChunkProcessorController::class, 'authTest'])
-            ->name('auth-test');
-        
-        // Route statistiques performance
-        Route::get('/performance', [ChunkProcessorController::class, 'getPerformanceStats'])
-            ->name('performance');
-    });
-    
-    // ✅ Routes Phase 2 - Import adhérents CORRIGÉES
-    Route::prefix('operator/dossiers')->name('operator.dossiers.')->group(function () {
-        
-        // Page import adhérents Phase 2
-        Route::get('/{dossier}/adherents-import', [DossierController::class, 'adherentsImport'])
-            ->name('adherents-import')
-            ->where('dossier', '[0-9]+');
-        
-        // ✅ ROUTE STORE ADHERENTS PHASE 2 - CORRECTION CRITIQUE
-        Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
-            ->name('store-adherents')
-            ->where('dossier', '[0-9]+')
-            ->middleware(['throttle:10,1']);
-        
-        // Routes session management pour Phase 2
-        Route::post('/save-session-adherents', [DossierController::class, 'saveSessionAdherents'])
-            ->name('save-session-adherents');
-        
-        Route::get('/get-session-adherents/{dossier}', [DossierController::class, 'getSessionAdherents'])
-            ->name('get-session-adherents')
-            ->where('dossier', '[0-9]+');
-    });
-});
-
-// ========================================
-// ROUTES CHUNKING PUBLIQUES (sans auth)
-// ========================================
-
-Route::prefix('chunking/public')->name('chunking.public.')->group(function () {
-    
-    // Health check public pour monitoring
-    Route::get('/status', function () {
-        return response()->json([
-            'status' => 'operational',
-            'timestamp' => now()->toISOString(),
-            'service' => 'SGLP Chunking Service v1.0',
-            'healthy' => true
-        ]);
-    })->name('status');
-    
-    // Endpoint de diagnostic simple
-    Route::get('/ping', function () {
-        return response()->json([
-            'success' => true,
-            'message' => 'pong',
-            'timestamp' => now()->toISOString()
-        ]);
-    })->name('ping');
-});
-
-// Routes chunking publiques (sans auth) pour certains endpoints
-Route::prefix('chunking/public')->group(function () {
-    
-    // Health check public
-    Route::get('/status', function () {
-        return response()->json([
-            'status' => 'operational',
-            'timestamp' => now(),
-            'service' => 'SGLP Chunking Service'
-        ]);
-    })->name('chunking.public.status');
-});

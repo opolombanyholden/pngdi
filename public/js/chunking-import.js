@@ -31,11 +31,11 @@ const ChunkingConfig = {
     
     // Endpoints avec priorité WEB (solution Discussion 39)
     endpoints: {
-        // Routes Web (PRIORITÉ selon solution authentification)
-        processChunk: '/chunking/process-chunk',        // ✅ Route web avec session
-        refreshCSRF: '/chunking/csrf-refresh',          // ✅ Route web avec session  
-        healthCheck: '/chunking/health',                // ✅ Route web avec session
-        authTest: '/chunking/auth-test',               // ✅ Route web test auth
+        // ✅ INITIALISATION VIDE - sera rempli dynamiquement
+        processChunk: null,
+        refreshCSRF: null,
+        healthCheck: null,
+        authTest: '/operator/chunking/auth-test',
         
         // Routes API (FALLBACK si nécessaire)
         processChunkAPI: '/api/organisations/process-chunk',
@@ -965,8 +965,29 @@ class ImportProcessor {
      * VERSION 1.5 : Envoi avec fallback intelligent Web → API + normalisation CSV CORRIGÉE
      */
     async sendChunkToServer(chunk, attempt = 1) {
-        const startTime = Date.now();
-        
+       
+    // ✅ CORRECTION : Forcer la mise à jour si URL undefined
+    if (!ChunkingConfig.endpoints.processChunk || ChunkingConfig.endpoints.processChunk === 'undefined') {
+        console.log('🔄 URL processChunk undefined, tentative de mise à jour...');
+        this.updateEndpointsFromPhase2Config();
+    }  
+        // ✅ DEBUG URL AVANT ENVOI
+    console.log('🔧 DEBUG URLs disponibles:', {
+        'Phase2Config.urls.processChunk': window.Phase2Config?.urls?.processChunk,
+        'ChunkingConfig.endpoints.processChunk': ChunkingConfig.endpoints.processChunk,
+        'URL finale qui sera utilisée': ChunkingConfig.endpoints.processChunk
+    });
+    
+    const startTime = Date.now();
+    const processChunkUrl = ChunkingConfig.endpoints.processChunk;
+    
+    if (!processChunkUrl || processChunkUrl === 'undefined') {
+        console.error('❌ URL processChunk est undefined !');
+        return Promise.reject(new Error('URL processChunk non définie'));
+    }
+    
+    console.log('📡 URL finale utilisée:', processChunkUrl);
+
         try {
             console.log(`📦 Traitement chunk ${chunk.id}, tentative ${attempt} (v1.5 CORRIGÉE)`);
             
@@ -1136,6 +1157,33 @@ class ImportProcessor {
         }
     }
     
+
+    /**
+ * ✅ NOUVELLE MÉTHODE : Mise à jour des endpoints depuis Phase2Config
+ */
+updateEndpointsFromPhase2Config() {
+    if (typeof window.Phase2Config !== 'undefined' && window.Phase2Config.urls) {
+        console.log('🔧 Mise à jour forcée des endpoints depuis Phase2Config');
+        
+        ChunkingConfig.endpoints.processChunk = window.Phase2Config.urls.processChunk;
+        ChunkingConfig.endpoints.refreshCSRF = window.Phase2Config.urls.refreshCSRF;
+        ChunkingConfig.endpoints.healthCheck = window.Phase2Config.urls.healthCheck;
+        
+        console.log('✅ Endpoints mis à jour:', ChunkingConfig.endpoints);
+        return true;
+    } else {
+        console.log('⚠️ Phase2Config toujours non disponible, utilisation fallback');
+        
+        // URLs directes en fallback
+        ChunkingConfig.endpoints.processChunk = '/operator/chunking/process-chunk';
+        ChunkingConfig.endpoints.refreshCSRF = '/operator/chunking/csrf-refresh';
+        ChunkingConfig.endpoints.healthCheck = '/operator/chunking/health';
+        
+        return false;
+    }
+}
+
+
     /**
      * VERSION 1.5 : Refresh CSRF avec fallback
      */
@@ -1296,6 +1344,212 @@ async function processImportWithChunking(adherentsData, validationResult) {
     }
 }
 
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Intégration spécifique Phase 2
+ * Compatible avec adherents-import.blade.php
+ */
+function hookIntoPhase2Import() {
+    console.log('🔗 Intégration avec adherents-import.blade.php Phase 2...');
+    
+    // Vérifier si nous sommes en Phase 2
+    if (typeof window.Phase2Config !== 'undefined') {
+        console.log('✅ Mode Phase 2 détecté - Configuration chunking adaptée');
+        
+        // Adapter la configuration aux URLs Phase 2
+        if (window.Phase2Config.urls) {
+            ChunkingConfig.endpoints.processChunk = window.Phase2Config.urls.processChunk;
+            ChunkingConfig.endpoints.refreshCSRF = window.Phase2Config.urls.refreshCSRF || '/operator/chunking/csrf-refresh';
+            ChunkingConfig.endpoints.healthCheck = window.Phase2Config.urls.healthCheck;
+        }
+        
+        // Adapter les seuils
+        if (window.Phase2Config.upload) {
+            ChunkingConfig.chunkSize = window.Phase2Config.upload.chunkSize || 100;
+            ChunkingConfig.triggerThreshold = window.Phase2Config.upload.chunkingThreshold || 50;
+            ChunkingConfig.maxRetries = window.Phase2Config.upload.maxRetries || 3;
+        }
+        
+        // ✅ MARQUER LE MODE INSERTION DURING CHUNKING
+        ChunkingConfig.insertionMode = 'DURING_CHUNKING';
+        ChunkingConfig.phase2Mode = true;
+        
+        // Hook dans les fonctions Phase 2
+        if (typeof window.handleFileUpload === 'function') {
+            console.log('🎯 Hook détecté : handleFileUpload pour Phase 2');
+            
+            const originalHandleFileUpload = window.handleFileUpload;
+            window.handleFileUpload = function(file) {
+                console.log('📁 Intercepted handleFileUpload pour chunking Phase 2');
+                
+                // Traitement du fichier avec chunking si nécessaire
+                return handleFileUploadWithChunking(file, originalHandleFileUpload);
+            };
+        }
+        
+        // Hook dans submitAdherents si disponible
+        if (typeof window.submitAdherents === 'function') {
+            console.log('🎯 Hook détecté : submitAdherents pour Phase 2');
+            
+            const originalSubmitAdherents = window.submitAdherents;
+            window.submitAdherents = function(adherentsData) {
+                console.log('📤 Intercepted submitAdherents pour chunking Phase 2');
+                
+                if (shouldUseChunking(adherentsData)) {
+                    return processImportWithChunking(adherentsData);
+                } else {
+                    return originalSubmitAdherents(adherentsData);
+                }
+            };
+        }
+        
+        console.log('✅ Intégration Phase 2 chunking terminée - INSERTION DURING CHUNKING activée');
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Traitement fichier avec chunking Phase 2
+ */
+async function handleFileUploadWithChunking(file, originalHandler) {
+    try {
+        console.log('📁 Analyse fichier pour chunking Phase 2:', {
+            name: file.name,
+            size: file.size,
+            type: file.type
+        });
+        
+        // Parser le fichier d'abord
+        const adherentsData = await parseFileToAdherents(file);
+        
+        if (shouldUseChunking(adherentsData)) {
+            console.log('🔄 Fichier volumineux détecté - Activation chunking Phase 2');
+            console.log('✅ SOLUTION: INSERTION DURING CHUNKING');
+            return await processImportWithChunking(adherentsData);
+        } else {
+            console.log('📁 Fichier standard - Traitement normal');
+            return await originalHandler(file);
+        }
+    } catch (error) {
+        console.error('❌ Erreur traitement fichier chunking Phase 2:', error);
+        throw error;
+    }
+}
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Parser fichier vers adhérents
+ */
+async function parseFileToAdherents(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                let adherentsData = [];
+                
+                if (file.name.endsWith('.csv')) {
+                    // Parser CSV avec PapaParse
+                    Papa.parse(e.target.result, {
+                        header: true,
+                        skipEmptyLines: true,
+                        dynamicTyping: true,
+                        complete: function(results) {
+                            console.log('✅ CSV parsé Phase 2:', results.data.length, 'lignes');
+                            adherentsData = results.data;
+                            resolve(adherentsData);
+                        },
+                        error: function(error) {
+                            console.error('❌ Erreur parsing CSV:', error);
+                            reject(error);
+                        }
+                    });
+                } else if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                    // Parser Excel avec SheetJS
+                    const workbook = XLSX.read(e.target.result, { type: 'binary' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    adherentsData = XLSX.utils.sheet_to_json(firstSheet);
+                    
+                    console.log('✅ Excel parsé Phase 2:', adherentsData.length, 'lignes');
+                    resolve(adherentsData);
+                } else {
+                    reject(new Error('Format de fichier non supporté Phase 2'));
+                }
+            } catch (error) {
+                console.error('❌ Erreur traitement fichier Phase 2:', error);
+                reject(error);
+            }
+        };
+        
+        reader.onerror = function() {
+            reject(new Error('Erreur lecture fichier Phase 2'));
+        };
+        
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            reader.readAsBinaryString(file);
+        } else {
+            reader.readAsText(file);
+        }
+    });
+}
+
+/**
+ * ✅ FONCTION DEBUG : Vérifier la configuration des URLs
+ */
+function debugChunkingConfig() {
+    console.log('🔧 DEBUG Configuration Chunking URLs:');
+    console.log('- Phase2Config.urls:', window.Phase2Config?.urls);
+    console.log('- ChunkingConfig.endpoints:', ChunkingConfig.endpoints);
+    console.log('- URL processChunk finale:', ChunkingConfig.endpoints.processChunk);
+    
+    if (!ChunkingConfig.endpoints.processChunk || ChunkingConfig.endpoints.processChunk.includes('undefined')) {
+        console.error('❌ ERREUR: URL processChunk incorrecte !');
+    } else {
+        console.log('✅ URL processChunk OK');
+    }
+}
+
+// Appeler le debug après configuration
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        // ✅ FORCER la mise à jour des endpoints AVANT le debug
+        const updateSuccess = updateChunkingEndpoints();
+        console.log('🔄 Mise à jour endpoints:', updateSuccess ? 'SUCCESS' : 'FALLBACK');
+        
+        // Puis debug
+        debugChunkingConfig();
+    }, 1000); // Attendre que Phase2Config soit chargé
+});
+
+
+function updateChunkingEndpoints() {
+    if (typeof window.Phase2Config !== 'undefined' && window.Phase2Config.urls) {
+        console.log('🔧 Mise à jour des endpoints chunking depuis Phase2Config');
+        
+        // ✅ CORRECTION : Utiliser les vrais noms de propriétés
+        ChunkingConfig.endpoints.processChunk = window.Phase2Config.urls.processChunk;
+        ChunkingConfig.endpoints.refreshCSRF = window.Phase2Config.urls.refreshCSRF;  
+        ChunkingConfig.endpoints.healthCheck = window.Phase2Config.urls.healthCheck;
+        
+        console.log('✅ Endpoints mis à jour:', ChunkingConfig.endpoints);
+        console.log('🔧 URL processChunk finale:', ChunkingConfig.endpoints.processChunk);
+        
+        return true; // Succès
+    } else {
+        console.log('⚠️ Phase2Config non disponible, utilisation des endpoints par défaut');
+        
+        // ✅ FALLBACK avec URLs par défaut
+        ChunkingConfig.endpoints.processChunk = '/operator/chunking/process-chunk';
+        ChunkingConfig.endpoints.refreshCSRF = '/operator/chunking/csrf-refresh';
+        ChunkingConfig.endpoints.healthCheck = '/operator/chunking/health';
+        
+        return false; // Fallback utilisé
+    }
+}
+
+
+
 // ========================================
 // INTÉGRATION AVEC ORGANISATION-CREATE.JS
 // ========================================
@@ -1356,23 +1610,25 @@ function hookIntoExistingImport() {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Système de Chunking PNGDI v1.5 initialisé (NORMALISATION CORRIGÉE)');
-    
-    // Test d'authentification immédiat
-    const testProcessor = new ImportProcessor(null, null);
-    testProcessor.testAuthentication().then(authOk => {
-        console.log('🔐 Test authentification initial v1.5:', authOk ? 'SUCCÈS' : 'ÉCHEC');
-        
-        if (!authOk) {
-            console.warn('⚠️ Authentification initiale échouée - le chunking pourra tout de même tenter de fonctionner');
-        }
-    });
+    console.log('🚀 Initialisation chunking-import.js v2.0 - INSERTION DURING CHUNKING');
     
     setTimeout(() => {
-        hookIntoExistingImport();
-        console.log('✅ Intégration chunking v1.5 terminée');
+        
+        if (typeof window.Phase2Config !== 'undefined' && window.Phase2Config.urls) {
+            console.log('🔧 Initialisation endpoints depuis Phase2Config');
+            ChunkingConfig.endpoints.processChunk = window.Phase2Config.urls.processChunk;
+            ChunkingConfig.endpoints.refreshCSRF = window.Phase2Config.urls.refreshCSRF;
+            ChunkingConfig.endpoints.healthCheck = window.Phase2Config.urls.healthCheck;
+            console.log('✅ Endpoints initialisés:', ChunkingConfig.endpoints);
+        }
+        // Prioriser l'intégration Phase 2 si disponible
+        const phase2Integrated = hookIntoPhase2Import();
+        
+        console.log('✅ Intégration chunking v2.0 terminée - INSERTION DURING CHUNKING');
     }, 500);
+    
 });
+
 
 // Exposer les fonctions principales
 window.ChunkingImport = {
@@ -1381,34 +1637,21 @@ window.ChunkingImport = {
     ImportProcessor,
     processImportWithChunking,
     shouldUseChunking,
-    config: ChunkingConfig
+    hookIntoPhase2Import,
+    handleFileUploadWithChunking,
+    parseFileToAdherents,
+    config: ChunkingConfig,
+    version: '2.0-INSERTION-DURING-CHUNKING'
 };
 
 console.log(`
 🎉 ========================================================================
-   PNGDI - SYSTÈME DE CHUNKING v1.5 - NORMALISATION CORRIGÉE
+   PNGDI - SYSTÈME DE CHUNKING v2.0 - INSERTION DURING CHUNKING
    ========================================================================
    
-   ✅ Version: 1.5 - AUTHENTIFICATION + NORMALISATION CSV CORRIGÉE
-   🔍 Classes: ChunkManager, ProgressTracker, ImportProcessor (v1.5)
-   🎨 Interface: Modal Bootstrap 5 avec progression temps réel
-   📊 Configuration: 100 items/chunk, seuil 50+, 3 retries max
-   🔗 Intégration: Hook automatique avec organisation-create.js
-   🔐 CSRF: Gestion automatique du refresh des tokens
-   🛡️ API: Auto-détection + fallback routes Web → API avec debug complet
-   
-   🚀 NOUVEAUTÉS v1.5 :
-   ✅ Correction calcul totalItems dans sendChunkToServer
-   ✅ Normalisation CSV fonctionnelle et testée
-   ✅ Logs détaillés pour diagnostic complet  
-   ✅ Gestion correcte des indices de chunk
-   ✅ Tests validés avec fichiers réels 1000+ adhérents
-   
-   🎯 Import de gros volumes avec anomalies conservées
-   📦 Chunking automatique pour éviter les timeouts
-   🔧 Mode PRODUCTION - Traitement réel des données v1.5
-   🇬🇦 Solution définitive pour l'import massif gabonais
-   
-   Développé pour l'excellence du service public gabonais
+   ✅ Version: 2.0 - PHASE 2 + INSERTION DURING CHUNKING
+   🔄 Mode: Phase 2 prioritaire avec fallback organisation-create.js
+   📁 Parser: CSV/Excel intégré pour Phase 2
+   🚀 Solution: INSERTION DURING CHUNKING activée
 ========================================================================
 `);
