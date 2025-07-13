@@ -663,6 +663,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('✅ Page Confirmation - Initialisée avec succès');
 });
-</script>
 
+</script>
 @endsection

@@ -20,10 +20,10 @@
 // ========================================
 const ChunkingConfig = {
     // Paramètres de chunking
-    chunkSize: 100,                    // Nombre d'adhérents par lot
-    triggerThreshold: 50,              // Seuil de déclenchement du chunking
-    pauseBetweenChunks: 500,           // Pause en ms entre les chunks
-    maxRetries: 3,                     // Nombre max de tentatives par chunk
+    chunkSize: 500,                    // Nombre d'adhérents par lot
+    triggerThreshold: 501,              // Seuil de déclenchement du chunking
+    pauseBetweenChunks: 3000,           // Pause en ms entre les chunks
+    maxRetries: 5,                     // Nombre max de tentatives par chunk
     
     // Configuration de l'interface
     modalId: 'chunkingProgressModal',

@@ -279,62 +279,91 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
     // ========================================
     // GESTION DES DOSSIERS - CORRIGÉE
     // ========================================
-    // Routes finalisation AJAX dans le groupe dossiers
     Route::prefix('dossiers')->name('dossiers.')->group(function () {
         
-        // ✅ ROUTES FINALISATION AJAX (utilise colonnes existantes uniquement)
-        Route::post('/{dossier}/finalize-later', [DossierController::class, 'finalizeLater'])
-            ->name('finalize-later')
-            ->middleware(['throttle:5,1'])
-            ->where('dossier', '[0-9]+');
-        
-        Route::post('/{dossier}/finalize-now', [DossierController::class, 'finalizeNow'])
-            ->name('finalize-now')
-            ->middleware(['throttle:5,1'])
-            ->where('dossier', '[0-9]+');
-        
-        // ✅ ROUTES SUPPORT FINALISATION (optionnelles)
-        Route::get('/{dossier}/status-check', [DossierController::class, 'statusCheck'])
-            ->name('status-check')
-            ->middleware(['throttle:30,1'])
-            ->where('dossier', '[0-9]+');
-
-        // ✅ ROUTE CONFIRMATION
-        Route::get('/{dossier}/confirmation', [DossierController::class, 'confirmation'])
-            ->name('confirmation')
-            ->where('dossier', '[0-9]+');
-        
-        // ✅ ROUTES PRINCIPALES DOSSIERS (existantes)
-        Route::get('/', [DossierController::class, 'index'])->name('index');
-        Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
-        Route::post('/', [DossierController::class, 'store'])->name('store');
-        Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
-        Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
-        Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
-        Route::post('/{dossier}/submit', [DossierController::class, 'soumettre'])->name('submit');
-        
-        // ✅ ROUTES PHASE 2 - IMPORT ADHÉRENTS
+        // ✅ ROUTES PHASE 2 - IMPORT ADHÉRENTS (CORRIGÉES)
         Route::get('/{dossier}/adherents-import', [DossierController::class, 'adherentsImportPage'])
             ->name('adherents-import')
             ->where('dossier', '[0-9]+');
-            
+        
         Route::post('/{dossier}/store-adherents', [DossierController::class, 'storeAdherentsPhase2'])
             ->name('store-adherents')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:10,1']);
+        
+        // === DÉBUT BLOC À AJOUTER ===
+        // Routes de finalisation AJAX Phase 2
+        Route::post('/{dossier}/finalize-later', [DossierController::class, 'finalizeLater'])
+            ->name('finalize-later')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:10,1']);
+
+        Route::post('/{dossier}/finalize-now', [DossierController::class, 'finalizeNow'])
+            ->name('finalize-now')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:10,1']);
+        // === FIN BLOC À AJOUTER ===
+
+
+        // ✅ ROUTES SANS MIDDLEWARE dossier.lock (accès lecture seule)
+        Route::get('/confirmation/{dossier}', [DossierController::class, 'confirmation'])
+            ->name('confirmation')
+            ->middleware(['throttle:60,1']);
+        
+        Route::get('/final-confirmation/{dossier}', [OrganisationController::class, 'finalConfirmation'])
+            ->name('final-confirmation')
+            ->middleware(['throttle:60,1']);
+
+
+        Route::post('/{dossier}/process-session-adherents', [OrganisationController::class, 'processSessionAdherents'])
+            ->name('process-session-adherents')
             ->where('dossier', '[0-9]+');
         
-        // ✅ ROUTES DOCUMENTS
-        Route::post('/{dossier}/upload-document', [DossierController::class, 'uploadDocument'])
-            ->name('upload-document');
-        Route::delete('/{dossier}/documents/{document}', [DossierController::class, 'deleteDocument'])
-            ->name('delete-document');
-        Route::get('/documents/{document}/download', [DossierController::class, 'downloadDocument'])
-            ->name('download-document');
+        // ✅ ROUTE DOWNLOAD-ACCUSE
+        Route::get('/{dossier}/download-accuse', [DossierController::class, 'downloadAccuse'])
+            ->name('download-accuse')
+            ->where('dossier', '[0-9]+')
+            ->middleware(['throttle:30,1']);
+        
+        // Status Phase 2
+        Route::get('/{dossier}/phase2-status', function($dossierId) {
+            $sessionKey = 'phase2_adherents_' . $dossierId;
+            $expirationKey = 'phase2_expires_' . $dossierId;
             
-        // ✅ ROUTES TEMPLATES
-        Route::get('/templates/adherents-excel', [DossierController::class, 'downloadTemplate'])
-            ->name('templates.adherents-excel');
-    });
+            $adherentsData = session($sessionKey, []);
+            $expirationTime = session($expirationKey);
+            
+            return response()->json([
+                'success' => true,
+                'has_session_data' => !empty($adherentsData),
+                'adherents_count' => count($adherentsData),
+                'expires_at' => $expirationTime,
+                'is_expired' => $expirationTime ? now()->isAfter($expirationTime) : false,
+                'dossier_id' => $dossierId
+            ]);
+        })->name('phase2-status')->where('dossier', '[0-9]+');
 
+        // ========================================
+        // ROUTES AVEC MIDDLEWARE dossier.lock
+        // ========================================
+        Route::middleware(['dossier.lock'])->group(function () {
+            Route::get('/anomalies', [DossierController::class, 'anomalies'])->name('anomalies');
+            Route::post('/anomalies/resolve/{adherent}', [DossierController::class, 'resolveAnomalie'])->name('anomalies.resolve');
+            
+            Route::get('/', [DossierController::class, 'index'])->name('index');
+            Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
+            Route::post('/', [DossierController::class, 'store'])->name('store');
+            
+            Route::get('/{dossier}', [DossierController::class, 'show'])->name('show');
+            Route::get('/{dossier}/edit', [DossierController::class, 'edit'])->name('edit');
+            Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
+            Route::post('/{dossier}/submit', [DossierController::class, 'submit'])->name('submit');
+            Route::delete('/{dossier}', [DossierController::class, 'destroy'])->name('destroy');
+            
+            Route::post('/{dossier}/extend-lock', [DossierController::class, 'extendLock'])->name('extend-lock');
+            Route::post('/{dossier}/release-lock', [DossierController::class, 'releaseLock'])->name('release-lock');
+        });
+    });
     
     // Gestion des adhérents
     Route::prefix('members')->name('members.')->group(function () {
