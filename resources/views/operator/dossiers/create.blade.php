@@ -2224,9 +2224,6 @@
 
 @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    
-    <!-- MODULE WORKFLOW 2 PHASES -->
-    <script src="{{ asset('js/workflow-2phases.js') }}"></script>
 
     <!-- Configuration JavaScript pour 8 étapes -->
     <script>
@@ -2780,9 +2777,8 @@ console.log('🚀 Workflow 2 Phases intégré avec succès dans create.blade.php
     <!-- Validation NIP format XX-QQQQ-YYYYMMDD -->
     <script src="{{ asset('js/nip-validation.js') }}"></script>
     
-    <!-- Scripts principaux -->
-    <script src="{{ asset('js/csrf-manager.js') }}"></script>
     
+
     <!-- Script principal adapté pour 8 étapes -->
     <script>
         // ========================================
@@ -4816,4 +4812,11 @@ function updateNavigationButtons() {
         }
     };
     </script>
+
+    <script src="{{ asset('js/unified-config-manager.js') }}"></script>
+    <script src="{{ asset('js/unified-csrf-manager.js') }}"></script>
+    <script src="{{ asset('js/csrf-manager.js') }}"></script> <!-- Avec détection -->
+    <script src="{{ asset('js/workflow-2phases.js') }}"></script>
+    <script src="{{ asset('js/chunking-import.js') }}"></script>
+    
 @endpush

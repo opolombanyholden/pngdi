@@ -4302,6 +4302,17 @@ private function processWithInsertionDuringChunking(array $adherentsArray, $orga
         
         return [
             'success' => empty($allErrors) || $totalInserted > 0,
+            
+            // ✅ FORMAT COMPATIBLE avec l'interface chunking existante
+            'data' => [
+                'processed' => $totalInserted,
+                'imported' => $totalInserted,
+                'errors' => count($allErrors),
+                'error_details' => $allErrors,
+                'chunks_processed' => $chunksProcessed
+            ],
+            
+            // ✅ MAINTENIR aussi l'ancien format pour la rétrocompatibilité
             'total_inserted' => $totalInserted,
             'chunks_processed' => $chunksProcessed,
             'errors' => $allErrors,

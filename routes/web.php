@@ -574,12 +574,47 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
 | Routes pour gestion CSRF et diagnostics
 |--------------------------------------------------------------------------
 */
+// ✅ NOUVEAU CODE CORRIGÉ :
 Route::get('/csrf-token', function () {
     return response()->json([
-        'csrf_token' => csrf_token(),
-        'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString()
+        'token' => csrf_token(),                    // ✅ 'token' au lieu de 'csrf_token'
+        'csrf_token' => csrf_token(),               // ✅ Compatibilité double
+        'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString(),
+        'timestamp' => now()->toISOString(),
+        'session_lifetime' => config('session.lifetime')
     ]);
-})->middleware('auth');
+})->middleware('web');  // ✅ 'web' au lieu de 'auth' pour permettre l'accès sans authentification
+
+// ========================================================================
+// ROUTES ADDITIONNELLES POUR DEBUG CSRF (OPTIONNEL)
+// ========================================================================
+
+// Route de diagnostic CSRF (pour debug uniquement)
+Route::get('/csrf-debug', function () {
+    return response()->json([
+        'csrf_token' => csrf_token(),
+        'session_id' => session()->getId(),
+        'session_driver' => config('session.driver'),
+        'session_lifetime' => config('session.lifetime'),
+        'session_cookie' => config('session.cookie'),
+        'app_key_set' => !empty(config('app.key')),
+        'user_authenticated' => auth()->check(),
+        'user_id' => auth()->id(),
+        'middleware_applied' => 'web',
+        'timestamp' => now()->toISOString()
+    ]);
+})->middleware('web');
+
+// Route de test CSRF POST (pour vérifier que le token fonctionne)
+Route::post('/csrf-test', function (Request $request) {
+    return response()->json([
+        'success' => true,
+        'message' => 'Token CSRF valide',
+        'token_received' => $request->input('_token') ? 'Présent' : 'Absent',
+        'timestamp' => now()->toISOString()
+    ]);
+})->middleware('web');
+
 
 // Routes de test (développement uniquement)
 if (config('app.debug')) {

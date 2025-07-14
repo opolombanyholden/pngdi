@@ -168,7 +168,7 @@ class Adherent extends Model
             }
 
             // ✅ CORRIGÉ : Appeler la méthode de détection des anomalies
-            $adherent->detectAndClassifyAnomalies();
+            $adherent->detectAndManageAllAnomalies();
         });
 
         static::created(function ($adherent) {

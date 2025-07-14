@@ -527,14 +527,14 @@ class DossierController extends Controller
                     ->where('is_active', true)
                     ->count();
                 
-                // Calcul simple des anomalies
+                // Calcul simple des anomalies - CORRIGÉ
                 $adherentsWithAnomalies = $organisation->adherents()
-                    ->whereNotNull('anomalies')
-                    ->where('anomalies', '!=', '[]')
-                    ->get(['anomalies']);
-                
+                    ->whereNotNull('anomalies_data')
+                    ->where('anomalies_data', '!=', '[]')
+                    ->get(['anomalies_data']);
+
                 foreach ($adherentsWithAnomalies as $adherent) {
-                    $anomalies = json_decode($adherent->anomalies ?? '[]', true) ?: [];
+                    $anomalies = json_decode($adherent->anomalies_data ?? '[]', true) ?: [];
                     if (!empty($anomalies)) {
                         $stats['anomalies_mineures']++;
                     }

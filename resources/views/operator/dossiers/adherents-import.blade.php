@@ -17,6 +17,7 @@ Version: 4.3 - Timeout étendu + Architecture modulaire CORRIGÉE
 <link rel="stylesheet" href="{{ asset('css/adherents-manager.css') }}">
 <link rel="stylesheet" href="{{ asset('css/chunking-interface.css') }}">
 
+
 <style>
 /* ========================================================================
    STYLES PHASE 2 - DESIGN GABONAIS MODERNE
@@ -1356,6 +1357,12 @@ console.log('✅ Système finalisation AJAX v5.1 - TIMEOUT ÉTENDU - PRÊT');
 console.log('📊 Upload config:', window.Phase2Config.upload);
 console.log('🔧 Process chunk URL:', window.Phase2Config.urls.processChunk);
 </script>
+
+<script src="{{ asset('js/unified-config-manager.js') }}"></script>
+    <script src="{{ asset('js/unified-csrf-manager.js') }}"></script>
+    <script src="{{ asset('js/csrf-manager.js') }}"></script> <!-- Avec détection -->
+    <script src="{{ asset('js/workflow-2phases.js') }}"></script>
+    <script src="{{ asset('js/chunking-import.js') }}"></script>
 
 <!-- ✅ SCRIPTS EXTERNES APRÈS LA CONFIGURATION -->
 <!-- Workflow 2 phases -->
