@@ -149,6 +149,13 @@ class Dossier extends Model
         return $this->hasOne(DossierLock::class);
     }
 
+        /**
+     * Agent assigné au dossier
+     */
+    public function assignedAgent()
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
+    }
     /**
      * ✅ CORRECTION PRINCIPALE - Relation avec les adhérents via organisation
      * 

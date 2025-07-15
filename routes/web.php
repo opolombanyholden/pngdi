@@ -122,12 +122,19 @@ require __DIR__.'/auth.php';
 | Routes Admin - VERSION TEST MINIMALE
 |--------------------------------------------------------------------------
 */
+/*
+|--------------------------------------------------------------------------
+| Routes Admin - VERSION MINIMALE SANS CONFLITS
+|--------------------------------------------------------------------------
+| CORRECTION COMPLÈTE : Suppression de tous les conflits avec admin.php
+| Seules les APIs essentielles pour le dashboard sont conservées
+*/
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     
     // Dashboard principal
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     
-    // APIs Temps Réel pour Dashboard
+    // APIs Temps Réel pour Dashboard (SANS CONFLIT)
     Route::prefix('api')->name('api.')->group(function () {
         Route::get('/stats', [DashboardController::class, 'getStatsApi'])->name('stats');
         Route::get('/activity', [DashboardController::class, 'getActivityFeed'])->name('activity');
@@ -141,51 +148,15 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::get('/notifications/recent', [NotificationController::class, 'recent'])->name('notifications.recent');
     });
     
-    // Analytics, Notifications, Profil, Paramètres
-    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
-    Route::prefix('notifications')->name('notifications.')->group(function () {
-        Route::get('/', [NotificationController::class, 'index'])->name('index');
-        Route::post('/mark-read/{id}', [NotificationController::class, 'markAsRead'])->name('mark-read');
-        Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
-    });
-    Route::get('/profile', [AdminProfileController::class, 'index'])->name('profile');
-    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    // ⚠️ TOUTES LES SECTIONS CONFLICTUELLES SUPPRIMÉES :
+    // - analytics (conflit avec admin.php)
+    // - notifications (conflit avec admin.php)  
+    // - settings (conflit avec admin.php)
+    // - profile (différence structurelle)
+    // - organisations, dossiers, users (conflits placeholders)
     
-    // Workflow
-    Route::prefix('workflow')->name('workflow.')->group(function () {
-        Route::get('/en-attente', [WorkflowController::class, 'enAttente'])->name('en-attente');
-        Route::get('/en-cours', [WorkflowController::class, 'enCours'])->name('en-cours');
-        Route::get('/termines', [WorkflowController::class, 'termines'])->name('termines');
-        Route::post('/assign/{dossier}', [WorkflowController::class, 'assign'])->name('assign');
-        Route::post('/validate/{validation}', [WorkflowController::class, 'validateDossier'])->name('validate');
-        Route::post('/reject/{validation}', [WorkflowController::class, 'reject'])->name('reject');
-    });
-    
-    // Routes temporaires (placeholders)
-    Route::get('/organisations', function() {
-        return response()->json(['message' => 'Gestion organisations admin - Contrôleur à créer']);
-    })->name('organisations.index');
-    Route::get('/dossiers', function() {
-        return response()->json(['message' => 'Gestion dossiers admin - Contrôleur à créer']);
-    })->name('dossiers.index');
-    Route::get('/users', function() {
-        return response()->json(['message' => 'Gestion utilisateurs admin - Contrôleur à créer']);
-    })->name('users.index');
-    Route::get('/reports', function() {
-        return response()->json(['message' => 'Rapports admin - Contrôleur à créer']);
-    })->name('reports.index');
-    Route::get('/config', function() {
-        return response()->json(['message' => 'Configuration admin - Contrôleur à créer']);
-    })->name('config.index');
-    Route::get('/system/settings', function() {
-        return response()->json(['message' => 'Paramètres système - Contrôleur à créer']);
-    })->name('system.settings');
-    Route::get('/system/logs', function() {
-        return response()->json(['message' => 'Logs système - Contrôleur à créer']);
-    })->name('system.logs');
-    Route::get('/system/backup', function() {
-        return response()->json(['message' => 'Sauvegarde système - Contrôleur à créer']);
-    })->name('system.backup');
+    // 🔗 REDIRECTION VERS admin.php POUR TOUTES LES AUTRES ROUTES
+    // Les routes complètes sont gérées dans routes/admin.php
 });
 
 /*
@@ -274,6 +245,13 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::post('/{dossier}/submit-to-administration', [OrganisationController::class, 'submitToAdministration'])
             ->name('submit-to-administration')
             ->middleware(['throttle:5,1']);
+    });
+
+        // Dans la section operator de web.php, ajoutez :
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Operator\MessageController::class, 'notifications'])->name('index');
+        Route::post('/mark-all-read', [\App\Http\Controllers\Operator\MessageController::class, 'markAllAsRead'])->name('mark-all-read');
+        Route::get('/count', [\App\Http\Controllers\Operator\MessageController::class, 'unreadCount'])->name('count');
     });
  
     // ========================================
@@ -396,12 +374,14 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::delete('/{message}', [\App\Http\Controllers\Operator\MessageController::class, 'destroy'])->name('destroy');
     });
     
+    /*
     // Notifications
     Route::prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Operator\MessageController::class, 'notifications'])->name('index');
         Route::post('/mark-all-read', [\App\Http\Controllers\Operator\MessageController::class, 'markAllAsRead'])->name('mark-all-read');
         Route::get('/count', [\App\Http\Controllers\Operator\MessageController::class, 'unreadCount'])->name('count');
     });
+    */
     
     // Déclarations
     Route::prefix('declarations')->name('declarations.')->group(function () {
@@ -438,6 +418,8 @@ Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
         ]);
     })->name('verrous.status');
 });
+
+
 
 /*
 |--------------------------------------------------------------------------

@@ -278,6 +278,31 @@ class User extends Authenticatable implements MustVerifyEmail
             ->exists();
     }
 
+
+        /**
+     * Dossiers assignés à cet agent
+     */
+    public function assignedDossiers()
+    {
+        return $this->hasMany(Dossier::class, 'assigned_to');
+    }
+
+    /**
+     * Validations effectuées par cet agent
+     */
+    public function dossierValidations()
+    {
+        return $this->hasMany(DossierValidation::class, 'validated_by');
+    }
+
+    /**
+     * Organisations créées par cet opérateur
+     */
+    public function organisations()
+    {
+        return $this->hasMany(Organisation::class, 'user_id');
+    }
+
     // =================================================================
     // RELATIONS - Enrichies avec nouvelles tables
     // =================================================================
@@ -332,25 +357,19 @@ class User extends Authenticatable implements MustVerifyEmail
     /**
      * ✅ RELATIONS EXISTANTES - PNGDI (conservées)
      */
-    public function organisations(): HasMany
-    {
-        return $this->hasMany(Organisation::class);
-    }
 
     public function activeOrganisations(): HasMany
     {
         return $this->hasMany(Organisation::class)->where('is_active', true);
     }
 
-    public function assignedDossiers(): HasMany
-    {
-        return $this->hasMany(Dossier::class, 'assigned_to');
-    }
 
     public function twoFactorCodes(): HasMany
     {
         return $this->hasMany(TwoFactorCode::class);
     }
+
+   
 
     // =================================================================
     // SYSTÈME PERMISSIONS AVANCÉ

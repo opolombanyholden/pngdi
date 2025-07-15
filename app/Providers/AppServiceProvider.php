@@ -16,6 +16,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(OrganisationStepService::class, function ($app) {
             return new OrganisationStepService();
         });
+
+        $this->app->singleton(\App\Services\PDFService::class, function ($app) {
+            return new \App\Services\PDFService();
+        });
     }
 
     /**

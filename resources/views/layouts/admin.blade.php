@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Administration') - PNGDI Gabon</title>
+    <title>@yield('title', 'Administration') - SGLP</title>
     
     <!-- Bootstrap 4 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -532,7 +532,7 @@
                         <i class="fas fa-shield-alt"></i>
                     </div>
                     <div class="logo-text-group">
-                        <h5 class="sidebar-title">PNGDI</h5>
+                        <h5 class="sidebar-title">SGLP</h5>
                         <div class="sidebar-subtitle">Admin</div>
                     </div>
                 </div>
@@ -545,168 +545,173 @@
             <div class="sidebar-profile">
                 <div class="profile-avatar">AD</div>
                 <div class="profile-info">
-                    <h6>Administrateur PNGDI</h6>
+                    <h6>Administrateur SGLP</h6>
                     <small><i class="fas fa-crown"></i> Administrateur</small>
                 </div>
             </div>
 
             <!-- Navigation sections -->
-            <nav class="sidebar-nav">
-                <!-- Tableau de Bord -->
-                <div class="nav-section">
-                    <div class="nav-section-title">TABLEAU DE BORD</div>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom active">
-                                <i class="nav-icon fas fa-eye"></i>
-                                <span class="nav-text">Vue d'ensemble</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-chart-line"></i>
-                                <span class="nav-text">Analytiques</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+            <!-- ========== REMPLACER LA SECTION NAVIGATION DANS admin.blade.php ========== -->
 
-                <!-- Gestion Dossiers -->
-                <div class="nav-section">
-                    <div class="nav-section-title">GESTION DOSSIERS</div>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-clock"></i>
-                                <span class="nav-text">En Attente</span>
-                                <span class="nav-badge warning">12</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-cogs"></i>
-                                <span class="nav-text">En Cours</span>
-                                <span class="nav-badge info">8</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-check-circle"></i>
-                                <span class="nav-text">Terminés</span>
-                                <span class="nav-badge success">45</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-folder-open"></i>
-                                <span class="nav-text">Tous les Dossiers</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                <!-- Navigation sections -->
+                <nav class="sidebar-nav">
+                    <!-- Tableau de Bord -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">TABLEAU DE BORD</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.dashboard') }}" class="nav-link-custom {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-eye"></i>
+                                    <span class="nav-text">Vue d'ensemble</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.analytics') }}" class="nav-link-custom {{ request()->routeIs('admin.analytics*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-chart-line"></i>
+                                    <span class="nav-text">Analytiques</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
 
-                <!-- Utilisateurs -->
-                <div class="nav-section">
-                    <div class="nav-section-title">UTILISATEURS</div>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-users"></i>
-                                <span class="nav-text">Opérateurs</span>
-                                <span class="nav-badge users">156</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-user-tie"></i>
-                                <span class="nav-text">Agents</span>
-                                <span class="nav-badge">23</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-user-plus"></i>
-                                <span class="nav-text">Nouvel Agent</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                    <!-- Gestion Dossiers -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">GESTION DOSSIERS</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.dossiers.en-attente') }}" class="nav-link-custom {{ request()->routeIs('admin.dossiers.en-attente') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-clock"></i>
+                                    <span class="nav-text">En Attente</span>
+                                    <span class="nav-badge warning">{{ \App\Models\Dossier::whereIn('statut', ['soumis'])->count() }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.workflow.en-cours') }}" class="nav-link-custom {{ request()->routeIs('admin.workflow.en-cours') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-cogs"></i>
+                                    <span class="nav-text">En Cours</span>
+                                    <span class="nav-badge info">{{ \App\Models\Dossier::where('statut', 'en_cours')->count() }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.workflow.termines') }}" class="nav-link-custom {{ request()->routeIs('admin.workflow.termines') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-check-circle"></i>
+                                    <span class="nav-text">Terminés</span>
+                                    <span class="nav-badge success">{{ \App\Models\Dossier::where('statut', 'approuve')->count() }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.organisations.index') }}" class="nav-link-custom {{ request()->routeIs('admin.organisations*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-folder-open"></i>
+                                    <span class="nav-text">Toutes Organisations</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
 
-                <!-- Configuration -->
-                <div class="nav-section">
-                    <div class="nav-section-title">CONFIGURATION</div>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-building"></i>
-                                <span class="nav-text">Types Organisations</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-file-alt"></i>
-                                <span class="nav-text">Types Documents</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-map-marker-alt"></i>
-                                <span class="nav-text">Zones Géographiques</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                    <!-- Utilisateurs -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">UTILISATEURS</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.users.operators') }}" class="nav-link-custom {{ request()->routeIs('admin.users.operators') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-users"></i>
+                                    <span class="nav-text">Opérateurs</span>
+                                    <span class="nav-badge users">{{ \App\Models\User::where('role', 'operator')->count() }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.users.agents') }}" class="nav-link-custom {{ request()->routeIs('admin.users.agents') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-user-tie"></i>
+                                    <span class="nav-text">Agents</span>
+                                    <span class="nav-badge">{{ \App\Models\User::where('role', 'agent')->count() }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.users.create') }}" class="nav-link-custom {{ request()->routeIs('admin.users.create') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-user-plus"></i>
+                                    <span class="nav-text">Nouvel Agent</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
 
-                <!-- Rapports -->
-                <div class="nav-section">
-                    <div class="nav-section-title">RAPPORTS</div>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-chart-bar"></i>
-                                <span class="nav-text">Statistiques</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-trophy"></i>
-                                <span class="nav-text">Performance</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-download"></i>
-                                <span class="nav-text">Export Données</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                    <!-- Configuration -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">CONFIGURATION</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.referentiels.types-organisations') }}" class="nav-link-custom {{ request()->routeIs('admin.referentiels.types-organisations') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-building"></i>
+                                    <span class="nav-text">Types Organisations</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.referentiels.document-types') }}" class="nav-link-custom {{ request()->routeIs('admin.referentiels.document-types') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-file-alt"></i>
+                                    <span class="nav-text">Types Documents</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.referentiels.zones.index') }}" class="nav-link-custom {{ request()->routeIs('admin.referentiels.zones') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-map-marker-alt"></i>
+                                    <span class="nav-text">Zones Géographiques</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
 
-                <!-- Système -->
-                <div class="nav-section">
-                    <div class="nav-section-title">SYSTÈME</div>
-                    <ul class="nav-list">
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-cog"></i>
-                                <span class="nav-text">Paramètres</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-list-alt"></i>
-                                <span class="nav-text">Logs Système</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#" class="nav-link-custom">
-                                <i class="nav-icon fas fa-database"></i>
-                                <span class="nav-text">Sauvegarde</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
+                    <!-- Rapports -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">RAPPORTS</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.reports.index') }}" class="nav-link-custom {{ request()->routeIs('admin.reports*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-chart-bar"></i>
+                                    <span class="nav-text">Rapports Généraux</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.exports.index') }}" class="nav-link-custom {{ request()->routeIs('admin.exports*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-download"></i>
+                                    <span class="nav-text">Exports</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Système -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">SYSTÈME</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.notifications.index') }}" class="nav-link-custom {{ request()->routeIs('admin.notifications*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-bell"></i>
+                                    <span class="nav-text">Notifications</span>
+                                    @php
+                                        $unreadCount = auth()->user()->unreadNotifications->count() ?? 0;
+                                    @endphp
+                                    @if($unreadCount > 0)
+                                        <span class="nav-badge danger">{{ $unreadCount }}</span>
+                                    @endif
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.activity-logs.index') }}" class="nav-link-custom {{ request()->routeIs('admin.activity-logs*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-history"></i>
+                                    <span class="nav-text">Logs d'Activité</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.settings.index') }}" class="nav-link-custom {{ request()->routeIs('admin.settings*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-cog"></i>
+                                    <span class="nav-text">Paramètres</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </nav>
+
+
         </aside>
 
         <!-- Contenu principal -->
@@ -716,7 +721,7 @@
                 <div class="header-left">
                     <h1 class="header-title">
                         <i class="fas fa-shield-alt" style="color: var(--gabon-blue);"></i>
-                        @yield('title', 'Administration PNGDI')
+                        @yield('title', 'Administration SGLP')
                     </h1>
                 </div>
 
@@ -744,7 +749,7 @@
                             <div class="user-menu" data-toggle="dropdown">
                                 <div class="user-avatar-header">AD</div>
                                 <div class="user-info-header">
-                                    <div class="user-name">Admin PNGDI</div>
+                                    <div class="user-name">Admin SGLP</div>
                                     <div class="user-role">Administrateur</div>
                                 </div>
                                 <i class="fas fa-chevron-down ml-2" style="color: #6b7280; font-size: 0.8rem;"></i>
@@ -799,7 +804,7 @@
     
     <script>
         $(document).ready(function() {
-            console.log('PNGDI Admin Layout - Design final chargé');
+            console.log('SGLP Admin Layout - Design final chargé');
             
             // Auto-dismiss des alertes
             setTimeout(function() {
