@@ -12,6 +12,7 @@ use App\Services\DossierService;
 use App\Services\FileUploadService;
 use App\Services\NotificationService;
 use App\Services\OrganisationValidationService;
+use App\Services\AdherentImportService; // ✅ NOUVEAU
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -27,19 +28,395 @@ class DossierController extends Controller
     protected $fileUploadService;
     protected $notificationService;
     protected $validationService;
+    protected $adherentImportService; // ✅ NOUVEAU
     
     public function __construct(
         DossierService $dossierService,
         FileUploadService $fileUploadService,
         NotificationService $notificationService,
-        OrganisationValidationService $validationService
+        OrganisationValidationService $validationService,
+        AdherentImportService $adherentImportService // ✅ NOUVEAU
     ) {
         $this->dossierService = $dossierService;
         $this->fileUploadService = $fileUploadService;
         $this->notificationService = $notificationService;
         $this->validationService = $validationService;
+        $this->adherentImportService = $adherentImportService; // ✅ NOUVEAU
     }
-    
+
+    /* *****************************************************
+    ** DEBUT DU NOUVEAU CODE
+    *********************************************************/
+
+/**
+     * ✅ TRAITEMENT STANDARD OPTIMISÉ AVEC SYSTÈME D'ANOMALIES INTÉGRÉ
+     */
+    private function processStandardOptimized(array $adherentsArray, $organisation, $dossier, Request $request)
+    {
+        DB::beginTransaction();
+
+        try {
+            $inserted = 0;
+            $errors = [];
+            $anomaliesCreated = [];
+            $anomalyCount = 0;
+
+            Log::info('🔄 DÉBUT TRAITEMENT AVEC ANOMALIES', [
+                'total_adherents' => count($adherentsArray),
+                'organisation_id' => $organisation->id
+            ]);
+
+            // ✅ TRAITEMENT PAR LOTS AVEC SYSTÈME D'ANOMALIES
+            $chunks = array_chunk($adherentsArray, 100);
+            
+            foreach ($chunks as $chunkIndex => $chunk) {
+                foreach ($chunk as $index => $adherentData) {
+                    try {
+                        if (!is_array($adherentData)) continue;
+                        
+                        $lineNumber = ($chunkIndex * 100) + $index + 1;
+
+                        // ✅ UTILISER LE SYSTÈME D'ANOMALIES DE L'AdherentImportService
+                        $validationResult = $this->adherentImportService->validateAndDetectAnomalies(
+                            $adherentData, 
+                            $organisation, 
+                            $lineNumber
+                        );
+
+                        // ✅ CRÉER L'ADHÉRENT AVEC ANOMALIES (même si anomalies détectées)
+                        $adherent = $this->adherentImportService->createAdherentWithAnomalies(
+                            $organisation,
+                            $validationResult['cleaned_data'],
+                            $validationResult['anomalies'],
+                            $lineNumber
+                        );
+
+                        if ($adherent) {
+                            $inserted++;
+
+                            // ✅ ENREGISTRER LES ANOMALIES EN BASE
+                            if (!empty($validationResult['anomalies'])) {
+                                $this->adherentImportService->createAnomalieRecords(
+                                    $adherent, 
+                                    $validationResult['anomalies'], 
+                                    $organisation->id, 
+                                    $lineNumber
+                                );
+                                $anomalyCount++;
+                                $anomaliesCreated = array_merge($anomaliesCreated, $validationResult['anomalies']);
+                            }
+
+                            Log::debug("✅ Adhérent créé avec anomalies", [
+                                'adherent_id' => $adherent->id,
+                                'nip' => $adherent->nip,
+                                'anomalies_count' => count($validationResult['anomalies'])
+                            ]);
+                        }
+
+                    } catch (\Exception $e) {
+                        $errors[] = "Ligne $lineNumber: " . $e->getMessage();
+                        Log::error("❌ Erreur adhérent ligne $lineNumber", [
+                            'error' => $e->getMessage(),
+                            'data' => $adherentData
+                        ]);
+                    }
+                }
+                
+                // ✅ NETTOYAGE MÉMOIRE ENTRE CHUNKS
+                if (memory_get_usage() > 1000000000) { // 1GB
+                    gc_collect_cycles();
+                }
+            }
+
+            // ✅ GÉNÉRER LE RAPPORT D'ANOMALIES
+            $anomalyReport = $this->adherentImportService->generateAnomalyReport($anomaliesCreated);
+
+            $dossier->update([
+                'statut' => 'soumis',
+                'donnees_supplementaires' => json_encode([
+                    'solution' => 'STANDARD_OPTIMIZED_WITH_ANOMALIES',
+                    'total_inserted' => $inserted,
+                    'errors_count' => count($errors),
+                    'anomalies_count' => $anomalyCount,
+                    'anomaly_report' => $anomalyReport,
+                    'anomalies_created' => $anomaliesCreated,
+                    'processed_at' => now()->toISOString()
+                ])
+            ]);
+
+            DB::commit();
+
+            Log::info('✅ TRAITEMENT STANDARD OPTIMISÉ TERMINÉ AVEC ANOMALIES', [
+                'inserted' => $inserted,
+                'errors_count' => count($errors),
+                'anomalies_count' => $anomalyCount,
+                'anomaly_report' => $anomalyReport
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Adhérents traités avec succès avec détection d\'anomalies',
+                'data' => [
+                    'total_inserted' => $inserted,
+                    'errors' => $errors,
+                    'anomalies_count' => $anomalyCount,
+                    'anomaly_report' => $anomalyReport
+                ],
+                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            Log::error('❌ ERREUR TRAITEMENT AVEC ANOMALIES', [
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * ✅ TRAITEMENT CHUNKING ULTRA-OPTIMISÉ AVEC ANOMALIES POUR 50K
+     */
+    private function processWithOptimizedChunking(array $adherentsArray, $organisation, $dossier, Request $request)
+    {
+        try {
+            $chunkSize = 250;
+            $chunks = array_chunk($adherentsArray, $chunkSize);
+            $totalChunks = count($chunks);
+            
+            $totalInserted = 0;
+            $allErrors = [];
+            $totalAnomaliesCount = 0;
+            $allAnomaliesCreated = [];
+
+            Log::info('🔄 DÉBUT CHUNKING ULTRA-OPTIMISÉ AVEC ANOMALIES', [
+                'total_adherents' => count($adherentsArray),
+                'total_chunks' => $totalChunks,
+                'chunk_size' => $chunkSize
+            ]);
+
+            DB::beginTransaction();
+
+            foreach ($chunks as $chunkIndex => $chunk) {
+                $chunkStartTime = microtime(true);
+                
+                $chunkInserted = 0;
+                $chunkAnomalies = 0;
+                
+                foreach ($chunk as $index => $adherentData) {
+                    try {
+                        if (!is_array($adherentData)) continue;
+                        
+                        $lineNumber = ($chunkIndex * $chunkSize) + $index + 1;
+
+                        // ✅ SYSTÈME D'ANOMALIES POUR GROS VOLUMES
+                        $validationResult = $this->adherentImportService->validateAndDetectAnomalies(
+                            $adherentData, 
+                            $organisation, 
+                            $lineNumber
+                        );
+
+                        $adherent = $this->adherentImportService->createAdherentWithAnomalies(
+                            $organisation,
+                            $validationResult['cleaned_data'],
+                            $validationResult['anomalies'],
+                            $lineNumber
+                        );
+
+                        if ($adherent) {
+                            $chunkInserted++;
+
+                            if (!empty($validationResult['anomalies'])) {
+                                $this->adherentImportService->createAnomalieRecords(
+                                    $adherent, 
+                                    $validationResult['anomalies'], 
+                                    $organisation->id, 
+                                    $lineNumber
+                                );
+                                $chunkAnomalies++;
+                                $allAnomaliesCreated = array_merge($allAnomaliesCreated, $validationResult['anomalies']);
+                            }
+                        }
+
+                    } catch (\Exception $e) {
+                        $allErrors[] = "Chunk $chunkIndex, ligne $lineNumber: " . $e->getMessage();
+                    }
+                }
+
+                $totalInserted += $chunkInserted;
+                $totalAnomaliesCount += $chunkAnomalies;
+                
+                $chunkTime = round((microtime(true) - $chunkStartTime) * 1000, 2);
+                
+                Log::info("✅ CHUNK ULTRA-OPTIMISÉ AVEC ANOMALIES $chunkIndex/$totalChunks", [
+                    'inserted' => $chunkInserted,
+                    'anomalies' => $chunkAnomalies,
+                    'total_so_far' => $totalInserted,
+                    'chunk_time_ms' => $chunkTime
+                ]);
+
+                // ✅ NETTOYAGE MÉMOIRE POUR 50K
+                if ($chunkIndex % 10 === 0) {
+                    gc_collect_cycles();
+                }
+
+                if ($totalChunks > 100) {
+                    usleep(250000); // 0.25 seconde
+                }
+            }
+
+            DB::commit();
+
+            // ✅ RAPPORT FINAL D'ANOMALIES
+            $finalAnomalyReport = $this->adherentImportService->generateAnomalyReport($allAnomaliesCreated);
+
+            $dossier->update([
+                'statut' => 'soumis',
+                'donnees_supplementaires' => json_encode([
+                    'solution' => 'ULTRA_OPTIMIZED_CHUNKING_WITH_ANOMALIES',
+                    'chunks_processed' => $totalChunks,
+                    'total_inserted' => $totalInserted,
+                    'errors_count' => count($allErrors),
+                    'anomalies_count' => $totalAnomaliesCount,
+                    'anomaly_report' => $finalAnomalyReport,
+                    'processed_at' => now()->toISOString(),
+                    'performance_optimized' => true
+                ])
+            ]);
+
+            Log::info('🎉 CHUNKING ULTRA-OPTIMISÉ AVEC ANOMALIES TERMINÉ', [
+                'total_inserted' => $totalInserted,
+                'total_anomalies' => $totalAnomaliesCount,
+                'chunks_processed' => $totalChunks
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Adhérents traités avec succès par chunking ultra-optimisé avec détection d'anomalies",
+                'data' => [
+                    'total_inserted' => $totalInserted,
+                    'chunks_processed' => $totalChunks,
+                    'errors' => $allErrors,
+                    'anomalies_count' => $totalAnomaliesCount,
+                    'anomaly_report' => $finalAnomalyReport,
+                    'solution' => 'ULTRA_OPTIMIZED_CHUNKING_WITH_ANOMALIES'
+                ],
+                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            
+            Log::error('❌ ERREUR CHUNKING ULTRA-OPTIMISÉ AVEC ANOMALIES', [
+                'error' => $e->getMessage(),
+                'dossier_id' => $dossier->id
+            ]);
+
+            throw $e;
+        }
+    }
+
+    // ========================================================================
+    // 🔧 CALCUL OPTIMISÉ DES STATISTIQUES AVEC ANOMALIES
+    // ========================================================================
+
+    /**
+     * ✅ CALCUL OPTIMISÉ DES STATISTIQUES AVEC ANOMALIES RÉELLES
+     */
+    private function calculateAdherentsStatsOptimized($organisation)
+    {
+        $stats = [
+            'total' => 0,
+            'valides' => 0,
+            'anomalies_critiques' => 0,
+            'anomalies_majeures' => 0,
+            'anomalies_mineures' => 0,
+            'anomalies_total' => 0
+        ];
+
+        if (!$organisation) {
+            return $stats;
+        }
+
+        try {
+            // ✅ TOTAL ADHÉRENTS
+            $stats['total'] = $organisation->adherents()->count();
+            
+            if ($stats['total'] > 10000) {
+                Log::info('🔍 ÉCHANTILLONNAGE ACTIVÉ POUR GROS VOLUME', [
+                    'total_adherents' => $stats['total']
+                ]);
+                
+                // Échantillon pour estimation
+                $sample = $organisation->adherents()
+                    ->with('anomalies')
+                    ->limit(1000)
+                    ->get();
+                
+                $sample_stats = $this->analyzeAnomaliesSampleFromDB($sample);
+                
+                // Extrapolation
+                $ratio = $stats['total'] / 1000;
+                $stats['anomalies_critiques'] = round($sample_stats['critiques'] * $ratio);
+                $stats['anomalies_majeures'] = round($sample_stats['majeures'] * $ratio);
+                $stats['anomalies_mineures'] = round($sample_stats['mineures'] * $ratio);
+                
+            } else {
+                // ✅ CALCUL DIRECT AVEC LA TABLE adherent_anomalies
+                $stats['anomalies_critiques'] = \App\Models\AdherentAnomalie::where('organisation_id', $organisation->id)
+                    ->where('type_anomalie', 'critique')
+                    ->count();
+                
+                $stats['anomalies_majeures'] = \App\Models\AdherentAnomalie::where('organisation_id', $organisation->id)
+                    ->where('type_anomalie', 'majeure')
+                    ->count();
+                
+                $stats['anomalies_mineures'] = \App\Models\AdherentAnomalie::where('organisation_id', $organisation->id)
+                    ->where('type_anomalie', 'mineure')
+                    ->count();
+            }
+
+            $stats['anomalies_total'] = $stats['anomalies_critiques'] + $stats['anomalies_majeures'] + $stats['anomalies_mineures'];
+            $stats['valides'] = $stats['total'] - $stats['anomalies_total'];
+
+        } catch (\Exception $e) {
+            Log::error('❌ ERREUR CALCUL STATS AVEC ANOMALIES', [
+                'organisation_id' => $organisation->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Valeurs par défaut
+            $stats['valides'] = $stats['total'];
+        }
+
+        return $stats;
+    }
+
+    /**
+     * ✅ ANALYSE ÉCHANTILLON DEPUIS LA TABLE adherent_anomalies
+     */
+    private function analyzeAnomaliesSampleFromDB($sample)
+    {
+        $stats = ['critiques' => 0, 'majeures' => 0, 'mineures' => 0];
+        
+        foreach ($sample as $adherent) {
+            $anomaliesCritiques = $adherent->anomalies()->where('type_anomalie', 'critique')->count();
+            $anomaliesMajeures = $adherent->anomalies()->where('type_anomalie', 'majeure')->count();
+            $anomaliesMineures = $adherent->anomalies()->where('type_anomalie', 'mineure')->count();
+            
+            if ($anomaliesCritiques > 0) $stats['critiques']++;
+            elseif ($anomaliesMajeures > 0) $stats['majeures']++;
+            elseif ($anomaliesMineures > 0) $stats['mineures']++;
+        }
+        
+        return $stats;
+    }
+
+    // ========================================================================
+    // TOUTES LES AUTRES MÉTHODES RESTENT IDENTIQUES
+    // ========================================================================
+
     /**
      * Afficher la liste des dossiers
      */
@@ -82,6 +459,17 @@ class DossierController extends Controller
         
         return view('operator.dossiers.index', compact('dossiers', 'organisations'));
     }
+
+
+
+    /* *****************************************************
+    ** FIN DU NOUVEAU CODE
+    *********************************************************/
+    
+    /**
+     * Afficher la liste des dossiers
+     */
+
 
     /**
      * Afficher le formulaire de création selon le type
@@ -482,77 +870,7 @@ class DossierController extends Controller
     /**
      * ✅ CALCUL OPTIMISÉ DES STATISTIQUES - GESTION 50K ADHÉRENTS
      */
-    private function calculateAdherentsStatsOptimized($organisation)
-    {
-        $stats = [
-            'total' => 0,
-            'valides' => 0,
-            'anomalies_critiques' => 0,
-            'anomalies_majeures' => 0,
-            'anomalies_mineures' => 0
-        ];
 
-        if (!$organisation) {
-            return $stats;
-        }
-
-        try {
-            // ✅ OPTIMISATION : Requête simple pour le total
-            $stats['total'] = $organisation->adherents()->count();
-            
-            // ✅ OPTIMISATION GROS VOLUMES : Échantillonnage si > 10K
-            if ($stats['total'] > 10000) {
-                Log::info('🔍 ÉCHANTILLONNAGE ACTIVÉ POUR GROS VOLUME', [
-                    'total_adherents' => $stats['total'],
-                    'methode' => 'sampling_estimation'
-                ]);
-                
-                // Échantillon de 1000 adhérents pour estimation
-                $sample = $organisation->adherents()
-                    ->limit(1000)
-                    ->get(['anomalies', 'is_active']);
-                
-                $sample_stats = $this->analyzeAnomaliesSample($sample);
-                
-                // Extrapolation sur le total
-                $ratio = $stats['total'] / 1000;
-                $stats['anomalies_critiques'] = round($sample_stats['critiques'] * $ratio);
-                $stats['anomalies_majeures'] = round($sample_stats['majeures'] * $ratio);
-                $stats['anomalies_mineures'] = round($sample_stats['mineures'] * $ratio);
-                $stats['valides'] = $stats['total'] - $stats['anomalies_critiques'] - $stats['anomalies_majeures'] - $stats['anomalies_mineures'];
-                
-            } else {
-                // ✅ CALCUL COMPLET POUR VOLUMES NORMAUX
-                $stats['valides'] = $organisation->adherents()
-                    ->where('is_active', true)
-                    ->count();
-                
-                // Calcul simple des anomalies - CORRIGÉ
-                $adherentsWithAnomalies = $organisation->adherents()
-                    ->whereNotNull('anomalies_data')
-                    ->where('anomalies_data', '!=', '[]')
-                    ->get(['anomalies_data']);
-
-                foreach ($adherentsWithAnomalies as $adherent) {
-                    $anomalies = json_decode($adherent->anomalies_data ?? '[]', true) ?: [];
-                    if (!empty($anomalies)) {
-                        $stats['anomalies_mineures']++;
-                    }
-                }
-            }
-
-        } catch (\Exception $e) {
-            Log::error('❌ ERREUR CALCUL STATS OPTIMISÉ', [
-                'organisation_id' => $organisation->id,
-                'error' => $e->getMessage()
-            ]);
-            
-            // Valeurs par défaut sécurisées
-            $stats['valides'] = $stats['total'];
-        }
-
-        return $stats;
-    }
 
     /**
      * ✅ ANALYSE ÉCHANTILLON POUR ESTIMATION GROS VOLUMES
@@ -871,201 +1189,7 @@ class DossierController extends Controller
         }
     }
 
-    /**
-     * ✅ TRAITEMENT STANDARD OPTIMISÉ
-     */
-    private function processStandardOptimized(array $adherentsArray, $organisation, $dossier, Request $request)
-    {
-        DB::beginTransaction();
-
-        try {
-            $inserted = 0;
-            $errors = [];
-
-            // ✅ TRAITEMENT PAR LOTS MÊME EN STANDARD
-            $chunks = array_chunk($adherentsArray, 100);
-            
-            foreach ($chunks as $chunk) {
-                foreach ($chunk as $adherentData) {
-                    try {
-                        if (!is_array($adherentData)) continue;
-                        
-                        $cleanData = $this->validateAdherentData($adherentData);
-
-                        Adherent::create([
-                            'organisation_id' => $organisation->id,
-                            'nip' => $cleanData['nip'],
-                            'nom' => strtoupper($cleanData['nom']),
-                            'prenom' => $cleanData['prenom'],
-                            'profession' => $cleanData['profession'] ?? null,
-                            'fonction' => $cleanData['fonction'] ?? 'Membre',
-                            'telephone' => $cleanData['telephone'] ?? null,
-                            'email' => $cleanData['email'] ?? null,
-                            'date_adhesion' => now(),
-                            'is_active' => true
-                        ]);
-
-                        $inserted++;
-
-                    } catch (\Exception $e) {
-                        $errors[] = "Erreur adhérent: " . $e->getMessage();
-                    }
-                }
-                
-                // ✅ NETTOYAGE MÉMOIRE ENTRE CHUNKS
-                if (memory_get_usage() > 1000000000) { // 1GB
-                    gc_collect_cycles();
-                }
-            }
-
-            $dossier->update([
-                'statut' => 'soumis',
-                'donnees_supplementaires' => json_encode([
-                    'solution' => 'STANDARD_OPTIMIZED',
-                    'total_inserted' => $inserted,
-                    'errors_count' => count($errors),
-                    'processed_at' => now()->toISOString()
-                ])
-            ]);
-
-            DB::commit();
-
-            Log::info('✅ TRAITEMENT STANDARD OPTIMISÉ TERMINÉ', [
-                'inserted' => $inserted,
-                'errors_count' => count($errors)
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Adhérents traités avec succès',
-                'data' => [
-                    'total_inserted' => $inserted,
-                    'errors' => $errors
-                ],
-                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            throw $e;
-        }
-    }
-
-    /**
-     * ✅ TRAITEMENT CHUNKING ULTRA-OPTIMISÉ POUR 50K
-     */
-    private function processWithOptimizedChunking(array $adherentsArray, $organisation, $dossier, Request $request)
-    {
-        try {
-            $chunkSize = 250; // ✅ CHUNKS PLUS PETITS POUR 50K
-            $chunks = array_chunk($adherentsArray, $chunkSize);
-            $totalChunks = count($chunks);
-            
-            $totalInserted = 0;
-            $allErrors = [];
-
-            Log::info('🔄 DÉBUT CHUNKING ULTRA-OPTIMISÉ', [
-                'total_adherents' => count($adherentsArray),
-                'total_chunks' => $totalChunks,
-                'chunk_size' => $chunkSize,
-                'estimated_time' => ($totalChunks * 2) . ' seconds'
-            ]);
-
-            DB::beginTransaction();
-
-            foreach ($chunks as $index => $chunk) {
-                $chunkStartTime = microtime(true);
-                
-                $chunkInserted = 0;
-                foreach ($chunk as $adherentData) {
-                    try {
-                        if (!is_array($adherentData)) continue;
-                        
-                        $cleanData = $this->validateAdherentData($adherentData);
-
-                        Adherent::create([
-                            'organisation_id' => $organisation->id,
-                            'nip' => $cleanData['nip'],
-                            'nom' => strtoupper($cleanData['nom']),
-                            'prenom' => $cleanData['prenom'],
-                            'profession' => $cleanData['profession'] ?? null,
-                            'telephone' => $cleanData['telephone'] ?? null,
-                            'date_adhesion' => now(),
-                            'is_active' => true
-                        ]);
-
-                        $chunkInserted++;
-
-                    } catch (\Exception $e) {
-                        $allErrors[] = "Chunk $index: " . $e->getMessage();
-                    }
-                }
-
-                $totalInserted += $chunkInserted;
-                
-                $chunkTime = round((microtime(true) - $chunkStartTime) * 1000, 2);
-                
-                Log::info("✅ CHUNK ULTRA-OPTIMISÉ $index/$totalChunks", [
-                    'inserted' => $chunkInserted,
-                    'total_so_far' => $totalInserted,
-                    'chunk_time_ms' => $chunkTime,
-                    'memory_usage_mb' => round(memory_get_usage() / 1024 / 1024, 2)
-                ]);
-
-                // ✅ NETTOYAGE MÉMOIRE CRUCIAL POUR 50K
-                if ($index % 10 === 0) {
-                    gc_collect_cycles();
-                }
-
-                // ✅ PAUSE MICRO POUR ÉVITER SURCHARGE SERVEUR
-                if ($totalChunks > 100) {
-                    usleep(250000); // 0.25 seconde
-                }
-            }
-
-            DB::commit();
-
-            $dossier->update([
-                'statut' => 'soumis',
-                'donnees_supplementaires' => json_encode([
-                    'solution' => 'ULTRA_OPTIMIZED_CHUNKING',
-                    'chunks_processed' => $totalChunks,
-                    'total_inserted' => $totalInserted,
-                    'errors_count' => count($allErrors),
-                    'processed_at' => now()->toISOString(),
-                    'performance_optimized' => true
-                ])
-            ]);
-
-            Log::info('🎉 CHUNKING ULTRA-OPTIMISÉ TERMINÉ', [
-                'total_inserted' => $totalInserted,
-                'chunks_processed' => $totalChunks,
-                'final_memory_mb' => round(memory_get_usage() / 1024 / 1024, 2)
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => "Adhérents traités avec succès par chunking ultra-optimisé",
-                'data' => [
-                    'total_inserted' => $totalInserted,
-                    'chunks_processed' => $totalChunks,
-                    'errors' => $allErrors,
-                    'solution' => 'ULTRA_OPTIMIZED_CHUNKING'
-                ],
-                'redirect_url' => route('operator.dossiers.confirmation', $dossier->id)
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollback();
-            
-            Log::error('❌ ERREUR CHUNKING ULTRA-OPTIMISÉ', [
-                'error' => $e->getMessage(),
-                'dossier_id' => $dossier->id
-            ]);
-
-            throw $e;
-        }
-    }
+ 
 
     /**
      * Page d'import des adhérents - Phase 2
@@ -1383,9 +1507,305 @@ class DossierController extends Controller
         ];
     }
 
+    // DÉLIMITEUR DÉBUT : MÉTHODE RAPPORT ANOMALIES
+    /**
+     * Afficher la page des anomalies pour un dossier
+    */
+    // DÉLIMITEUR DÉBUT : MÉTHODE RAPPORT ANOMALIES
+    /**
+     * Afficher la page des anomalies pour un dossier
+     */
+    public function rapportAnomalies(Dossier $dossier)
+    {
+        try {
+            // Vérifier l'accès
+            if ($dossier->organisation->user_id !== Auth::id()) {
+                abort(403);
+            }
+
+            // Récupérer les adhérents avec anomalies pour cette organisation
+            $anomalies = Adherent::where('organisation_id', $dossier->organisation->id)
+                ->where('has_anomalies', true)
+                ->with(['organisation'])
+                ->paginate(20);
+
+            // ✅ CORRECTION : Traiter les données d'anomalies avec vérification de type
+            foreach ($anomalies as $adherent) {
+                if ($adherent->anomalies_data) {
+                    // Vérifier si c'est une string JSON ou déjà un array
+                    if (is_string($adherent->anomalies_data)) {
+                        $decoded = json_decode($adherent->anomalies_data, true);
+                        $adherent->anomalies_data = $decoded ?: [];
+                    } elseif (!is_array($adherent->anomalies_data)) {
+                        $adherent->anomalies_data = [];
+                    }
+                } else {
+                    $adherent->anomalies_data = [];
+                }
+            }
+
+            // Récupérer toutes les organisations de l'utilisateur pour le filtre
+            $organisations = Organisation::where('user_id', Auth::id())
+                ->orderBy('nom')
+                ->get();
+
+            // ✅ CORRECTION : Statistiques optimisées
+            $stats = [
+                'total' => $anomalies->total(),
+                'critiques' => Adherent::where('organisation_id', $dossier->organisation->id)
+                    ->where('anomalies_severity', 'critique')
+                    ->count(),
+                'majeures' => Adherent::where('organisation_id', $dossier->organisation->id)
+                    ->where('anomalies_severity', 'majeure')
+                    ->count(),
+                'mineures' => Adherent::where('organisation_id', $dossier->organisation->id)
+                    ->where('anomalies_severity', 'mineure')
+                    ->count()
+            ];
+
+            Log::info('✅ Page anomalies chargée', [
+                'dossier_id' => $dossier->id,
+                'organisation_id' => $dossier->organisation->id,
+                'anomalies_count' => $anomalies->total(),
+                'stats' => $stats
+            ]);
+
+            return view('operator.dossiers.anomalies', compact(
+                'dossier',
+                'anomalies', 
+                'organisations',
+                'stats'
+            ));
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur affichage anomalies', [
+                'dossier_id' => $dossier->id,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
+            ]);
+            
+            return redirect()->route('operator.dossiers.show', $dossier->id)
+                ->with('error', 'Erreur lors de l\'affichage des anomalies : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * ✅ EXPORT PDF DES ANOMALIES
+     */
+    public function exportAnomaliesPDF(Dossier $dossier)
+    {
+        try {
+            // Vérifier l'accès utilisateur
+            if ($dossier->organisation->user_id !== Auth::id()) {
+                abort(403, 'Accès non autorisé à ce dossier');
+            }
+
+            // Récupérer les anomalies avec pagination désactivée pour le PDF
+            $anomalies = Adherent::where('organisation_id', $dossier->organisation->id)
+                ->where(function($query) {
+                    $query->whereNotNull('anomalies_data')
+                          ->where('anomalies_data', '!=', '[]')
+                          ->orWhereNotNull('anomalies_severity');
+                })
+                ->with('organisation')
+                ->orderBy('anomalies_severity', 'desc')
+                ->orderBy('nom')
+                ->get();
+
+            // Traitement des données d'anomalies
+            foreach ($anomalies as $adherent) {
+                if ($adherent->anomalies_data) {
+                    if (is_string($adherent->anomalies_data)) {
+                        $adherent->anomalies_data = json_decode($adherent->anomalies_data, true) ?: [];
+                    } elseif (!is_array($adherent->anomalies_data)) {
+                        $adherent->anomalies_data = [];
+                    }
+                } else {
+                    $adherent->anomalies_data = [];
+                }
+            }
+
+            // Calcul des statistiques
+            $stats = [
+                'total' => $anomalies->count(),
+                'critiques' => $anomalies->where('anomalies_severity', 'critique')->count(),
+                'majeures' => $anomalies->where('anomalies_severity', 'majeure')->count(),
+                'mineures' => $anomalies->where('anomalies_severity', 'mineure')->count(),
+                'organisation' => $dossier->organisation->nom,
+                'dossier_numero' => $dossier->numero_recepisse ?? $dossier->id,
+                'date_generation' => now()->format('d/m/Y à H:i')
+            ];
+
+            // Groupement des anomalies par type pour les statistiques détaillées
+            $anomaliesParType = [];
+            foreach ($anomalies as $adherent) {
+                foreach ($adherent->anomalies_data as $anomalie) {
+                    $code = $anomalie['code'] ?? 'non_categorise';
+                    if (!isset($anomaliesParType[$code])) {
+                        $anomaliesParType[$code] = [
+                            'code' => $code,
+                            'message' => $anomalie['message'] ?? $code,
+                            'count' => 0,
+                            'severity' => $anomalie['type'] ?? 'mineure'
+                        ];
+                    }
+                    $anomaliesParType[$code]['count']++;
+                }
+            }
+
+            $stats['anomalies_par_type'] = array_values($anomaliesParType);
+
+            Log::info('📄 Export PDF anomalies initié', [
+                'dossier_id' => $dossier->id,
+                'organisation_id' => $dossier->organisation->id,
+                'anomalies_count' => $anomalies->count(),
+                'user_id' => Auth::id()
+            ]);
+
+            // Génération du PDF avec Dompdf
+            $pdf = \PDF::loadView('operator.dossiers.pdf.rapport-anomalies', compact(
+                'dossier',
+                'anomalies',
+                'stats'
+            ));
+
+            // Configuration du PDF
+            $pdf->setPaper('A4', 'portrait');
+            $pdf->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => 'Arial'
+            ]);
+
+            $filename = "rapport_anomalies_{$dossier->organisation->nom}_{$dossier->id}_" . date('Ymd_His') . ".pdf";
+
+            Log::info('✅ PDF anomalies généré avec succès', [
+                'dossier_id' => $dossier->id,
+                'filename' => $filename,
+                'anomalies_count' => $anomalies->count()
+            ]);
+
+            return $pdf->download($filename);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Erreur génération PDF anomalies', [
+                'dossier_id' => $dossier->id,
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
+            ]);
+
+            return redirect()->back()
+                ->with('error', 'Erreur lors de la génération du rapport PDF : ' . $e->getMessage());
+        }
+    }
+
+
+// DÉLIMITEUR FIN : MÉTHODE RAPPORT ANOMALIES
+    // DÉLIMITEUR FIN : MÉTHODE RAPPORT ANOMALIES
+
+    /**
+     * ✅ RÉCUPÉRATION DES ANOMALIES DEPUIS LA BASE DE DONNÉES
+     */
+    private function getAnomaliesFromDossierDB($dossierId)
+    {
+        try {
+            // Récupérer le dossier avec l'organisation
+            $dossier = Dossier::with('organisation')->find($dossierId);
+            
+            if (!$dossier || !$dossier->organisation) {
+                return [];
+            }
+
+            // Récupérer les anomalies depuis la table adherent_anomalies
+            $anomaliesDB = \DB::table('adherent_anomalies')
+                ->join('adherents', 'adherent_anomalies.adherent_id', '=', 'adherents.id')
+                ->where('adherent_anomalies.organisation_id', $dossier->organisation->id)
+                ->select(
+                    'adherent_anomalies.*',
+                    'adherents.nip',
+                    'adherents.nom',
+                    'adherents.prenom'
+                )
+                ->get();
+
+            // Formatter les anomalies pour l'affichage
+            $anomaliesFormatted = [];
+            
+            foreach ($anomaliesDB as $anomalie) {
+                $anomaliesFormatted[] = [
+                    'id' => $anomalie->id,
+                    'adherent_id' => $anomalie->adherent_id,
+                    'adherent_nip' => $anomalie->nip,
+                    'adherent_nom' => $anomalie->nom . ' ' . $anomalie->prenom,
+                    'type_anomalie' => $anomalie->type_anomalie,
+                    'code_anomalie' => $anomalie->code_anomalie ?? 'NON_DEFINI',
+                    'champ_concerne' => $anomalie->champ_concerne,
+                    'description' => $anomalie->description ?? $anomalie->message_anomalie,
+                    'valeur_detectee' => $anomalie->valeur_incorrecte ?? $anomalie->valeur_erronee,
+                    'suggestion' => $anomalie->suggestion ?? null,
+                    'est_resolu' => (bool) ($anomalie->statut === 'resolu'),
+                    'date_detection' => $anomalie->detectee_le ?? $anomalie->created_at,
+                    'gravite' => $this->getAnomalieGravite($anomalie->type_anomalie)
+                ];
+            }
+
+            Log::info('✅ Anomalies récupérées depuis DB', [
+                'dossier_id' => $dossierId,
+                'organisation_id' => $dossier->organisation->id,
+                'total_anomalies' => count($anomaliesFormatted)
+            ]);
+
+            return $anomaliesFormatted;
+
+        } catch (\Exception $e) {
+            Log::error('❌ ERREUR getAnomaliesFromDossierDB', [
+                'dossier_id' => $dossierId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [];
+        }
+    }
+
+    /**
+     * ✅ DÉTERMINER LA GRAVITÉ D'UNE ANOMALIE
+     */
+    private function getAnomalieGravite($typeAnomalie)
+    {
+        $gravites = [
+            'critique' => [
+                'niveau' => 'Critique',
+                'couleur' => 'danger',
+                'priorite' => 1
+            ],
+            'majeure' => [
+                'niveau' => 'Majeure', 
+                'couleur' => 'warning',
+                'priorite' => 2
+            ],
+            'mineure' => [
+                'niveau' => 'Mineure',
+                'couleur' => 'info', 
+                'priorite' => 3
+            ]
+        ];
+
+        return $gravites[$typeAnomalie] ?? [
+            'niveau' => 'Inconnue',
+            'couleur' => 'secondary',
+            'priorite' => 4
+        ];
+    }
+
+// DÉLIMITEUR FIN : MÉTHODE RAPPORT ANOMALIES
+
     // ========================================================================
     // MÉTHODES PLACEHOLDER POUR COMPATIBILITÉ
     // ========================================================================
+
+
+
+
 
     public function downloadAccuse($dossier) { return redirect()->back()->with('info', 'En développement'); }
     public function anomalies(Request $request) { return redirect()->back()->with('info', 'En développement'); }

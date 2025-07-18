@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\AdherentAnomalie; // ✅ NOUVEAU IMPORT
 
 class Adherent extends Model
 {
@@ -954,20 +955,6 @@ class Adherent extends Model
         return $query->where('has_anomalies', false);
     }
 
-    public function scopeAnomaliesCritiques($query)
-    {
-        return $query->where('anomalies_severity', self::ANOMALIE_CRITIQUE);
-    }
-
-    public function scopeAnomaliesMajeures($query)
-    {
-        return $query->where('anomalies_severity', self::ANOMALIE_MAJEURE);
-    }
-
-    public function scopeAnomaliesMineures($query)
-    {
-        return $query->where('anomalies_severity', self::ANOMALIE_MINEURE);
-    }
 
     // ✅ NOUVEAUX SCOPES POUR ANOMALIES NIP
     public function scopeNipAbsent($query)
@@ -1637,8 +1624,323 @@ class Adherent extends Model
     }
 
 // ========================================
-// DÉLIMITEUR FIN : NOUVELLES MÉTHODES À AJOUTER
+// GESTION DES ANOMALIES
 // ========================================
+// ========================================
+// NOUVELLES MÉTHODES À AJOUTER AU MODÈLE ADHERENT
+// FICHIER : app/Models/Adherent.php
+// INSTRUCTION : Ajouter ces méthodes à la fin de la classe Adherent
+// ========================================
+
+/**
+ * ✅ NOUVELLE RELATION : Anomalies de cet adhérent
+ */
+public function anomalies(): HasMany
+{
+    return $this->hasMany(AdherentAnomalie::class);
+}
+
+/**
+ * ✅ NOUVELLE RELATION : Anomalies en attente
+ */
+public function anomaliesEnAttente(): HasMany
+{
+    return $this->hasMany(AdherentAnomalie::class)->where('statut', 'en_attente');
+}
+
+/**
+ * ✅ NOUVELLE RELATION : Anomalies critiques
+ */
+public function anomaliesCritiques(): HasMany
+{
+    return $this->hasMany(AdherentAnomalie::class)->where('type_anomalie', 'critique');
+}
+
+/**
+ * ✅ NOUVEAUX SCOPES POUR ANOMALIES
+ */
+public function scopeAvecAnomalies($query)
+{
+    return $query->where('has_anomalies', true);
+}
+
+public function scopeSansAnomalies($query)
+{
+    return $query->where('has_anomalies', false);
+}
+
+public function scopeAnomaliesCritiques($query)
+{
+    return $query->where('anomalies_severity', 'critique');
+}
+
+public function scopeAnomaliesMajeures($query)
+{
+    return $query->where('anomalies_severity', 'majeure');
+}
+
+public function scopeAnomaliesMineures($query)
+{
+    return $query->where('anomalies_severity', 'mineure');
+}
+
+public function scopeEnAttenteValidation($query)
+{
+    return $query->where('statut_validation', 'en_attente');
+}
+
+/**
+ * ✅ NOUVEAUX ACCESSEURS POUR ANOMALIES
+ */
+public function getHasAnomaliesCritiquesAttribute()
+{
+    return $this->anomalies_severity === 'critique';
+}
+
+public function getHasAnomaliesMajeuresAttribute()
+{
+    return $this->anomalies_severity === 'majeure';
+}
+
+public function getHasAnomaliesMineuresToAttribute()
+{
+    return $this->anomalies_severity === 'mineure';
+}
+
+public function getNombreAnomaliesAttribute()
+{
+    return $this->anomalies()->count();
+}
+
+public function getNombreAnomaliesEnAttenteAttribute()
+{
+    return $this->anomaliesEnAttente()->count();
+}
+
+public function getStatutAnomaliesAttribute()
+{
+    if (!$this->has_anomalies) {
+        return 'Aucune anomalie';
+    }
+
+    $enAttente = $this->anomaliesEnAttente()->count();
+    $total = $this->anomalies()->count();
+    
+    if ($enAttente === 0) {
+        return 'Toutes résolues';
+    } elseif ($enAttente === $total) {
+        return 'En attente';
+    } else {
+        return "Partiellement résolues ({$enAttente}/{$total})";
+    }
+}
+
+/**
+ * ✅ NOUVELLES MÉTHODES MÉTIER POUR ANOMALIES
+ */
+public function ajouterAnomalie($type, $champ, $message, $valeurErronee = null, $description = null)
+{
+    return AdherentAnomalie::create([
+        'adherent_id' => $this->id,
+        'organisation_id' => $this->organisation_id,
+        'type_anomalie' => $type,
+        'champ_concerne' => $champ,
+        'message_anomalie' => $message,
+        'valeur_erronee' => json_encode($valeurErronee),
+        'description' => $description ?? $message,
+        'statut' => 'en_attente',
+        'detectee_le' => now()
+    ]);
+}
+
+public function marquerAnomalieResolue($anomalieId, $valeurCorrigee = null, $commentaire = null)
+{
+    $anomalie = $this->anomalies()->findOrFail($anomalieId);
+    $anomalie->resoudre($valeurCorrigee, $commentaire, auth()->id());
+    
+    // Mettre à jour le statut global si toutes les anomalies critiques sont résolues
+    $this->verifierEtMettreAJourStatut();
+    
+    return $anomalie;
+}
+
+public function ignorerAnomalie($anomalieId, $commentaire = null)
+{
+    $anomalie = $this->anomalies()->findOrFail($anomalieId);
+    $anomalie->ignorer($commentaire, auth()->id());
+    
+    // Mettre à jour le statut global
+    $this->verifierEtMettreAJourStatut();
+    
+    return $anomalie;
+}
+
+public function verifierEtMettreAJourStatut()
+{
+    $anomaliesCritiquesEnAttente = $this->anomalies()
+        ->where('type_anomalie', 'critique')
+        ->where('statut', 'en_attente')
+        ->count();
+
+    // Si plus d'anomalies critiques en attente, activer l'adhérent
+    if ($anomaliesCritiquesEnAttente === 0 && $this->statut_validation === 'en_attente') {
+        $this->update([
+            'statut_validation' => 'valide',
+            'is_active' => true
+        ]);
+        
+        Log::info('Adhérent activé après résolution anomalies critiques', [
+            'adherent_id' => $this->id,
+            'nip' => $this->nip
+        ]);
+    }
+
+    // Mettre à jour le niveau de sévérité global
+    $nouvelleSeverite = $this->calculerSeveriteGlobale();
+    if ($nouvelleSeverite !== $this->anomalies_severity) {
+        $this->update(['anomalies_severity' => $nouvelleSeverite]);
+    }
+}
+
+public function calculerSeveriteGlobale()
+{
+    $anomaliesEnAttente = $this->anomaliesEnAttente();
+    
+    if ($anomaliesEnAttente->where('type_anomalie', 'critique')->exists()) {
+        return 'critique';
+    } elseif ($anomaliesEnAttente->where('type_anomalie', 'majeure')->exists()) {
+        return 'majeure';
+    } elseif ($anomaliesEnAttente->where('type_anomalie', 'mineure')->exists()) {
+        return 'mineure';
+    }
+    
+    return null;
+}
+
+public function resoudreToutesAnomaliesEnLot($commentaire = null)
+{
+    DB::beginTransaction();
+    
+    try {
+        $anomaliesEnAttente = $this->anomaliesEnAttente()->get();
+        
+        foreach ($anomaliesEnAttente as $anomalie) {
+            $anomalie->resoudre(null, $commentaire, auth()->id());
+        }
+        
+        // Mettre à jour le statut de l'adhérent
+        $this->update([
+            'statut_validation' => 'valide',
+            'is_active' => true,
+            'anomalies_severity' => null
+        ]);
+        
+        DB::commit();
+        
+        Log::info('Toutes les anomalies résolues en lot', [
+            'adherent_id' => $this->id,
+            'count' => $anomaliesEnAttente->count()
+        ]);
+        
+        return $anomaliesEnAttente;
+        
+    } catch (\Exception $e) {
+        DB::rollback();
+        throw $e;
+    }
+}
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Obtenir le résumé des anomalies
+ */
+public function getResumeAnomalies()
+{
+    $anomalies = $this->anomalies()->get();
+    
+    if ($anomalies->isEmpty()) {
+        return null;
+    }
+    
+    return [
+        'total' => $anomalies->count(),
+        'en_attente' => $anomalies->where('statut', 'en_attente')->count(),
+        'resolues' => $anomalies->where('statut', 'resolu')->count(),
+        'ignorees' => $anomalies->where('statut', 'ignore')->count(),
+        'critiques' => $anomalies->where('type_anomalie', 'critique')->count(),
+        'majeures' => $anomalies->where('type_anomalie', 'majeure')->count(),
+        'mineures' => $anomalies->where('type_anomalie', 'mineure')->count(),
+        'derniere_detection' => $anomalies->max('detectee_le'),
+        'derniere_resolution' => $anomalies->whereNotNull('date_correction')->max('date_correction')
+    ];
+}
+
+/**
+ * ✅ NOUVELLE MÉTHODE : Générer rapport d'anomalies pour cet adhérent
+ */
+public function genererRapportAnomalies()
+{
+    $anomalies = $this->anomalies()->with('correcteur')->get();
+    
+    return [
+        'adherent' => [
+            'id' => $this->id,
+            'nip' => $this->nip,
+            'nom_complet' => $this->prenom . ' ' . $this->nom,
+            'organisation' => $this->organisation->nom,
+            'statut_validation' => $this->statut_validation,
+            'is_active' => $this->is_active
+        ],
+        'resume' => $this->getResumeAnomalies(),
+        'anomalies_detail' => $anomalies->map(function($anomalie) {
+            return [
+                'id' => $anomalie->id,
+                'type' => $anomalie->type_anomalie,
+                'champ' => $anomalie->champ_concerne,
+                'message' => $anomalie->message_anomalie,
+                'valeur_erronee' => $anomalie->valeur_erronee,
+                'valeur_corrigee' => $anomalie->valeur_corrigee,
+                'statut' => $anomalie->statut,
+                'detectee_le' => $anomalie->detectee_le,
+                'corrige_par' => $anomalie->correcteur->name ?? null,
+                'date_correction' => $anomalie->date_correction,
+                'commentaire' => $anomalie->commentaire_correction
+            ];
+        }),
+        'date_generation' => now()->format('d/m/Y H:i:s')
+    ];
+}
+
+/**
+ * ✅ NOUVELLES MÉTHODES STATIQUES POUR STATISTIQUES ANOMALIES
+ */
+public static function getStatistiquesAnomaliesParOrganisation($organisationId)
+{
+    return self::where('organisation_id', $organisationId)
+        ->selectRaw('
+            COUNT(*) as total_adherents,
+            SUM(CASE WHEN has_anomalies = 1 THEN 1 ELSE 0 END) as avec_anomalies,
+            SUM(CASE WHEN anomalies_severity = "critique" THEN 1 ELSE 0 END) as critiques,
+            SUM(CASE WHEN anomalies_severity = "majeure" THEN 1 ELSE 0 END) as majeures,
+            SUM(CASE WHEN anomalies_severity = "mineure" THEN 1 ELSE 0 END) as mineures,
+            SUM(CASE WHEN statut_validation = "en_attente" THEN 1 ELSE 0 END) as en_attente_validation
+        ')
+        ->first();
+}
+
+public static function getStatistiquesAnomaliesGlobales()
+{
+    return self::selectRaw('
+        COUNT(*) as total_adherents,
+        COUNT(DISTINCT organisation_id) as organisations_concernees,
+        SUM(CASE WHEN has_anomalies = 1 THEN 1 ELSE 0 END) as avec_anomalies,
+        SUM(CASE WHEN anomalies_severity = "critique" THEN 1 ELSE 0 END) as critiques,
+        SUM(CASE WHEN anomalies_severity = "majeure" THEN 1 ELSE 0 END) as majeures,
+        SUM(CASE WHEN anomalies_severity = "mineure" THEN 1 ELSE 0 END) as mineures,
+        SUM(CASE WHEN statut_validation = "en_attente" THEN 1 ELSE 0 END) as en_attente_validation
+    ')
+    ->first();
+}
+
 
 
 

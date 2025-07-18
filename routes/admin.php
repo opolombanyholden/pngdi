@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\WorkflowController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\NipDatabaseController;
 
 /*
 |--------------------------------------------------------------------------
@@ -202,6 +203,23 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'admin']
         Route::post('/import', [UserManagementController::class, 'import'])->name('import');
         Route::get('/import/template', [UserManagementController::class, 'downloadTemplate'])
             ->name('import.template');
+    });
+
+
+    // Module Gestion Base NIP
+    Route::prefix('nip-database')->name('nip-database.')->group(function () {
+        Route::get('/', [NipDatabaseController::class, 'index'])->name('index');
+        Route::get('/import', [NipDatabaseController::class, 'import'])->name('import');
+        Route::post('/import', [NipDatabaseController::class, 'processImport'])->name('process-import');
+        Route::get('/template', [NipDatabaseController::class, 'downloadTemplate'])->name('template');
+        Route::get('/export', [NipDatabaseController::class, 'export'])->name('export');
+        Route::post('/cleanup', [NipDatabaseController::class, 'cleanup'])->name('cleanup');
+        Route::get('/search', [NipDatabaseController::class, 'search'])->name('search');
+        Route::post('/verify', [NipDatabaseController::class, 'verify'])->name('verify');
+        Route::get('/{id}', [NipDatabaseController::class, 'show'])->name('show');
+        Route::get('/{id}/edit', [NipDatabaseController::class, 'edit'])->name('edit');
+        Route::put('/{id}', [NipDatabaseController::class, 'update'])->name('update');
+        Route::delete('/{id}', [NipDatabaseController::class, 'destroy'])->name('destroy');
     });
     
     /*
@@ -466,7 +484,12 @@ Route::prefix('api/admin')->name('api.admin.')->middleware(['auth', 'admin'])->g
     
     // Notifications
     Route::get('/notifications/count', [NotificationController::class, 'getUnreadCount'])->name('notifications.count');
-
+    
+    // API de validation NIP temps réel
+    Route::post('/api/validate-nip', [App\Services\NipValidationService::class, 'validateNipApi'])
+        ->name('api.validate-nip')
+        ->middleware('auth');
+    // === FIN BLOC À AJOUTER ===
 
 // ===============================================
 // AJOUTS À EFFECTUER DANS routes/admin.php

@@ -627,15 +627,15 @@ class Fondateur extends Model
     public static function getMinimumRequired($typeOrganisation): int
     {
         $minimums = [
-            'association' => 2,         // ⭐ Ajusté selon les nouvelles règles
-            'ong' => 2,
-            'parti_politique' => 3,     // ⭐ Utiliser les vraies valeurs enum
-            'confession_religieuse' => 2,
-            'syndicat' => 3,
-            'organisation_patronale' => 3
+            'association' => 1,         // ⭐ Ajusté selon les nouvelles règles
+            'ong' => 1,
+            'parti_politique' => 1,     // ⭐ Utiliser les vraies valeurs enum
+            'confession_religieuse' => 1,
+            'syndicat' => 1,
+            'organisation_patronale' => 1
         ];
 
-        return $minimums[$typeOrganisation] ?? 2;
+        return $minimums[$typeOrganisation] ?? 1;
     }
 
     /**

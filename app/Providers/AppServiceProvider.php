@@ -20,6 +20,20 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\PDFService::class, function ($app) {
             return new \App\Services\PDFService();
         });
+
+        // ✅ ENREGISTREMENT CORRECT DES SERVICES
+        $this->app->singleton(\App\Services\AnomalieService::class, function ($app) {
+            return new \App\Services\AnomalieService();
+        });
+        
+        // ✅ NOUVEAU : Enregistrement conditionnel de NipValidationService
+        if (class_exists(\App\Services\NipValidationService::class)) {
+            $this->app->singleton(\App\Services\NipValidationService::class, function ($app) {
+                return new \App\Services\NipValidationService();
+            });
+        }
+
+
     }
 
     /**

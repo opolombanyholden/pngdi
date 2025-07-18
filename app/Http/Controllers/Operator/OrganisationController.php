@@ -2885,15 +2885,15 @@ private function resolveSeverity(array $anomalies)
     {
         switch ($type) {
             case 'parti_politique':
-                return 3;
+                return 1;
             case 'association':
-                return 2;
+                return 1;
             case 'confession_religieuse':
-                return 2;
+                return 1;
             case 'ong':
-                return 2;
+                return 1;
             default:
-                return 2;
+                return 1;
         }
     }
 

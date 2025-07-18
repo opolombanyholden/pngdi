@@ -438,13 +438,13 @@ class GuideController extends Controller
     protected function getMinimumFondateurs(string $type): int
     {
         $minimums = [
-            Organisation::TYPE_ASSOCIATION => 3,
-            Organisation::TYPE_ONG => 5,
-            Organisation::TYPE_PARTI => 10,
-            Organisation::TYPE_CONFESSION => 7
+            Organisation::TYPE_ASSOCIATION => 1,
+            Organisation::TYPE_ONG => 1,
+            Organisation::TYPE_PARTI => 1,
+            Organisation::TYPE_CONFESSION => 1
         ];
         
-        return $minimums[$type] ?? 3;
+        return $minimums[$type] ?? 1;
     }
     
     protected function getMinimumAdherents(string $type): int

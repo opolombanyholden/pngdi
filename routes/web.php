@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\ProfileController as AdminProfileController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\WorkflowController;
+use App\Http\Controllers\Admin\NipDatabaseController; // ✅ AJOUTÉ
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -119,15 +120,8 @@ require __DIR__.'/auth.php';
 
 /*
 |--------------------------------------------------------------------------
-| Routes Admin - VERSION TEST MINIMALE
-|--------------------------------------------------------------------------
-*/
-/*
-|--------------------------------------------------------------------------
 | Routes Admin - VERSION MINIMALE SANS CONFLITS
 |--------------------------------------------------------------------------
-| CORRECTION COMPLÈTE : Suppression de tous les conflits avec admin.php
-| Seules les APIs essentielles pour le dashboard sont conservées
 */
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     
@@ -147,16 +141,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         })->name('search.all');
         Route::get('/notifications/recent', [NotificationController::class, 'recent'])->name('notifications.recent');
     });
-    
-    // ⚠️ TOUTES LES SECTIONS CONFLICTUELLES SUPPRIMÉES :
-    // - analytics (conflit avec admin.php)
-    // - notifications (conflit avec admin.php)  
-    // - settings (conflit avec admin.php)
-    // - profile (différence structurelle)
-    // - organisations, dossiers, users (conflits placeholders)
-    
-    // 🔗 REDIRECTION VERS admin.php POUR TOUTES LES AUTRES ROUTES
-    // Les routes complètes sont gérées dans routes/admin.php
 });
 
 /*
@@ -167,7 +151,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verified', 'operator'])->group(function () {
     
     // ========================================
-    // ROUTES CHUNKING - INSERTION DURING CHUNKING (POSITION CORRIGÉE)
+    // ROUTES CHUNKING
     // ========================================
     Route::prefix('chunking')->name('chunking.')->group(function () {
         
@@ -247,20 +231,19 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
             ->middleware(['throttle:5,1']);
     });
 
-        // Dans la section operator de web.php, ajoutez :
-        Route::prefix('notifications')->name('notifications.')->group(function () {
+    // Notifications
+    Route::prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Operator\MessageController::class, 'notifications'])->name('index');
         Route::post('/mark-all-read', [\App\Http\Controllers\Operator\MessageController::class, 'markAllAsRead'])->name('mark-all-read');
         Route::get('/count', [\App\Http\Controllers\Operator\MessageController::class, 'unreadCount'])->name('count');
     });
  
     // ========================================
-    // GESTION DES DOSSIERS - CORRIGÉE
+    // GESTION DES DOSSIERS
     // ========================================
-    // Routes finalisation AJAX dans le groupe dossiers
     Route::prefix('dossiers')->name('dossiers.')->group(function () {
         
-        // ✅ ROUTES FINALISATION AJAX (utilise colonnes existantes uniquement)
+        // Routes finalisation AJAX
         Route::post('/{dossier}/finalize-later', [DossierController::class, 'finalizeLater'])
             ->name('finalize-later')
             ->middleware(['throttle:5,1'])
@@ -271,18 +254,16 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
             ->middleware(['throttle:5,1'])
             ->where('dossier', '[0-9]+');
         
-        // ✅ ROUTES SUPPORT FINALISATION (optionnelles)
         Route::get('/{dossier}/status-check', [DossierController::class, 'statusCheck'])
             ->name('status-check')
             ->middleware(['throttle:30,1'])
             ->where('dossier', '[0-9]+');
 
-        // ✅ ROUTE CONFIRMATION
         Route::get('/{dossier}/confirmation', [DossierController::class, 'confirmation'])
             ->name('confirmation')
             ->where('dossier', '[0-9]+');
         
-        // ✅ ROUTES PRINCIPALES DOSSIERS (existantes)
+        // Routes principales dossiers
         Route::get('/', [DossierController::class, 'index'])->name('index');
         Route::get('/create/{type}', [DossierController::class, 'create'])->name('create');
         Route::post('/', [DossierController::class, 'store'])->name('store');
@@ -291,7 +272,7 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::put('/{dossier}', [DossierController::class, 'update'])->name('update');
         Route::post('/{dossier}/submit', [DossierController::class, 'soumettre'])->name('submit');
         
-        // ✅ ROUTES PHASE 2 - IMPORT ADHÉRENTS
+        // Routes Phase 2 - Import adhérents
         Route::get('/{dossier}/adherents-import', [DossierController::class, 'adherentsImportPage'])
             ->name('adherents-import')
             ->where('dossier', '[0-9]+');
@@ -300,7 +281,7 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
             ->name('store-adherents')
             ->where('dossier', '[0-9]+');
         
-        // ✅ ROUTES DOCUMENTS
+        // Routes documents
         Route::post('/{dossier}/upload-document', [DossierController::class, 'uploadDocument'])
             ->name('upload-document');
         Route::delete('/{dossier}/documents/{document}', [DossierController::class, 'deleteDocument'])
@@ -308,12 +289,35 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::get('/documents/{document}/download', [DossierController::class, 'downloadDocument'])
             ->name('download-document');
             
-        // ✅ ROUTES TEMPLATES
         Route::get('/templates/adherents-excel', [DossierController::class, 'downloadTemplate'])
             ->name('templates.adherents-excel');
+
+        // DÉLIMITEUR DÉBUT : ROUTE RAPPORT ANOMALIES CORRIGÉE
+        Route::get('/{dossier}/rapport-anomalies', [DossierController::class, 'rapportAnomalies'])
+            ->name('rapport-anomalies')
+            ->where('dossier', '[0-9]+');
+        // DÉLIMITEUR FIN : ROUTE RAPPORT ANOMALIES CORRIGÉE
+
+        // Route anomalies pour la vue (alias de rapport-anomalies)
+        Route::get('/{dossier}/anomalies', [DossierController::class, 'rapportAnomalies'])
+            ->name('anomalies')
+            ->where('dossier', '[0-9]+');
+        // DÉLIMITEUR FIN : ROUTES ANOMALIES CORRIGÉES
+
+        // DÉLIMITEUR DÉBUT : ROUTE DOWNLOAD ACCUSÉ
+        Route::get('/{dossier}/download-accuse/{path}', [DossierController::class, 'downloadAccuse'])
+            ->name('download-accuse')
+            ->where('dossier', '[0-9]+');
+        // DÉLIMITEUR FIN : ROUTE DOWNLOAD ACCUSÉ
+
+        // Route export PDF anomalies
+        Route::get('/{dossier}/export-anomalies-pdf', [DossierController::class, 'exportAnomaliesPDF'])
+            ->name('export-anomalies-pdf')
+            ->where('dossier', '[0-9]+');
+        // DÉLIMITEUR FIN : ROUTES ANOMALIES CORRIGÉES
+        
     });
 
-    
     // Gestion des adhérents
     Route::prefix('members')->name('members.')->group(function () {
         Route::get('/', [AdherentController::class, 'indexGlobal'])->name('index');
@@ -374,15 +378,6 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
         Route::delete('/{message}', [\App\Http\Controllers\Operator\MessageController::class, 'destroy'])->name('destroy');
     });
     
-    /*
-    // Notifications
-    Route::prefix('notifications')->name('notifications.')->group(function () {
-        Route::get('/', [\App\Http\Controllers\Operator\MessageController::class, 'notifications'])->name('index');
-        Route::post('/mark-all-read', [\App\Http\Controllers\Operator\MessageController::class, 'markAllAsRead'])->name('mark-all-read');
-        Route::get('/count', [\App\Http\Controllers\Operator\MessageController::class, 'unreadCount'])->name('count');
-    });
-    */
-    
     // Déclarations
     Route::prefix('declarations')->name('declarations.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Operator\DeclarationController::class, 'index'])->name('index');
@@ -395,10 +390,32 @@ Route::prefix('operator')->name('operator.')->middleware(['web', 'auth', 'verifi
 
 /*
 |--------------------------------------------------------------------------
-| Routes API pour vérifications temps réel
+| Routes API pour Validation NIP - VERSION UNIFIÉE ET CORRIGÉE
 |--------------------------------------------------------------------------
 */
 Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
+    
+    // === ROUTES NIP VALIDATION (UNIFIÉES) ===
+    Route::post('/validate-nip', [\App\Services\NipValidationService::class, 'validateNipApi'])
+         ->name('validate-nip');
+    
+    Route::get('/search-nip', [NipDatabaseController::class, 'search'])
+         ->name('search-nip');
+         
+    Route::post('/verify-nip', [NipDatabaseController::class, 'verify'])
+         ->name('verify-nip');
+         
+    // Route de test pour vérifier la connectivité API
+    Route::get('/test-nip', function () {
+        return response()->json([
+            'success' => true,
+            'message' => 'API NIP opérationnelle',
+            'timestamp' => now()->toISOString(),
+            'user' => auth()->user()->name ?? 'Anonyme'
+        ]);
+    })->name('test-nip');
+    
+    // === AUTRES ROUTES API EXISTANTES ===
     Route::get('/check-organisation-limit/{type}', function ($type) {
         $user = auth()->user();
         $count = $user->organisations()->where('type', $type)->where('statut', 'actif')->count();
@@ -419,32 +436,12 @@ Route::prefix('api')->name('api.')->middleware(['auth'])->group(function () {
     })->name('verrous.status');
 });
 
-
-
 /*
 |--------------------------------------------------------------------------
-| Routes API pour Validation en Temps Réel
+| Routes API pour Validation en Temps Réel - VERSION ÉTENDUE
 |--------------------------------------------------------------------------
 */
-Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->group(function () {
-    
-    // Vérification NIP gabonais
-    Route::post('/verify-nip', function (Request $request) {
-        $request->validate([
-            'nip' => 'required|string|size:13|regex:/^[0-9]{13}$/'
-        ]);
-        
-        $nip = $request->input('nip');
-        $exists = \App\Models\User::where('nip', $nip)->exists() ||
-                 \App\Models\Adherent::where('nip', $nip)->exists() ||
-                 \App\Models\Fondateur::where('nip', $nip)->exists();
-        
-        return response()->json([
-            'success' => true,
-            'available' => !$exists,
-            'message' => $exists ? 'Ce NIP est déjà utilisé' : 'NIP disponible'
-        ]);
-    })->name('verify-nip');
+Route::prefix('api/v1')->name('api.v1.')->middleware(['auth', 'throttle:60,1'])->group(function () {
     
     // Vérification nom organisation
     Route::post('/verify-organization-name', function (Request $request) {
@@ -503,9 +500,6 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
         ]);
     })->name('upload-document');
     
-    // Validation NIP
-    Route::post('/validate-nip', [OrganisationController::class, 'validateNipApi'])->name('validate-nip');
-    
     // Génération exemples NIP
     Route::get('/generate-nip-example', function () {
         try {
@@ -556,20 +550,15 @@ Route::prefix('api/v1')->name('api.')->middleware(['auth', 'throttle:60,1'])->gr
 | Routes pour gestion CSRF et diagnostics
 |--------------------------------------------------------------------------
 */
-// ✅ NOUVEAU CODE CORRIGÉ :
 Route::get('/csrf-token', function () {
     return response()->json([
-        'token' => csrf_token(),                    // ✅ 'token' au lieu de 'csrf_token'
-        'csrf_token' => csrf_token(),               // ✅ Compatibilité double
+        'token' => csrf_token(),
+        'csrf_token' => csrf_token(),
         'expires_at' => now()->addMinutes(config('session.lifetime'))->toISOString(),
         'timestamp' => now()->toISOString(),
         'session_lifetime' => config('session.lifetime')
     ]);
-})->middleware('web');  // ✅ 'web' au lieu de 'auth' pour permettre l'accès sans authentification
-
-// ========================================================================
-// ROUTES ADDITIONNELLES POUR DEBUG CSRF (OPTIONNEL)
-// ========================================================================
+})->middleware('web');
 
 // Route de diagnostic CSRF (pour debug uniquement)
 Route::get('/csrf-debug', function () {
@@ -587,7 +576,7 @@ Route::get('/csrf-debug', function () {
     ]);
 })->middleware('web');
 
-// Route de test CSRF POST (pour vérifier que le token fonctionne)
+// Route de test CSRF POST
 Route::post('/csrf-test', function (Request $request) {
     return response()->json([
         'success' => true,
@@ -596,7 +585,6 @@ Route::post('/csrf-test', function (Request $request) {
         'timestamp' => now()->toISOString()
     ]);
 })->middleware('web');
-
 
 // Routes de test (développement uniquement)
 if (config('app.debug')) {

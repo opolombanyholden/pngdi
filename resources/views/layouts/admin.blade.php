@@ -554,6 +554,7 @@
             <!-- ========== REMPLACER LA SECTION NAVIGATION DANS admin.blade.php ========== -->
 
                 <!-- Navigation sections -->
+              <!-- Navigation sections -->
                 <nav class="sidebar-nav">
                     <!-- Tableau de Bord -->
                     <div class="nav-section">
@@ -603,6 +604,32 @@
                                 <a href="{{ route('admin.organisations.index') }}" class="nav-link-custom {{ request()->routeIs('admin.organisations*') ? 'active' : '' }}">
                                     <i class="nav-icon fas fa-folder-open"></i>
                                     <span class="nav-text">Toutes Organisations</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Base de Données NIP - NOUVELLE SECTION -->
+                    <div class="nav-section">
+                        <div class="nav-section-title">BASE DE DONNÉES</div>
+                        <ul class="nav-list">
+                            <li class="nav-item">
+                                <a href="{{ route('admin.nip-database.index') }}" class="nav-link-custom {{ request()->routeIs('admin.nip-database.index') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-database"></i>
+                                    <span class="nav-text">Base NIP</span>
+                                    <span class="nav-badge info">{{ number_format(\App\Models\NipDatabase::count()) }}</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.nip-database.import') }}" class="nav-link-custom {{ request()->routeIs('admin.nip-database.import') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-upload"></i>
+                                    <span class="nav-text">Import NIP</span>
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('admin.nip-database.template') }}" class="nav-link-custom">
+                                    <i class="nav-icon fas fa-download"></i>
+                                    <span class="nav-text">Template Excel</span>
                                 </a>
                             </li>
                         </ul>

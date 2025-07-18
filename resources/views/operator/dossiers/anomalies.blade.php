@@ -33,9 +33,17 @@
                             <p class="mb-0 opacity-90">Suivez et résolvez les anomalies détectées dans vos adhérents</p>
                         </div>
                         <div class="col-md-4 text-end">
-                            <a href="{{ route('operator.dossiers.index') }}" class="btn btn-light">
-                                <i class="fas fa-arrow-left me-2"></i>Retour aux Dossiers
-                            </a>
+                            <div class="btn-group" role="group">
+                                <a href="{{ route('operator.dossiers.export-anomalies-pdf', $dossier->id) }}" 
+                                   class="btn btn-warning me-2" 
+                                   target="_blank"
+                                   title="Télécharger le rapport PDF des anomalies">
+                                    <i class="fas fa-file-pdf me-2"></i>Rapport PDF
+                                </a>
+                                <a href="{{ route('operator.dossiers.index') }}" class="btn btn-light">
+                                    <i class="fas fa-arrow-left me-2"></i>Retour aux Dossiers
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -115,7 +123,7 @@
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <form method="GET" action="{{ route('operator.dossiers.anomalies') }}">
+                    <form method="GET" action="{{ route('operator.dossiers.anomalies', $dossier->id) }}">
                         <div class="row align-items-center">
                             <div class="col-md-4">
                                 <label for="organisation_id" class="form-label">Organisation</label>
@@ -143,7 +151,7 @@
                                     <button type="submit" class="btn btn-primary">
                                         <i class="fas fa-filter me-2"></i>Filtrer
                                     </button>
-                                    <a href="{{ route('operator.dossiers.anomalies') }}" class="btn btn-outline-secondary">
+                                    <a href="{{ route('operator.dossiers.anomalies', $dossier->id) }}" class="btn btn-outline-secondary">
                                         <i class="fas fa-times me-2"></i>Reset
                                     </a>
                                 </div>

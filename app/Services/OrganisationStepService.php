@@ -524,13 +524,13 @@ class OrganisationStepService
     private function getMinFondateurs(string $type): int
     {
         $minimums = [
-            'association' => 3,
-            'ong' => 5,
-            'parti_politique' => 3,
-            'confession_religieuse' => 3
+            'association' => 1,
+            'ong' => 1,
+            'parti_politique' => 1,
+            'confession_religieuse' => 1
         ];
 
-        return $minimums[$type] ?? 3;
+        return $minimums[$type] ?? 1;
     }
 
     /**

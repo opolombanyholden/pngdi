@@ -333,7 +333,7 @@ Version: 5.0 - Correction variable $dossier undefined
                     {{-- Rapport d'Anomalies --}}
                     @if($adherents_stats['anomalies_critiques'] > 0 || $adherents_stats['anomalies_majeures'] > 0 || $adherents_stats['anomalies_mineures'] > 0)
                     <div class="d-grid gap-2 mb-3">
-                        <a href="{{ route('operator.dossiers.rapport-anomalies', $dossierData->id ?? 0) }}" class="btn btn-outline-warning btn-lg" target="_blank">
+                       <a href="{{ route('operator.dossiers.rapport-anomalies', $confirmationData['dossier']->id ?? 0) }}" class="btn btn-outline-warning btn-lg" target="_blank">
                             <i class="fas fa-exclamation-triangle me-2"></i>
                             Télécharger le Rapport d'Anomalies (PDF)
                         </a>
